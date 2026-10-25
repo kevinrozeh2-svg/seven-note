@@ -70,13 +70,13 @@ export async function testSupabaseConnection(url: string, anonKey: string): Prom
     }
     const testClient = createClient(url, anonKey)
     // Check if we can reach the health or query workspaces table
-    const { error } = await testClient.from('workspaces').select('id').limit(1)
+    const { error } = await testClient.from('seven_workspaces').select('id').limit(1)
     if (error) {
       // If table doesn't exist yet, warn user nicely
       if (error.code === '42P01') {
         return { 
           success: true, 
-          message: 'Conectado a Supabase, pero la tabla "workspaces" no existe. Por favor ejecuta el script SQL.' 
+          message: 'Conectado a Supabase, pero la tabla "seven_workspaces" no existe. Por favor ejecuta el script SQL.' 
         }
       }
       return { success: false, message: `Error de Supabase: ${error.message}` }

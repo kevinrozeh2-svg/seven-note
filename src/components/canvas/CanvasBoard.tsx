@@ -210,6 +210,7 @@ export function CanvasBoard({ workspaceId }: CanvasBoardProps) {
         minZoom={0.2}
         maxZoom={2}
         defaultEdgeOptions={{ animated: true }}
+        proOptions={{ hideAttribution: true }}
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1.5} color="#94a3b8" />
         <Controls className="!bg-white dark:!bg-slate-800 !border-slate-200 dark:!border-slate-700 !shadow-lg rounded-lg" />

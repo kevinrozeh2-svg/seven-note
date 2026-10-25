@@ -123,7 +123,7 @@ class SyncEngine {
           is_deleted: w.isDeleted
         }))
 
-        const { error: wsError } = await supabase.from('workspaces').upsert(payload, { onConflict: 'id' })
+        const { error: wsError } = await supabase.from('seven_workspaces').upsert(payload, { onConflict: 'id' })
         if (wsError) throw wsError
 
         // Mark local as synced
@@ -149,7 +149,7 @@ class SyncEngine {
           is_deleted: n.isDeleted
         }))
 
-        const { error: nodeError } = await supabase.from('canvas_nodes').upsert(payload, { onConflict: 'id' })
+        const { error: nodeError } = await supabase.from('seven_canvas_nodes').upsert(payload, { onConflict: 'id' })
         if (nodeError) throw nodeError
 
         await db.canvasNodes.bulkUpdate(
@@ -175,7 +175,7 @@ class SyncEngine {
           is_deleted: e.isDeleted
         }))
 
-        const { error: edgeError } = await supabase.from('canvas_edges').upsert(payload, { onConflict: 'id' })
+        const { error: edgeError } = await supabase.from('seven_canvas_edges').upsert(payload, { onConflict: 'id' })
         if (edgeError) throw edgeError
 
         await db.canvasEdges.bulkUpdate(
@@ -186,7 +186,7 @@ class SyncEngine {
       // 4. PULL REMOTE WORKSPACES (Updated since last sync)
       const lastSync = this.lastSyncTime || 0
       const { data: remoteWorkspaces, error: pullWsError } = await supabase
-        .from('workspaces')
+        .from('seven_workspaces')
         .select('*')
         .gt('updated_at', lastSync)
 
@@ -216,7 +216,7 @@ class SyncEngine {
 
       // 5. PULL REMOTE NODES
       const { data: remoteNodes, error: pullNodeError } = await supabase
-        .from('canvas_nodes')
+        .from('seven_canvas_nodes')
         .select('*')
         .gt('updated_at', lastSync)
 
@@ -246,7 +246,7 @@ class SyncEngine {
 
       // 6. PULL REMOTE EDGES
       const { data: remoteEdges, error: pullEdgeError } = await supabase
-        .from('canvas_edges')
+        .from('seven_canvas_edges')
         .select('*')
         .gt('updated_at', lastSync)
 

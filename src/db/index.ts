@@ -3,9 +3,18 @@ import Dexie, { type Table } from 'dexie'
 export type ViewMode = 'doc' | 'canvas' | 'split'
 export type SyncStatus = 'synced' | 'pending' | 'failed'
 
+export interface CustomPropertyItem {
+  id: string
+  name: string
+  type: 'text' | 'number' | 'checkbox' | 'date' | 'select' | 'unknown'
+  value: any
+  visibility: 'always_show' | 'always_hide' | 'hide_empty'
+}
+
 export interface WorkspaceItem {
   id: string
   parentId: string | null
+  folder?: string | null
   title: string
   icon: string
   color?: string
@@ -16,6 +25,23 @@ export interface WorkspaceItem {
   isFavorite: boolean
   isDeleted: boolean
   syncStatus: SyncStatus
+
+  // Extended properties matching AppFlowy / AFFiNE
+  tags?: string[]
+  documentMode?: string // 'Estándar' | 'Sin bordes' | 'Dividido'
+  isJournal?: boolean
+  journalDate?: string
+  templateName?: string
+  createdBy?: string
+  lastEditedBy?: string
+  borderlessTheme?: boolean
+  pageWidth?: 'standard' | 'wide' | 'full'
+  isInformationOpen?: boolean
+  informationContent?: string
+  biDirectionalLinksVisible?: boolean
+  propertyVisibility?: Record<string, 'always_show' | 'always_hide' | 'hide_empty'>
+  activeProperties?: string[]
+  customProperties?: CustomPropertyItem[]
 }
 
 export type CanvasNodeType = 'note' | 'todo' | 'image' | 'link' | 'column' | 'subboard'
