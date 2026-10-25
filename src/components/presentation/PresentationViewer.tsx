@@ -165,6 +165,16 @@ export function PresentationViewer({
     }
   }, [initialFrameId, slides])
 
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {})
+      setIsFullscreen(true)
+    } else {
+      document.exitFullscreen().catch(() => {})
+      setIsFullscreen(false)
+    }
+  }
+
   // Keyboard navigation
   useEffect(() => {
     if (!isOpen) return
@@ -199,16 +209,6 @@ export function PresentationViewer({
   const handleMouseMove = (e: React.MouseEvent) => {
     if (isLaserPointerActive) {
       setLaserPos({ x: e.clientX, y: e.clientY })
-    }
-  }
-
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {})
-      setIsFullscreen(true)
-    } else {
-      document.exitFullscreen().catch(() => {})
-      setIsFullscreen(false)
     }
   }
 

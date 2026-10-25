@@ -469,7 +469,6 @@ export function DocEditor({
             </span>
           </div>
         </div>
-      )}
 
       {/* Floating Text Selection Bubble Toolbar */}
       {floatingMenuPos && (
