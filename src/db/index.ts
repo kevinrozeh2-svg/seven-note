@@ -44,13 +44,25 @@ export interface WorkspaceItem {
   customProperties?: CustomPropertyItem[]
 }
 
-export type CanvasNodeType = 'note' | 'todo' | 'image' | 'link' | 'column' | 'subboard'
+export type CanvasNodeType =
+  | 'note'
+  | 'todo'
+  | 'image'
+  | 'link'
+  | 'column'
+  | 'subboard'
+  | 'docframe'
+  | 'shape'
+  | 'text'
+  | 'frame'
 
 export interface CanvasTodoItem {
   id: string
   text: string
   completed: boolean
 }
+
+export type ShapeKind = 'rect' | 'roundedRect' | 'ellipse' | 'diamond' | 'triangle' | 'star'
 
 export interface CanvasNodeData {
   title?: string
@@ -63,9 +75,27 @@ export interface CanvasNodeData {
   description?: string
   subboardId?: string
   subboardTitle?: string
+  workspaceId?: string
   width?: number
   height?: number
   collapsed?: boolean
+
+  // Shape specific properties
+  shapeType?: ShapeKind
+  fillColor?: string
+  strokeColor?: string
+  strokeWidth?: number
+  strokeStyle?: 'solid' | 'dashed'
+  textColor?: string
+  fontSize?: number | 'sm' | 'base' | 'lg' | 'xl'
+
+  // Frame specific properties
+  frameIndex?: number
+  frameTitle?: string
+
+  // Text specific properties
+  textAlign?: 'left' | 'center' | 'right'
+  isLocked?: boolean
 }
 
 export interface CanvasNodeItem {
@@ -167,7 +197,46 @@ export async function seedInitialData() {
     </blockquote>
   `
 
+  const untitledId = 'untitled-workspace'
+
   await db.workspaces.bulkAdd([
+    {
+      id: untitledId,
+      parentId: null,
+      folder: 'First Folder',
+      title: 'Untitled',
+      icon: '',
+      color: '#3b82f6',
+      viewMode: 'doc',
+      docContent: '<p></p>',
+      createdAt: now,
+      updatedAt: now,
+      isFavorite: false,
+      isDeleted: false,
+      syncStatus: 'pending',
+      activeProperties: [
+        'tags',
+        'documentMode',
+        'isJournal',
+        'templateName',
+        'createdAt',
+        'updatedAt',
+        'createdBy',
+        'borderlessTheme',
+        'pageWidth'
+      ],
+      propertyVisibility: {
+        tags: 'always_show',
+        documentMode: 'always_hide',
+        isJournal: 'always_hide',
+        templateName: 'always_hide',
+        createdAt: 'always_show',
+        updatedAt: 'always_show',
+        createdBy: 'always_hide',
+        borderlessTheme: 'always_hide',
+        pageWidth: 'always_hide'
+      }
+    },
     {
       id: rootWorkspaceId,
       parentId: null,
@@ -176,9 +245,9 @@ export async function seedInitialData() {
       color: '#6366f1',
       viewMode: 'split',
       docContent: defaultDocHtml,
-      createdAt: now,
-      updatedAt: now,
-      isFavorite: true,
+      createdAt: now - 3600000,
+      updatedAt: now - 1800000,
+      isFavorite: false,
       isDeleted: false,
       syncStatus: 'pending'
     },

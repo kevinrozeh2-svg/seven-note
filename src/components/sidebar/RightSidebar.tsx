@@ -244,19 +244,6 @@ export function RightSidebar({
       {/* Top Header Icon Tabs */}
       <div className="h-12 border-b border-[#242428] flex items-center justify-between px-3 shrink-0">
         <div className="flex items-center gap-1">
-          {/* AI Tab */}
-          <button
-            onClick={() => onTabChange('ai')}
-            className={`p-1.5 rounded-md transition ${
-              activeTab === 'ai'
-                ? 'bg-[#2a2a30] text-zinc-100 shadow-xs'
-                : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#1e1e22]'
-            }`}
-            title="Asistente de IA"
-          >
-            <Sparkles size={16} />
-          </button>
-
           {/* Outline Tab */}
           <button
             onClick={() => onTabChange('outline')}

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import TaskList from '@tiptap/extension-task-list'
@@ -22,8 +22,17 @@ import {
   Code,
   Heading1,
   Heading2,
+  Heading3,
   List,
-  CheckSquare
+  CheckSquare,
+  Quote,
+  Table as TableIcon,
+  AlertTriangle,
+  Lightbulb,
+  Info as InfoIcon,
+  Minus,
+  Binary,
+  X
 } from 'lucide-react'
 import { db, type WorkspaceItem } from '../../db'
 import { syncEngine } from '../../lib/syncEngine'
@@ -54,7 +63,14 @@ export function DocEditor({
   const [infoText, setInfoText] = useState(workspace.informationContent || '')
   const [showBiDirectional, setShowBiDirectional] = useState(workspace.biDirectionalLinksVisible ?? false)
   const [showLinkSelector, setShowLinkSelector] = useState(false)
-  const [showToolbar, setShowToolbar] = useState(false)
+
+  // Slash Menu state
+  const [slashMenuOpen, setSlashMenuOpen] = useState(false)
+  const [slashFilter, setSlashFilter] = useState('')
+
+  // Floating text selection menu state
+  const [floatingMenuPos, setFloatingMenuPos] = useState<{ x: number; y: number } | null>(null)
+
   const isFirstRender = useRef(true)
   const saveTimeoutRef = useRef<any>(null)
 
@@ -79,7 +95,7 @@ export function DocEditor({
         allowBase64: true
       }),
       Placeholder.configure({
-        placeholder: 'Escribe algo o pulsa "/" para insertar bloques...'
+        placeholder: 'Escribe algo o pulsa "/" para insertar bloques de AFFiNE...'
       })
     ],
     content: workspace.docContent || '<p></p>',
@@ -87,6 +103,33 @@ export function DocEditor({
       attributes: {
         class:
           'prose prose-invert max-w-none focus:outline-none min-h-[350px] text-zinc-200 font-sans leading-relaxed text-sm selection:bg-blue-600/30'
+      },
+      handleKeyDown: (_, event) => {
+        if (event.key === '/') {
+          // Open slash menu
+          setSlashMenuOpen(true)
+          setSlashFilter('')
+        } else if (event.key === 'Escape') {
+          setSlashMenuOpen(false)
+        }
+        return false
+      }
+    },
+    onSelectionUpdate: ({ editor }) => {
+      const { from, to } = editor.state.selection
+      if (from !== to) {
+        // Text is selected, position floating toolbar
+        const domSelection = window.getSelection()
+        if (domSelection && domSelection.rangeCount > 0) {
+          const range = domSelection.getRangeAt(0)
+          const rect = range.getBoundingClientRect()
+          setFloatingMenuPos({
+            x: rect.left + rect.width / 2,
+            y: rect.top - 45
+          })
+        }
+      } else {
+        setFloatingMenuPos(null)
       }
     },
     onUpdate: ({ editor }) => {
@@ -191,7 +234,7 @@ export function DocEditor({
     })
   }
 
-  // Find incoming backlinks (pages that reference current note ID or title)
+  // Find incoming backlinks
   const backlinks = allWorkspaces.filter(
     (w) =>
       w.id !== workspace.id &&
@@ -200,13 +243,135 @@ export function DocEditor({
         (workspace.title && workspace.title !== 'Untitled' && w.docContent.includes(workspace.title)))
   )
 
-  // Append a bi-directional link into the current editor
   const handleInsertLinkToNote = (targetNote: WorkspaceItem) => {
     if (!editor) return
     const linkHtml = `<p>🔗 <a href="#note=${targetNote.id}" class="text-blue-400 underline font-medium">${targetNote.icon || '📄'} ${targetNote.title || 'Untitled'}</a></p>`
     editor.commands.insertContent(linkHtml)
     setShowLinkSelector(false)
   }
+
+  // Insert custom block into editor
+  const insertBlock = useCallback(
+    (type: string) => {
+      if (!editor) return
+
+      // If user typed "/" right before, remove it
+      const { from } = editor.state.selection
+      const textBefore = editor.state.doc.textBetween(Math.max(0, from - 1), from)
+      if (textBefore === '/') {
+        editor.commands.deleteRange({ from: from - 1, to: from })
+      }
+
+      switch (type) {
+        case 'h1':
+          editor.chain().focus().toggleHeading({ level: 1 }).run()
+          break
+        case 'h2':
+          editor.chain().focus().toggleHeading({ level: 2 }).run()
+          break
+        case 'h3':
+          editor.chain().focus().toggleHeading({ level: 3 }).run()
+          break
+        case 'taskList':
+          editor.chain().focus().toggleTaskList().run()
+          break
+        case 'bulletList':
+          editor.chain().focus().toggleBulletList().run()
+          break
+        case 'orderedList':
+          editor.chain().focus().toggleOrderedList().run()
+          break
+        case 'blockquote':
+          editor.chain().focus().toggleBlockquote().run()
+          break
+        case 'codeBlock':
+          editor.chain().focus().toggleCodeBlock().run()
+          break
+        case 'divider':
+          editor.chain().focus().setHorizontalRule().run()
+          break
+        case 'callout-idea':
+          editor.commands.insertContent(
+            `<div class="callout my-4 p-3.5 rounded-xl bg-amber-500/10 border-l-4 border-amber-500 text-amber-200 text-xs flex items-start gap-2.5">
+              <span class="text-base select-none">💡</span>
+              <div><strong>Idea Clave:</strong> Describe aquí una propuesta o reflexión importante.</div>
+            </div><p></p>`
+          )
+          break
+        case 'callout-info':
+          editor.commands.insertContent(
+            `<div class="callout my-4 p-3.5 rounded-xl bg-sky-500/10 border-l-4 border-sky-500 text-sky-200 text-xs flex items-start gap-2.5">
+              <span class="text-base select-none">ℹ️</span>
+              <div><strong>Nota Informativa:</strong> Datos de contexto o instrucciones para el lector.</div>
+            </div><p></p>`
+          )
+          break
+        case 'callout-warning':
+          editor.commands.insertContent(
+            `<div class="callout my-4 p-3.5 rounded-xl bg-rose-500/10 border-l-4 border-rose-500 text-rose-200 text-xs flex items-start gap-2.5">
+              <span class="text-base select-none">⚠️</span>
+              <div><strong>Advertencia:</strong> Punto crítico a tener en cuenta antes de continuar.</div>
+            </div><p></p>`
+          )
+          break
+        case 'table':
+          editor.commands.insertContent(
+            `<table class="w-full border-collapse border border-zinc-700 my-4 text-xs">
+              <thead>
+                <tr class="bg-zinc-800/80">
+                  <th class="border border-zinc-700 p-2 text-left font-semibold text-zinc-200">Elemento</th>
+                  <th class="border border-zinc-700 p-2 text-left font-semibold text-zinc-200">Responsable</th>
+                  <th class="border border-zinc-700 p-2 text-left font-semibold text-zinc-200">Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="border border-zinc-700 p-2 text-zinc-300">Requerimiento 1</td>
+                  <td class="border border-zinc-700 p-2 text-zinc-400">Equipo</td>
+                  <td class="border border-zinc-700 p-2 text-emerald-400 font-medium">Completado</td>
+                </tr>
+                <tr>
+                  <td class="border border-zinc-700 p-2 text-zinc-300">Requerimiento 2</td>
+                  <td class="border border-zinc-700 p-2 text-zinc-400">Dev</td>
+                  <td class="border border-zinc-700 p-2 text-amber-400 font-medium">En Progreso</td>
+                </tr>
+              </tbody>
+            </table><p></p>`
+          )
+          break
+        case 'math':
+          editor.commands.insertContent(
+            `<div class="my-4 p-3 rounded-xl bg-zinc-900 border border-zinc-800 font-mono text-xs text-indigo-300 flex items-center justify-between">
+              <span>$$ E = mc^2 \\quad \\vert \\quad f(x) = \\int_{-\\infty}^{\\infty} e^{-x^2} dx $$</span>
+              <span class="text-[10px] text-zinc-500 uppercase">Fórmula LaTeX</span>
+            </div><p></p>`
+          )
+          break
+        case 'ai':
+          onOpenAIModal && onOpenAIModal()
+          break
+      }
+      setSlashMenuOpen(false)
+    },
+    [editor, onOpenAIModal]
+  )
+
+  const slashMenuItems = [
+    { id: 'h1', title: 'Título 1', desc: 'Encabezado principal de sección', icon: <Heading1 size={15} className="text-sky-400" /> },
+    { id: 'h2', title: 'Título 2', desc: 'Subtítulo mediano', icon: <Heading2 size={15} className="text-sky-400" /> },
+    { id: 'h3', title: 'Título 3', desc: 'Subtítulo pequeño', icon: <Heading3 size={15} className="text-sky-400" /> },
+    { id: 'taskList', title: 'Lista de Tareas', desc: 'Checklist interactivo con casillas', icon: <CheckSquare size={15} className="text-emerald-400" /> },
+    { id: 'bulletList', title: 'Lista con Viñetas', desc: 'Lista desordenada estándar', icon: <List size={15} className="text-zinc-300" /> },
+    { id: 'callout-idea', title: 'Destacado: Idea (💡)', desc: 'Bloque coloreado estilo AFFiNE', icon: <Lightbulb size={15} className="text-amber-400" /> },
+    { id: 'callout-info', title: 'Destacado: Nota (ℹ️)', desc: 'Mensaje de contexto importante', icon: <InfoIcon size={15} className="text-sky-400" /> },
+    { id: 'callout-warning', title: 'Destacado: Alerta (⚠️)', desc: 'Aviso crítico o advertencia', icon: <AlertTriangle size={15} className="text-rose-400" /> },
+    { id: 'codeBlock', title: 'Bloque de Código', desc: 'Contenedor monoespaciado para código', icon: <Code size={15} className="text-purple-400" /> },
+    { id: 'table', title: 'Tabla / Matriz', desc: 'Tabla interactiva de 3 columnas', icon: <TableIcon size={15} className="text-indigo-400" /> },
+    { id: 'math', title: 'Fórmula Matemática', desc: 'Bloque de notación LaTeX', icon: <Binary size={15} className="text-pink-400" /> },
+    { id: 'blockquote', title: 'Cita', desc: 'Párrafo en bloque destacado', icon: <Quote size={15} className="text-zinc-400" /> },
+    { id: 'divider', title: 'Separador Horizontal', desc: 'Línea de división de contenido', icon: <Minus size={15} className="text-zinc-500" /> },
+    { id: 'ai', title: 'Escribir con IA', desc: 'Generar o expandir con asistente', icon: <Sparkles size={15} className="text-cyan-400" /> }
+  ].filter((item) => item.title.toLowerCase().includes(slashFilter.toLowerCase()) || item.desc.toLowerCase().includes(slashFilter.toLowerCase()))
 
   const pageWidthClass =
     workspace.pageWidth === 'full'
@@ -219,82 +384,189 @@ export function DocEditor({
 
   return (
     <div className="flex flex-col h-full bg-[#161618] overflow-y-auto text-zinc-200 select-text relative">
-      {/* Optional Formatting Toolbar Toggle */}
-      <div className="sticky top-0 z-10 flex justify-end px-6 py-1 bg-[#161618]/90 backdrop-blur-xs">
-        <button
-          onClick={() => setShowToolbar(!showToolbar)}
-          className="text-[11px] text-zinc-500 hover:text-zinc-300 py-0.5 px-2 rounded hover:bg-[#202024] transition"
-        >
-          {showToolbar ? 'Ocultar barra de formato' : 'Formato de texto'}
-        </button>
-      </div>
-
-      {showToolbar && (
-        <div className="sticky top-7 z-10 flex items-center justify-between px-6 py-1.5 border-b border-[#26262a] bg-[#1a1a1e] backdrop-blur text-xs flex-wrap gap-1">
+      {/* Top Formatting Toolbar */}
+      <div className="sticky top-0 z-20 flex items-center justify-between px-6 py-2 border-b border-[#242428] bg-[#161618]/95 backdrop-blur-md text-xs flex-wrap gap-1.5 shadow-xs">
           <div className="flex items-center gap-1">
+            {/* Quick insert block button */}
+            <button
+              onClick={() => {
+                setSlashMenuOpen(!slashMenuOpen)
+                setSlashFilter('')
+              }}
+              className="flex items-center gap-1 px-2 py-1 rounded-md bg-[#222226] hover:bg-[#2b2b32] text-zinc-300 transition mr-1 font-medium"
+              title="Insertar bloques de contenido (/)"
+            >
+              <Plus size={13} className="text-blue-400" />
+              <span>Bloque</span>
+            </button>
+
+            <div className="w-[1px] h-4 bg-[#2b2b30] mx-0.5" />
+
             <button
               onClick={() => editor.chain().focus().toggleBold().run()}
-              className={`p-1 rounded ${editor.isActive('bold') ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+              className={`p-1.5 rounded-md ${editor.isActive('bold') ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#202024]'}`}
               title="Negrita"
             >
               <Bold size={14} />
             </button>
             <button
               onClick={() => editor.chain().focus().toggleItalic().run()}
-              className={`p-1 rounded ${editor.isActive('italic') ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+              className={`p-1.5 rounded-md ${editor.isActive('italic') ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#202024]'}`}
               title="Cursiva"
             >
               <Italic size={14} />
             </button>
             <button
               onClick={() => editor.chain().focus().toggleUnderline().run()}
-              className={`p-1 rounded ${editor.isActive('underline') ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+              className={`p-1.5 rounded-md ${editor.isActive('underline') ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#202024]'}`}
               title="Subrayado"
             >
               <UnderlineIcon size={14} />
             </button>
             <button
               onClick={() => editor.chain().focus().toggleCode().run()}
-              className={`p-1 rounded ${editor.isActive('code') ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
-              title="Código"
+              className={`p-1.5 rounded-md ${editor.isActive('code') ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#202024]'}`}
+              title="Código en línea"
             >
               <Code size={14} />
             </button>
-            <div className="w-[1px] h-4 bg-[#2f2f35] mx-1" />
+
+            <div className="w-[1px] h-4 bg-[#2b2b30] mx-0.5" />
+
             <button
               onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-              className={`p-1 rounded ${editor.isActive('heading', { level: 1 }) ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+              className={`p-1.5 rounded-md ${editor.isActive('heading', { level: 1 }) ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#202024]'}`}
+              title="Encabezado 1"
             >
               <Heading1 size={14} />
             </button>
             <button
               onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-              className={`p-1 rounded ${editor.isActive('heading', { level: 2 }) ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+              className={`p-1.5 rounded-md ${editor.isActive('heading', { level: 2 }) ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#202024]'}`}
+              title="Encabezado 2"
             >
               <Heading2 size={14} />
             </button>
             <button
               onClick={() => editor.chain().focus().toggleBulletList().run()}
-              className={`p-1 rounded ${editor.isActive('bulletList') ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+              className={`p-1.5 rounded-md ${editor.isActive('bulletList') ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#202024]'}`}
+              title="Lista de viñetas"
             >
               <List size={14} />
             </button>
             <button
               onClick={() => editor.chain().focus().toggleTaskList().run()}
-              className={`p-1 rounded ${editor.isActive('taskList') ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-zinc-200'}`}
+              className={`p-1.5 rounded-md ${editor.isActive('taskList') ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#202024]'}`}
+              title="Lista de tareas"
             >
               <CheckSquare size={14} />
             </button>
           </div>
-          <div className="text-[11px] text-zinc-500">
-            {saveStatus === 'saving' ? 'Guardando...' : 'Guardado'}
+
+          <div className="flex items-center gap-3 text-[11px] text-zinc-500">
+            <span className="font-mono">
+              {saveStatus === 'saving' ? 'Guardando...' : 'Guardado'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Text Selection Bubble Toolbar */}
+      {floatingMenuPos && (
+        <div
+          style={{
+            position: 'fixed',
+            left: `${floatingMenuPos.x}px`,
+            top: `${floatingMenuPos.y}px`,
+            transform: 'translateX(-50%)'
+          }}
+          className="z-50 flex items-center gap-1 p-1 rounded-xl bg-[#18181b]/95 border border-[#2e2e36] shadow-2xl backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
+        >
+          <button
+            onClick={() => editor.chain().focus().toggleBold().run()}
+            className={`p-1.5 rounded-md ${editor.isActive('bold') ? 'bg-blue-600 text-white' : 'text-zinc-300 hover:bg-zinc-800'}`}
+          >
+            <Bold size={13} />
+          </button>
+          <button
+            onClick={() => editor.chain().focus().toggleItalic().run()}
+            className={`p-1.5 rounded-md ${editor.isActive('italic') ? 'bg-blue-600 text-white' : 'text-zinc-300 hover:bg-zinc-800'}`}
+          >
+            <Italic size={13} />
+          </button>
+          <button
+            onClick={() => editor.chain().focus().toggleUnderline().run()}
+            className={`p-1.5 rounded-md ${editor.isActive('underline') ? 'bg-blue-600 text-white' : 'text-zinc-300 hover:bg-zinc-800'}`}
+          >
+            <UnderlineIcon size={13} />
+          </button>
+          <button
+            onClick={() => editor.chain().focus().toggleCode().run()}
+            className={`p-1.5 rounded-md ${editor.isActive('code') ? 'bg-blue-600 text-white' : 'text-zinc-300 hover:bg-zinc-800'}`}
+          >
+            <Code size={13} />
+          </button>
+        </div>
+      )}
+
+      {/* Slash Menu Popover Dialog */}
+      {slashMenuOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-2xs flex items-center justify-center p-4">
+          <div
+            className="w-full max-w-md bg-[#18181c] border border-[#2d2d34] rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[70vh] animate-in fade-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Search filter input */}
+            <div className="p-3 border-b border-[#26262a] flex items-center justify-between gap-2">
+              <input
+                autoFocus
+                type="text"
+                value={slashFilter}
+                onChange={(e) => setSlashFilter(e.target.value)}
+                placeholder="Filtrar bloques de AFFiNE..."
+                className="w-full bg-transparent border-none outline-none text-xs text-zinc-100 placeholder:text-zinc-500 font-sans"
+              />
+              <button
+                onClick={() => setSlashMenuOpen(false)}
+                className="p-1 rounded text-zinc-400 hover:text-white"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            {/* Blocks menu list */}
+            <div className="overflow-y-auto p-2 space-y-1">
+              {slashMenuItems.length === 0 ? (
+                <div className="py-6 text-center text-xs text-zinc-500">
+                  No se encontraron bloques para "{slashFilter}"
+                </div>
+              ) : (
+                slashMenuItems.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => insertBlock(item.id)}
+                    className="w-full text-left p-2.5 rounded-xl hover:bg-[#222228] transition flex items-center gap-3 group text-xs"
+                  >
+                    <div className="p-2 rounded-lg bg-[#222228] group-hover:bg-[#2b2b34] shrink-0 transition">
+                      {item.icon}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="font-semibold text-zinc-200 group-hover:text-blue-400 transition">
+                        {item.title}
+                      </div>
+                      <div className="text-[11px] text-zinc-500 truncate">{item.desc}</div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
           </div>
         </div>
       )}
 
       {/* Main Document Body Container */}
       <div className={`mx-auto w-full pt-8 pb-24 ${pageWidthClass}`}>
-        {/* Top: Add icon Button (Matches Screenshot) */}
+        {/* Top: Add icon Button */}
         <div className="mb-4 relative">
           {workspace.icon ? (
             <div className="flex items-center gap-2 group">
@@ -332,7 +604,7 @@ export function DocEditor({
           />
         </div>
 
-        {/* Big Title (Matches Screenshot: placeholder "Title") */}
+        {/* Big Title */}
         <div className="mb-6">
           <input
             type="text"
@@ -346,7 +618,7 @@ export function DocEditor({
           />
         </div>
 
-        {/* Collapsible: "Información" (Matches Screenshot) */}
+        {/* Collapsible: "Información" */}
         <div className="mb-8">
           <div
             onClick={handleToggleInfo}
@@ -362,7 +634,6 @@ export function DocEditor({
                 )}
               </span>
             </div>
-            {/* Fine divider line */}
             <div className="flex-1 h-[1px] bg-[#26262a]" />
           </div>
 
@@ -384,7 +655,7 @@ export function DocEditor({
           )}
         </div>
 
-        {/* Action Pills Row (Matches Screenshot: "Iniciar", "Con IA ✨", "Plantilla 🗂️", "Sin bordes 🔗") */}
+        {/* Action Pills Row ("Iniciar", "Con IA ✨", "Plantilla 🗂️", "Sin bordes 🔗") */}
         <div className="flex items-center gap-2 mb-8 flex-wrap select-none text-xs">
           <span className="text-zinc-400 font-medium mr-1">Iniciar</span>
 
@@ -422,7 +693,7 @@ export function DocEditor({
           <EditorContent editor={editor} />
         </div>
 
-        {/* Section: Bi-Directional Links (Matches Screenshot) */}
+        {/* Section: Bi-Directional Links */}
         <div className="mt-14 pt-6 border-t border-[#26262a]">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
@@ -446,7 +717,6 @@ export function DocEditor({
                   <span>Vincular nota</span>
                 </button>
               )}
-              {/* "Mostrar" / "Ocultar" button from screenshot */}
               <button
                 onClick={handleToggleBiDirectional}
                 className="px-3 py-1 rounded-md bg-[#222226] hover:bg-[#2a2a30] text-zinc-300 text-xs font-medium transition"
@@ -459,7 +729,6 @@ export function DocEditor({
           {/* Bi-Directional Links expanded body */}
           {showBiDirectional && (
             <div className="space-y-3 animate-in fade-in duration-100">
-              {/* Link selector popover */}
               {showLinkSelector && (
                 <div className="p-3 bg-[#141416] border border-[#2a2a30] rounded-xl text-xs space-y-2">
                   <span className="text-zinc-400 font-medium block">

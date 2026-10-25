@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import {
   X,
-  FileText,
   Search,
   Star,
   Trash2,
   Clock,
-  Plus
+  Plus,
+  Layers
 } from 'lucide-react'
 import type { WorkspaceItem } from '../../db'
 
@@ -21,6 +21,8 @@ interface AllDocsModalProps {
   onDeleteWorkspace: (e: React.MouseEvent, id: string) => void
 }
 
+type ModeFilter = 'all' | 'favorites' | 'journals' | 'doc' | 'canvas'
+
 export function AllDocsModal({
   isOpen,
   onClose,
@@ -33,6 +35,7 @@ export function AllDocsModal({
 }: AllDocsModalProps) {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedTag, setSelectedTag] = useState<string>('all')
+  const [modeFilter, setModeFilter] = useState<ModeFilter>('all')
   const [sortBy, setSortBy] = useState<'updated' | 'created' | 'title'>('updated')
 
   if (!isOpen) return null
@@ -44,14 +47,25 @@ export function AllDocsModal({
     new Set(activeDocs.flatMap((w) => w.tags || []).filter(Boolean))
   )
 
-  // Filter and sort
+  // Filter and sort matching AFFiNE collections
   const filtered = activeDocs
     .filter((w) => {
+      // Search
       const matchQuery =
         w.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         w.docContent.toLowerCase().includes(searchQuery.toLowerCase())
+
+      // Tag
       const matchTag = selectedTag === 'all' || (w.tags || []).includes(selectedTag)
-      return matchQuery && matchTag
+
+      // Mode / Category
+      let matchMode = true
+      if (modeFilter === 'favorites') matchMode = w.isFavorite
+      else if (modeFilter === 'journals') matchMode = !!w.isJournal
+      else if (modeFilter === 'doc') matchMode = w.viewMode === 'doc'
+      else if (modeFilter === 'canvas') matchMode = w.viewMode === 'canvas'
+
+      return matchQuery && matchTag && matchMode
     })
     .sort((a, b) => {
       if (sortBy === 'updated') return b.updatedAt - a.updatedAt
@@ -62,16 +76,16 @@ export function AllDocsModal({
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
       <div
-        className="bg-[#18181b] border border-[#27272a] rounded-xl max-w-3xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-150"
+        className="bg-[#18181b] border border-[#27272a] rounded-2xl max-w-3xl w-full shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in fade-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="px-5 py-4 border-b border-[#27272a] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2">
-            <FileText size={18} className="text-blue-400" />
-            <h3 className="text-sm font-semibold text-zinc-100">Todos los documentos</h3>
+            <Layers size={18} className="text-blue-400" />
+            <h3 className="text-sm font-semibold text-zinc-100">Colecciones & Documentos (AFFiNE)</h3>
             <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#27272a] text-zinc-400 font-medium">
-              {activeDocs.length}
+              {filtered.length} de {activeDocs.length}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -92,6 +106,29 @@ export function AllDocsModal({
               <X size={16} />
             </button>
           </div>
+        </div>
+
+        {/* Collection Filter Tabs (AFFiNE Workspace Mode Filter) */}
+        <div className="px-5 py-2 border-b border-[#242428] bg-[#141416] flex items-center gap-1.5 overflow-x-auto shrink-0">
+          {[
+            { id: 'all', label: 'Todas las notas' },
+            { id: 'favorites', label: '⭐ Favoritas' },
+            { id: 'journals', label: '📅 Diarios' },
+            { id: 'doc', label: '📄 Documentos' },
+            { id: 'canvas', label: '☍ Tableros Edgeless' }
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setModeFilter(tab.id as ModeFilter)}
+              className={`px-3 py-1 rounded-lg text-xs font-medium transition shrink-0 ${
+                modeFilter === tab.id
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-[#222226] text-zinc-400 hover:text-zinc-200'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
 
         {/* Filter & Search Bar */}
@@ -158,10 +195,10 @@ export function AllDocsModal({
           </div>
         </div>
 
-        {/* Documents Table / List */}
-        <div className="flex-1 overflow-y-auto divide-y divide-[#242428] text-xs">
+        {/* List of Documents */}
+        <div className="p-4 overflow-y-auto space-y-2 flex-1">
           {filtered.length === 0 ? (
-            <div className="p-12 text-center text-zinc-500">
+            <div className="py-12 text-center text-xs text-zinc-500">
               No se encontraron documentos con los filtros seleccionados.
             </div>
           ) : (
@@ -172,52 +209,59 @@ export function AllDocsModal({
                   onSelectWorkspace(ws.id)
                   onClose()
                 }}
-                className={`flex items-center justify-between p-3.5 hover:bg-[#1f1f24] cursor-pointer transition group ${
-                  ws.id === currentWorkspaceId ? 'bg-blue-950/20' : ''
+                className={`p-3 rounded-xl border transition cursor-pointer flex items-center justify-between gap-4 group ${
+                  ws.id === currentWorkspaceId
+                    ? 'bg-[#202026] border-blue-500/50'
+                    : 'bg-[#141416] border-[#242428] hover:border-[#383842] hover:bg-[#1a1a1e]'
                 }`}
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <span className="text-xl p-1 rounded bg-[#222226] shrink-0">
-                    {ws.icon || '📄'}
-                  </span>
+                  <span className="text-2xl shrink-0">{ws.icon || '📄'}</span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-semibold text-zinc-100 group-hover:text-blue-400 transition truncate text-sm">
+                      <h4 className="font-semibold text-xs text-zinc-200 group-hover:text-blue-400 transition truncate">
                         {ws.title || 'Untitled'}
-                      </span>
+                      </h4>
                       {ws.isFavorite && (
                         <Star size={12} className="text-amber-400 fill-amber-400 shrink-0" />
                       )}
+                      {ws.isJournal && (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-sky-950 text-sky-400 border border-sky-800">
+                          Diario
+                        </span>
+                      )}
                     </div>
-                    <div className="flex items-center gap-3 mt-1 text-[11px] text-zinc-500">
+                    <div className="flex items-center gap-2 mt-1 text-[11px] text-zinc-500">
                       <span className="flex items-center gap-1">
                         <Clock size={11} />
                         {new Date(ws.updatedAt).toLocaleDateString('es-ES', {
-                          day: '2-digit',
-                          month: 'short',
-                          year: 'numeric'
+                          day: 'numeric',
+                          month: 'short'
                         })}
                       </span>
+                      <span>•</span>
+                      <span className="capitalize">{ws.viewMode}</span>
                       {ws.tags && ws.tags.length > 0 && (
-                        <div className="flex items-center gap-1 overflow-hidden">
-                          {ws.tags.slice(0, 3).map((t) => (
-                            <span
-                              key={t}
-                              className="px-1.5 py-0.2 rounded bg-[#27272a] text-zinc-400 text-[10px]"
-                            >
-                              #{t}
-                            </span>
-                          ))}
-                        </div>
+                        <>
+                          <span>•</span>
+                          <div className="flex gap-1 overflow-hidden">
+                            {ws.tags.map((t) => (
+                              <span key={t} className="text-zinc-400">
+                                #{t}
+                              </span>
+                            ))}
+                          </div>
+                        </>
                       )}
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1 ml-4 opacity-0 group-hover:opacity-100 transition shrink-0">
+                {/* Actions */}
+                <div className="flex items-center gap-1 shrink-0 opacity-80 group-hover:opacity-100">
                   <button
                     onClick={(e) => onToggleFavorite(e, ws)}
-                    className="p-1.5 rounded hover:bg-[#27272a] text-zinc-400 hover:text-amber-400 transition"
+                    className="p-1.5 rounded-md hover:bg-[#25252a] text-zinc-400 hover:text-amber-400 transition"
                     title={ws.isFavorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
                   >
                     <Star
@@ -227,8 +271,8 @@ export function AllDocsModal({
                   </button>
                   <button
                     onClick={(e) => onDeleteWorkspace(e, ws.id)}
-                    className="p-1.5 rounded hover:bg-rose-950/40 text-zinc-400 hover:text-rose-400 transition"
-                    title="Mover a papelera"
+                    className="p-1.5 rounded-md hover:bg-rose-950/40 text-zinc-500 hover:text-rose-400 transition"
+                    title="Mover a la papelera"
                   >
                     <Trash2 size={14} />
                   </button>

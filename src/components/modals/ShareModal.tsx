@@ -7,9 +7,11 @@ import {
   Globe,
   FileText,
   FileCode,
+  Printer,
+  FileJson,
   ShieldCheck
 } from 'lucide-react'
-import type { WorkspaceItem } from '../../db'
+import { db, type WorkspaceItem } from '../../db'
 
 interface ShareModalProps {
   isOpen: boolean
@@ -19,6 +21,7 @@ interface ShareModalProps {
 
 export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
   const [copiedLink, setCopiedLink] = useState(false)
+  const [copiedMd, setCopiedMd] = useState(false)
   const [isPublic, setIsPublic] = useState(false)
   const [permission, setPermission] = useState<'view' | 'edit'>('view')
 
@@ -32,16 +35,38 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
     setTimeout(() => setCopiedLink(false), 2000)
   }
 
+  // Convert HTML content into simple markdown
+  const getMarkdownContent = () => {
+    const rawText = workspace.docContent
+      .replace(/<h1>(.*?)<\/h1>/gi, '# $1\n\n')
+      .replace(/<h2>(.*?)<\/h2>/gi, '## $1\n\n')
+      .replace(/<h3>(.*?)<\/h3>/gi, '### $1\n\n')
+      .replace(/<p>(.*?)<\/p>/gi, '$1\n\n')
+      .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
+      .replace(/<em>(.*?)<\/em>/gi, '*$1*')
+      .replace(/<code>(.*?)<\/code>/gi, '`$1`')
+      .replace(/<li.*?>(.*?)<\/li>/gi, '- $1\n')
+      .replace(/<[^>]*>/g, '')
+      .trim()
+    return `# ${workspace.title}\n\n${rawText}`
+  }
+
   const exportMarkdown = () => {
-    const blob = new Blob([`# ${workspace.title}\n\n${workspace.docContent.replace(/<[^>]*>/g, '')}`], {
-      type: 'text/markdown;charset=utf-8'
-    })
+    const md = getMarkdownContent()
+    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
     a.download = `${workspace.title.replace(/\s+/g, '_').toLowerCase() || 'nota'}.md`
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  const handleCopyMarkdown = async () => {
+    const md = getMarkdownContent()
+    await navigator.clipboard.writeText(md)
+    setCopiedMd(true)
+    setTimeout(() => setCopiedMd(false), 2000)
   }
 
   const exportHTML = () => {
@@ -53,10 +78,14 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; max-width: 760px; margin: 40px auto; padding: 0 20px; color: #222; }
     h1 { border-bottom: 1px solid #eee; padding-bottom: 8px; }
+    ul[data-type="taskList"] { list-style: none; padding-left: 0; }
+    ul[data-type="taskList"] li { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    blockquote { border-left: 3px solid #6366f1; padding-left: 12px; color: #555; }
+    .callout { padding: 12px; border-radius: 8px; background: #f3f4f6; margin: 16px 0; }
   </style>
 </head>
 <body>
-  <h1>${workspace.title}</h1>
+  <h1>${workspace.icon ? `${workspace.icon} ` : ''}${workspace.title}</h1>
   ${workspace.docContent}
 </body>
 </html>`
@@ -69,17 +98,47 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
     URL.revokeObjectURL(url)
   }
 
+  const handlePrintPDF = () => {
+    window.print()
+  }
+
+  const exportJSONSnapshot = async () => {
+    const nodes = await db.canvasNodes.where('workspaceId').equals(workspace.id).toArray()
+    const edges = await db.canvasEdges.where('workspaceId').equals(workspace.id).toArray()
+
+    const snapshot = {
+      type: 'seven-note-snapshot',
+      version: '1.0',
+      exportedAt: new Date().toISOString(),
+      workspace,
+      canvas: {
+        nodes,
+        edges
+      }
+    }
+
+    const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
+      type: 'application/json;charset=utf-8'
+    })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${workspace.title.replace(/\s+/g, '_').toLowerCase() || 'nota'}_snapshot.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
       <div
-        className="bg-[#18181b] border border-[#27272a] rounded-xl max-w-md w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+        className="bg-[#18181b] border border-[#27272a] rounded-2xl max-w-md w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="px-5 py-4 border-b border-[#27272a] flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Share2 size={18} className="text-blue-400" />
-            <h3 className="text-sm font-semibold text-zinc-100">Compartir documento</h3>
+            <h3 className="text-sm font-semibold text-zinc-100">Compartir y Exportar (AFFiNE)</h3>
           </div>
           <button
             onClick={onClose}
@@ -89,13 +148,13 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
           </button>
         </div>
 
-        <div className="p-5 space-y-5 text-xs text-zinc-300">
+        <div className="p-5 space-y-4 text-xs text-zinc-300">
           {/* Document summary */}
-          <div className="p-3 bg-[#131315] rounded-lg border border-[#242428] flex items-center gap-3">
+          <div className="p-3 bg-[#131315] rounded-xl border border-[#242428] flex items-center gap-3">
             <span className="text-2xl">{workspace.icon || '📄'}</span>
             <div className="min-w-0 flex-1">
               <h4 className="font-semibold text-zinc-100 truncate">{workspace.title || 'Untitled'}</h4>
-              <p className="text-[11px] text-zinc-500">Última edición hoy</p>
+              <p className="text-[11px] text-zinc-500">Última edición hoy • Modo {workspace.viewMode}</p>
             </div>
           </div>
 
@@ -169,10 +228,10 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
             )}
           </div>
 
-          {/* Quick Exports */}
+          {/* Quick Exports (Matching AFFiNE) */}
           <div className="pt-2 border-t border-[#27272a]">
             <label className="block text-[11px] font-medium text-zinc-400 mb-2">
-              Exportar archivo
+              Exportar documento & lienzo
             </label>
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -182,12 +241,37 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
                 <FileCode size={14} className="text-blue-400" />
                 <span>Markdown (.md)</span>
               </button>
+
+              <button
+                onClick={handleCopyMarkdown}
+                className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-[#222226] hover:bg-[#2a2a30] text-zinc-200 font-medium transition"
+              >
+                {copiedMd ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} className="text-sky-400" />}
+                <span>{copiedMd ? 'Copiado!' : 'Copiar MD'}</span>
+              </button>
+
               <button
                 onClick={exportHTML}
                 className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-[#222226] hover:bg-[#2a2a30] text-zinc-200 font-medium transition"
               >
                 <FileText size={14} className="text-amber-400" />
-                <span>Página Web (.html)</span>
+                <span>Página (.html)</span>
+              </button>
+
+              <button
+                onClick={handlePrintPDF}
+                className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-[#222226] hover:bg-[#2a2a30] text-zinc-200 font-medium transition"
+              >
+                <Printer size={14} className="text-rose-400" />
+                <span>Imprimir / PDF</span>
+              </button>
+
+              <button
+                onClick={exportJSONSnapshot}
+                className="col-span-2 flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-[#222226] hover:bg-[#2a2a30] text-zinc-200 font-medium transition"
+              >
+                <FileJson size={14} className="text-emerald-400" />
+                <span>Instantánea completa JSON (Lienzo + Doc)</span>
               </button>
             </div>
           </div>
