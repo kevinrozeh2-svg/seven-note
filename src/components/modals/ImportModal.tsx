@@ -1,20 +1,23 @@
 import { useState, useRef } from 'react'
 import {
-  X,
-  Upload,
-  CheckCircle2,
-  AlertCircle
-} from 'lucide-react'
-import { db } from '../../db'
+  CloseIcon,
+  UploadIcon,
+  DoneIcon,
+  InformationIcon
+} from '@blocksuite/icons/rc'
+import { db, DEFAULT_SPACE_ID } from '../../db'
 import { syncEngine } from '../../lib/syncEngine'
+import { importObsidianCanvas } from '../../lib/canvasExchange'
+import { toast } from 'sonner'
 
 interface ImportModalProps {
   isOpen: boolean
   onClose: () => void
   onWorkspaceImported: (newId: string) => void
+  currentSpaceId?: string
 }
 
-export function ImportModal({ isOpen, onClose, onWorkspaceImported }: ImportModalProps) {
+export function ImportModal({ isOpen, onClose, onWorkspaceImported, currentSpaceId }: ImportModalProps) {
   const [fileName, setFileName] = useState<string | null>(null)
   const [importedTitle, setImportedTitle] = useState('')
   const [importedContent, setImportedContent] = useState('')
@@ -23,7 +26,7 @@ export function ImportModal({ isOpen, onClose, onWorkspaceImported }: ImportModa
 
   if (!isOpen) return null
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
 
@@ -31,6 +34,40 @@ export function ImportModal({ isOpen, onClose, onWorkspaceImported }: ImportModa
     const titleWithoutExt = file.name.replace(/\.[^/.]+$/, '')
     setImportedTitle(titleWithoutExt)
     setError(null)
+
+    // Handle Obsidian JSON Canvas format (.canvas)
+    if (file.name.endsWith('.canvas')) {
+      try {
+        const newId = crypto.randomUUID()
+        const now = Date.now()
+        await db.workspaces.add({
+          id: newId,
+          parentId: null,
+          spaceId: currentSpaceId || DEFAULT_SPACE_ID,
+          title: titleWithoutExt || 'Tablero Canvas Importado',
+          icon: '🎨',
+          color: '#8b5cf6',
+          viewMode: 'canvas',
+          docContent: '<p>Tablero importado desde Obsidian Canvas</p>',
+          createdAt: now,
+          updatedAt: now,
+          isFavorite: false,
+          isDeleted: false,
+          syncStatus: 'pending',
+          tags: ['Obsidian', 'Canvas']
+        })
+
+        const count = await importObsidianCanvas(newId, file)
+        toast.success(`Tablero Obsidian importado con éxito (${count} tarjetas)`)
+        syncEngine.scheduleSync(1000)
+        onWorkspaceImported(newId)
+        onClose()
+        return
+      } catch (err: any) {
+        setError(err.message || 'Error al importar archivo .canvas')
+        return
+      }
+    }
 
     const reader = new FileReader()
     reader.onload = (event) => {
@@ -84,9 +121,10 @@ export function ImportModal({ isOpen, onClose, onWorkspaceImported }: ImportModa
       await db.workspaces.add({
         id: newId,
         parentId: null,
+        spaceId: currentSpaceId || DEFAULT_SPACE_ID,
         title: importedTitle || 'Documento Importado',
         icon: '📥',
-        color: '#3b82f6',
+        color: '#1e96eb',
         viewMode: 'doc',
         docContent: importedContent || '<p>Contenido importado vacío</p>',
         createdAt: now,
@@ -106,53 +144,98 @@ export function ImportModal({ isOpen, onClose, onWorkspaceImported }: ImportModa
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
       <div
-        className="bg-[#18181b] border border-[#27272a] rounded-xl max-w-md w-full shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150"
+        className="rounded-2xl max-w-md w-full border shadow-2xl overflow-hidden flex flex-col"
+        style={{
+          backgroundColor: 'var(--affine-background-overlay-panel-color)',
+          borderColor: 'var(--affine-border-color)',
+          boxShadow: 'var(--affine-popover-shadow)',
+          color: 'var(--affine-text-primary-color)'
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-5 py-4 border-b border-[#27272a] flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2">
-            <Upload size={18} className="text-cyan-400" />
-            <h3 className="text-sm font-semibold text-zinc-100">Importar archivo</h3>
+        <div
+          className="px-5 py-4 border-b flex items-center justify-between shrink-0"
+          style={{ borderColor: 'var(--affine-border-color)' }}
+        >
+          <div className="flex items-center gap-2.5">
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center"
+              style={{
+                backgroundColor: 'rgba(30, 150, 235, 0.1)',
+                color: '#1e96eb'
+              }}
+            >
+              <UploadIcon style={{ width: 18, height: 18 }} />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold" style={{ color: 'var(--affine-text-primary-color)' }}>
+                Importar Archivo
+              </h3>
+              <p className="text-[11px]" style={{ color: 'var(--affine-text-secondary-color)' }}>
+                Convierte archivos Markdown o JSON a páginas de Seven Note
+              </p>
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-[#27272a] transition"
+            className="p-1.5 rounded-lg transition"
+            style={{ color: 'var(--affine-text-secondary-color)' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--affine-hover-color)'
+              e.currentTarget.style.color = 'var(--affine-text-primary-color)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent'
+              e.currentTarget.style.color = 'var(--affine-text-secondary-color)'
+            }}
           >
-            <X size={16} />
+            <CloseIcon style={{ width: 16, height: 16 }} />
           </button>
         </div>
 
-        <div className="p-5 space-y-4 text-xs text-zinc-300">
+        <div className="p-5 space-y-4 text-xs">
           <input
             type="file"
             ref={fileInputRef}
             onChange={handleFileChange}
-            accept=".md,.markdown,.txt,.json,.html"
+            accept=".md,.markdown,.txt,.json,.html,.canvas"
             className="hidden"
           />
 
           {/* Upload Drop Area */}
           <div
             onClick={() => fileInputRef.current?.click()}
-            className="border-2 border-dashed border-[#2d2d34] hover:border-blue-500 rounded-xl p-6 text-center cursor-pointer bg-[#141416] transition flex flex-col items-center gap-2"
+            className="border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition flex flex-col items-center gap-2"
+            style={{
+              borderColor: 'var(--affine-border-color)',
+              backgroundColor: 'var(--affine-background-secondary-color)'
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.borderColor = '#1e96eb')}
+            onMouseLeave={(e) => (e.currentTarget.style.borderColor = 'var(--affine-border-color)')}
           >
-            <div className="p-3 rounded-full bg-[#222226] text-zinc-300">
-              <Upload size={22} className="text-blue-400" />
+            <div
+              className="p-3 rounded-full flex items-center justify-center"
+              style={{
+                backgroundColor: 'var(--affine-hover-color)',
+                color: '#1e96eb'
+              }}
+            >
+              <UploadIcon style={{ width: 22, height: 22 }} />
             </div>
-            <p className="font-semibold text-zinc-200">
+            <p className="font-semibold text-xs" style={{ color: 'var(--affine-text-primary-color)' }}>
               {fileName ? fileName : 'Selecciona o arrastra un archivo'}
             </p>
-            <p className="text-[11px] text-zinc-500">
-              Formatos soportados: Markdown (.md), Texto plano (.txt), JSON (.json)
+            <p className="text-[11px]" style={{ color: 'var(--affine-text-secondary-color)' }}>
+              Formatos soportados: Markdown (.md), Obsidian Canvas (.canvas), JSON (.json)
             </p>
           </div>
 
           {error && (
-            <div className="p-2.5 rounded-lg bg-rose-950/40 border border-rose-800 text-rose-300 flex items-center gap-2">
-              <AlertCircle size={14} />
+            <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-500 flex items-center gap-2">
+              <InformationIcon style={{ width: 14, height: 14 }} />
               <span>{error}</span>
             </div>
           )}
@@ -160,19 +243,33 @@ export function ImportModal({ isOpen, onClose, onWorkspaceImported }: ImportModa
           {fileName && (
             <div className="space-y-3 pt-2">
               <div>
-                <label className="block text-[11px] font-medium text-zinc-400 mb-1">
+                <label className="block text-[11px] font-medium mb-1" style={{ color: 'var(--affine-text-secondary-color)' }}>
                   Título del documento:
                 </label>
                 <input
                   type="text"
                   value={importedTitle}
                   onChange={(e) => setImportedTitle(e.target.value)}
-                  className="w-full bg-[#141416] border border-[#2d2d34] rounded-lg px-3 py-1.5 text-xs text-zinc-100 focus:outline-none focus:border-blue-500"
+                  className="w-full rounded-lg px-3 py-1.5 text-xs outline-none border transition"
+                  style={{
+                    backgroundColor: 'var(--affine-background-primary-color)',
+                    borderColor: 'var(--affine-border-color)',
+                    color: 'var(--affine-text-primary-color)'
+                  }}
+                  onFocus={(e) => (e.currentTarget.style.borderColor = '#1e96eb')}
+                  onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--affine-border-color)')}
                 />
               </div>
 
-              <div className="p-2.5 rounded-lg bg-[#141416] border border-[#242428] text-zinc-400 text-[11px] flex items-center gap-2">
-                <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
+              <div
+                className="p-2.5 rounded-lg border text-[11px] flex items-center gap-2"
+                style={{
+                  backgroundColor: 'var(--affine-background-secondary-color)',
+                  borderColor: 'var(--affine-border-color)',
+                  color: 'var(--affine-text-secondary-color)'
+                }}
+              >
+                <DoneIcon style={{ width: 14, height: 14, color: '#10b981' }} />
                 <span>Archivo leído y listo para crear nueva página.</span>
               </div>
             </div>
@@ -181,14 +278,26 @@ export function ImportModal({ isOpen, onClose, onWorkspaceImported }: ImportModa
           <div className="flex gap-2 justify-end pt-2">
             <button
               onClick={onClose}
-              className="px-3 py-1.5 rounded-lg bg-[#222226] hover:bg-[#2a2a30] text-zinc-300 font-medium transition"
+              className="px-3 py-1.5 rounded-lg border font-medium transition"
+              style={{
+                backgroundColor: 'var(--affine-background-secondary-color)',
+                borderColor: 'var(--affine-border-color)',
+                color: 'var(--affine-text-primary-color)'
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--affine-hover-color)')}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'var(--affine-background-secondary-color)')}
             >
               Cancelar
             </button>
             <button
               onClick={handleConfirmImport}
               disabled={!fileName}
-              className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-lg font-medium transition"
+              className="px-4 py-1.5 disabled:opacity-40 text-white rounded-lg font-medium transition shadow-xs"
+              style={{ backgroundColor: '#1e96eb' }}
+              onMouseEnter={(e) => {
+                if (fileName) e.currentTarget.style.backgroundColor = '#197ec6'
+              }}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#1e96eb')}
             >
               Crear documento
             </button>

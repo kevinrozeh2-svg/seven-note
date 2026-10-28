@@ -1,17 +1,23 @@
 import { memo, useState, useEffect, useRef } from 'react'
 import { Handle, Position } from '@xyflow/react'
-import { Trash2, AlignLeft, AlignCenter, AlignRight } from 'lucide-react'
+import {
+  DeleteIcon,
+  AlignLeftIcon,
+  AlignHorizontalCenterIcon,
+  AlignRightIcon
+} from '@blocksuite/icons/rc'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
+import { areNodePropsEqual } from './nodeUtils'
 
 const TEXT_COLORS: Record<string, string> = {
-  white: 'text-zinc-100',
-  slate: 'text-zinc-400',
-  blue: 'text-sky-400',
-  green: 'text-emerald-400',
-  yellow: 'text-amber-400',
-  rose: 'text-rose-400',
-  purple: 'text-purple-400'
+  white: 'text-[var(--app-text-primary)]',
+  slate: 'text-[var(--app-text-secondary)]',
+  blue: 'text-sky-600 dark:text-sky-400',
+  green: 'text-emerald-600 dark:text-emerald-400',
+  yellow: 'text-amber-600 dark:text-amber-400',
+  rose: 'text-rose-600 dark:text-rose-400',
+  purple: 'text-purple-600 dark:text-purple-400'
 }
 
 const FONT_SIZES: Record<string, { class: string; label: string }> = {
@@ -30,8 +36,8 @@ export const TextNode = memo(({ id, data, selected }: any) => {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   useEffect(() => {
-    setContent(data.content || '')
-    setColor(data.color || 'white')
+    if (data.content !== undefined) setContent(data.content)
+    if (data.color !== undefined) setColor(data.color)
     if (data.fontSize) setSize(data.fontSize)
     if (data.textAlign) setAlign(data.textAlign)
   }, [data.content, data.color, data.fontSize, data.textAlign])
@@ -79,35 +85,41 @@ export const TextNode = memo(({ id, data, selected }: any) => {
     <div
       className={`relative min-w-[120px] max-w-[400px] p-2 rounded-lg transition group ${
         selected
-          ? 'ring-1 ring-blue-500 bg-[#1e1e24]/60 backdrop-blur-xs'
-          : 'hover:bg-[#1a1a1e]/40'
+          ? 'ring-1 ring-[var(--app-accent)] bg-[var(--app-hover)]'
+          : 'hover:bg-[var(--app-hover)]'
       }`}
     >
       {/* 4 Handles for connection arrows */}
       <Handle
-        type="target"
+        id="top"
+        type="source"
         position={Position.Top}
-        className="!w-2.5 !h-2.5 !bg-indigo-500 !border-2 !border-white dark:!border-zinc-900"
+        className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800"
       />
       <Handle
+        id="bottom"
         type="source"
         position={Position.Bottom}
-        className="!w-2.5 !h-2.5 !bg-indigo-500 !border-2 !border-white dark:!border-zinc-900"
+        className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800"
       />
       <Handle
-        type="target"
+        id="left"
+        type="source"
         position={Position.Left}
-        className="!w-2.5 !h-2.5 !bg-indigo-500 !border-2 !border-white dark:!border-zinc-900"
+        className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800"
       />
       <Handle
+        id="right"
         type="source"
         position={Position.Right}
-        className="!w-2.5 !h-2.5 !bg-indigo-500 !border-2 !border-white dark:!border-zinc-900"
+        className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800"
       />
 
       {/* Floating Toolbar when selected */}
       {selected && (
-        <div className="absolute -top-10 left-0 z-30 flex items-center gap-1 p-1 bg-[#18181b] border border-[#2b2b32] rounded-xl shadow-2xl backdrop-blur-md text-zinc-300">
+        <div
+          className="absolute -top-10 left-0 z-30 flex items-center gap-1 p-1 rounded-lg border shadow-md bg-[var(--app-bg-overlay)] border-[var(--app-border)] text-[var(--app-text-primary)]"
+        >
           {/* Size buttons */}
           {(['sm', 'base', 'lg', 'xl'] as const).map((s) => (
             <button
@@ -116,15 +128,20 @@ export const TextNode = memo(({ id, data, selected }: any) => {
                 setSize(s)
                 save({ fontSize: s })
               }}
-              className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                size === s ? 'bg-blue-600 text-white' : 'text-zinc-400 hover:text-white'
-              }`}
+              className="px-1.5 py-0.5 rounded text-[10px] font-bold transition"
+              style={{
+                backgroundColor: size === s ? '#1e96eb' : 'transparent',
+                color: size === s ? '#ffffff' : 'var(--affine-text-secondary-color)'
+              }}
             >
               {FONT_SIZES[s].label}
             </button>
           ))}
 
-          <div className="w-[1px] h-3.5 bg-[#2d2d34] mx-0.5" />
+          <div
+            className="w-[1px] h-3.5 mx-0.5"
+            style={{ backgroundColor: 'var(--affine-border-color)' }}
+          />
 
           {/* Alignment */}
           <button
@@ -133,19 +150,23 @@ export const TextNode = memo(({ id, data, selected }: any) => {
               setAlign(nextAlign)
               save({ textAlign: nextAlign })
             }}
-            className="p-1 rounded text-zinc-400 hover:text-white"
+            className="p-1 rounded transition"
+            style={{ color: 'var(--affine-text-secondary-color)' }}
             title="Alineación de texto"
           >
             {align === 'left' ? (
-              <AlignLeft size={13} />
+              <AlignLeftIcon style={{ width: 14, height: 14 }} />
             ) : align === 'center' ? (
-              <AlignCenter size={13} />
+              <AlignHorizontalCenterIcon style={{ width: 14, height: 14 }} />
             ) : (
-              <AlignRight size={13} />
+              <AlignRightIcon style={{ width: 14, height: 14 }} />
             )}
           </button>
 
-          <div className="w-[1px] h-3.5 bg-[#2d2d34] mx-0.5" />
+          <div
+            className="w-[1px] h-3.5 mx-0.5"
+            style={{ backgroundColor: 'var(--affine-border-color)' }}
+          />
 
           {/* Colors */}
           {['white', 'slate', 'blue', 'green', 'yellow', 'rose', 'purple'].map((col) => (
@@ -169,19 +190,22 @@ export const TextNode = memo(({ id, data, selected }: any) => {
                   : col === 'rose'
                   ? 'bg-rose-400'
                   : 'bg-purple-400'
-              } ${color === col ? 'ring-1 ring-white' : ''}`}
+              } ${color === col ? 'ring-2 ring-[#1e96eb]' : ''}`}
             />
           ))}
 
-          <div className="w-[1px] h-3.5 bg-[#2d2d34] mx-0.5" />
+          <div
+            className="w-[1px] h-3.5 mx-0.5"
+            style={{ backgroundColor: 'var(--affine-border-color)' }}
+          />
 
           {/* Delete */}
           <button
             onClick={handleDelete}
-            className="p-1 rounded hover:bg-rose-950/50 text-zinc-400 hover:text-rose-400"
+            className="p-1 rounded text-rose-500 hover:bg-rose-500/10 transition"
             title="Eliminar texto"
           >
-            <Trash2 size={13} />
+            <DeleteIcon style={{ width: 13, height: 13 }} />
           </button>
         </div>
       )}
@@ -213,10 +237,10 @@ export const TextNode = memo(({ id, data, selected }: any) => {
           className={`cursor-text whitespace-pre-wrap select-none leading-relaxed font-sans ${textColorClass} ${fontSizeClass} text-${align}`}
         >
           {content || (
-            <span className="text-zinc-500 italic text-xs">Doble clic para escribir texto</span>
+            <span className="italic text-xs opacity-60">Doble clic para escribir texto</span>
           )}
         </div>
       )}
     </div>
   )
-})
+}, areNodePropsEqual)

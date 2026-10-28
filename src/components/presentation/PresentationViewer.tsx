@@ -1,25 +1,25 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { useLiveQuery } from 'dexie-react-hooks'
 import {
-  X,
-  ChevronLeft,
-  ChevronRight,
-  Maximize2,
-  Minimize2,
-  Play,
-  Pause,
-  RotateCcw,
-  Layers,
-  Sparkles,
-  CheckCircle2,
-  Circle
-} from 'lucide-react'
-import type { WorkspaceItem, CanvasNodeItem } from '../../db'
+  CloseIcon,
+  ArrowLeftSmallIcon,
+  ArrowRightSmallIcon,
+  ExpandFullIcon,
+  ExpandCloseIcon,
+  PlayIcon,
+  PausePanelIcon,
+  ResetIcon,
+  AllDocsIcon,
+  AiIcon,
+  DoneIcon
+} from '@blocksuite/icons/rc'
+import { db, type WorkspaceItem, type CanvasNodeItem } from '../../db'
 
 interface PresentationViewerProps {
   isOpen: boolean
   onClose: () => void
   workspace: WorkspaceItem | undefined
-  nodes: CanvasNodeItem[]
+  nodes?: CanvasNodeItem[]
   initialFrameId?: string
 }
 
@@ -44,6 +44,13 @@ export function PresentationViewer({
   const [laserPos, setLaserPos] = useState({ x: -100, y: -100 })
   const [isBlackout, setIsBlackout] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
+
+  // Query nodes lazily only when presentation is open
+  const queriedNodes = useLiveQuery<CanvasNodeItem[]>(
+    () => (isOpen && workspace?.id ? db.canvasNodes.where('workspaceId').equals(workspace.id).and((n) => !n.isDeleted).toArray() : Promise.resolve<CanvasNodeItem[]>([])),
+    [isOpen, workspace?.id]
+  ) ?? []
+  const effectiveNodes = nodes ?? queriedNodes
   const [showThumbnails, setShowThumbnails] = useState(false)
 
   // Presentation Timer state
@@ -70,7 +77,7 @@ export function PresentationViewer({
     if (!workspace) return []
 
     // 1. Check for canvas frames
-    const frameNodes = nodes
+    const frameNodes = effectiveNodes
       .filter((n) => n.type === 'frame' && !n.isDeleted)
       .sort((a, b) => (a.data.frameIndex || 0) - (b.data.frameIndex || 0))
 
@@ -84,7 +91,7 @@ export function PresentationViewer({
         const fy2 = fy1 + frameH
 
         // Find canvas nodes inside or overlapping this frame
-        const insideNodes = nodes.filter(
+        const insideNodes = effectiveNodes.filter(
           (n) =>
             n.id !== frame.id &&
             !n.isDeleted &&
@@ -143,27 +150,27 @@ export function PresentationViewer({
     }
 
     // If still just intro slide and there are canvas nodes, add a slide showing canvas cards
-    if (resultSlides.length === 1 && nodes.length > 0) {
+    if (resultSlides.length === 1 && effectiveNodes.length > 0) {
       resultSlides.push({
         id: 'slide-cards',
         title: 'Elementos del Tablero Visual',
         type: 'frame',
-        nodes: nodes.filter((n) => !n.isDeleted && n.type !== 'docframe')
+        nodes: effectiveNodes.filter((n) => !n.isDeleted && n.type !== 'docframe')
       })
     }
 
     return resultSlides
-  }, [workspace, nodes])
+  }, [workspace, effectiveNodes])
 
   // If initialFrameId is provided, jump to it
   useEffect(() => {
     if (initialFrameId && slides.length > 0) {
       const idx = slides.findIndex((s) => s.id === initialFrameId)
-      if (idx !== -1) {
+      if (idx !== -1 && idx !== currentSlideIndex) {
         setCurrentSlideIndex(idx)
       }
     }
-  }, [initialFrameId, slides])
+  }, [initialFrameId, slides, currentSlideIndex])
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -260,7 +267,7 @@ export function PresentationViewer({
             {workspace.title || 'Untitled'}
           </span>
           <span className="text-zinc-500 text-xs">•</span>
-          <span className="text-xs text-indigo-400 font-medium">
+          <span className="text-xs text-[#1e96eb] font-medium">
             Diapositiva {currentSlideIndex + 1} de {slides.length}
           </span>
         </div>
@@ -277,7 +284,7 @@ export function PresentationViewer({
             }`}
             title="Puntero Láser (L)"
           >
-            <Sparkles size={13} className={isLaserPointerActive ? 'text-red-400' : ''} />
+            <AiIcon style={{ width: 14, height: 14 }} className={isLaserPointerActive ? 'text-red-400' : ''} />
             <span>Láser</span>
           </button>
 
@@ -287,7 +294,11 @@ export function PresentationViewer({
             className="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition"
             title="Pantalla completa (F)"
           >
-            {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+            {isFullscreen ? (
+              <ExpandCloseIcon style={{ width: 15, height: 15 }} />
+            ) : (
+              <ExpandFullIcon style={{ width: 15, height: 15 }} />
+            )}
           </button>
 
           {/* Exit Presentation */}
@@ -295,7 +306,7 @@ export function PresentationViewer({
             onClick={onClose}
             className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition"
           >
-            <X size={14} />
+            <CloseIcon style={{ width: 14, height: 14 }} />
             <span>Salir (Esc)</span>
           </button>
         </div>
@@ -308,7 +319,7 @@ export function PresentationViewer({
             {/* Slide title header */}
             <div className="flex items-center justify-between pb-6 border-b border-zinc-800/80 mb-6">
               <div className="flex items-center gap-3">
-                <span className="w-7 h-7 rounded-lg bg-indigo-600/30 border border-indigo-500/40 text-indigo-400 flex items-center justify-center font-bold text-xs">
+                <span className="w-7 h-7 rounded-lg bg-[#1e96eb]/20 border border-[#1e96eb]/40 text-[#1e96eb] flex items-center justify-center font-bold text-xs">
                   #{currentSlideIndex + 1}
                 </span>
                 <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
@@ -327,56 +338,134 @@ export function PresentationViewer({
               ) : currentSlide.nodes && currentSlide.nodes.length > 0 ? (
                 /* Frame nodes visual rendering */
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {currentSlide.nodes.map((n) => (
-                    <div
-                      key={n.id}
-                      className="p-4 rounded-2xl bg-[#1c1c22] border border-zinc-800 shadow-md space-y-2"
-                    >
-                      {/* Node Header */}
-                      <div className="flex items-center justify-between">
-                        <span className="font-semibold text-sm text-zinc-100 truncate">
-                          {n.data.title || (n.type === 'note' ? 'Nota' : n.type === 'todo' ? 'Tareas' : n.type)}
-                        </span>
-                        <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
-                          {n.type}
-                        </span>
-                      </div>
-
-                      {/* Content */}
-                      {n.data.content && (
-                        <p className="text-xs text-zinc-300 leading-relaxed whitespace-pre-wrap">
-                          {n.data.content}
-                        </p>
-                      )}
-
-                      {/* Todos */}
-                      {n.data.todos && (
-                        <div className="space-y-1.5 pt-1">
-                          {n.data.todos.map((todo) => (
-                            <div key={todo.id} className="flex items-center gap-2 text-xs">
-                              {todo.completed ? (
-                                <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
-                              ) : (
-                                <Circle size={14} className="text-zinc-500 shrink-0" />
-                              )}
-                              <span className={todo.completed ? 'line-through text-zinc-500' : 'text-zinc-300'}>
-                                {todo.text}
-                              </span>
-                            </div>
-                          ))}
+                  {currentSlide.nodes.map((n) => {
+                    if (n.type === 'shape') {
+                      const shapeKind = n.data?.shapeType || 'rect'
+                      return (
+                        <div
+                          key={n.id}
+                          className={`p-5 rounded-2xl border-2 flex flex-col items-center justify-center text-center shadow-lg transition ${
+                            n.data.color === 'green'
+                              ? 'bg-emerald-950/20 border-emerald-500 text-emerald-200'
+                              : n.data.color === 'yellow'
+                              ? 'bg-amber-950/20 border-amber-500 text-amber-200'
+                              : n.data.color === 'purple'
+                              ? 'bg-purple-950/20 border-purple-500 text-purple-200'
+                              : n.data.color === 'rose'
+                              ? 'bg-rose-950/20 border-rose-500 text-rose-200'
+                              : 'bg-sky-950/20 border-sky-500 text-sky-200'
+                          } ${shapeKind === 'ellipse' ? 'rounded-full' : shapeKind === 'roundedRect' ? 'rounded-3xl' : 'rounded-xl'}`}
+                        >
+                          <span className="text-[10px] uppercase font-mono tracking-wider opacity-60 mb-1">
+                            {shapeKind}
+                          </span>
+                          <span className="font-semibold text-sm sm:text-base leading-snug">
+                            {n.data.content || n.data.title || 'Forma'}
+                          </span>
                         </div>
-                      )}
+                      )
+                    }
 
-                      {/* Image */}
-                      {n.data.imageUrl && (
-                        <img
-                          src={n.data.imageUrl}
-                          alt=""
-                          className="w-full h-32 object-cover rounded-xl mt-2"
-                        />
-                      )}
-                    </div>
-                  ))}
+                    if (n.type === 'text') {
+                      return (
+                        <div
+                          key={n.id}
+                          className="p-4 rounded-xl bg-transparent border border-zinc-800/60 flex items-center"
+                        >
+                          <p
+                            className={`font-semibold leading-relaxed ${
+                              n.data.fontSize === 'xl'
+                                ? 'text-2xl text-white font-extrabold'
+                                : n.data.fontSize === 'lg'
+                                ? 'text-lg text-zinc-100 font-bold'
+                                : 'text-sm text-zinc-200'
+                            }`}
+                          >
+                            {n.data.content || 'Texto'}
+                          </p>
+                        </div>
+                      )
+                    }
+
+                    if (n.type === 'note') {
+                      return (
+                        <div
+                          key={n.id}
+                          className={`p-4 rounded-2xl shadow-md border space-y-2 ${
+                            n.data.color === 'green'
+                              ? 'bg-emerald-950/30 border-emerald-800/60 text-emerald-100'
+                              : n.data.color === 'yellow'
+                              ? 'bg-amber-950/30 border-amber-800/60 text-amber-100'
+                              : n.data.color === 'blue'
+                              ? 'bg-sky-950/30 border-sky-800/60 text-sky-100'
+                              : n.data.color === 'rose'
+                              ? 'bg-rose-950/30 border-rose-800/60 text-rose-100'
+                              : 'bg-zinc-900 border-zinc-800 text-zinc-200'
+                          }`}
+                        >
+                          <span className="font-semibold text-sm block">
+                            {n.data.title || 'Nota'}
+                          </span>
+                          {n.data.content && (
+                            <p className="text-xs leading-relaxed whitespace-pre-wrap opacity-90">
+                              {n.data.content}
+                            </p>
+                          )}
+                        </div>
+                      )
+                    }
+
+                    return (
+                      <div
+                        key={n.id}
+                        className="p-4 rounded-2xl bg-[#1c1c22] border border-zinc-800 shadow-md space-y-2"
+                      >
+                        {/* Node Header */}
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-sm text-zinc-100 truncate">
+                            {n.data.title || (n.type === 'todo' ? 'Tareas' : n.type)}
+                          </span>
+                          <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
+                            {n.type}
+                          </span>
+                        </div>
+
+                        {/* Content */}
+                        {n.data.content && (
+                          <p className="text-xs text-zinc-300 leading-relaxed whitespace-pre-wrap">
+                            {n.data.content}
+                          </p>
+                        )}
+
+                        {/* Todos */}
+                        {n.data.todos && (
+                          <div className="space-y-1.5 pt-1">
+                            {n.data.todos.map((todo) => (
+                              <div key={todo.id} className="flex items-center gap-2 text-xs">
+                                {todo.completed ? (
+                                  <DoneIcon style={{ width: 14, height: 14, color: '#10b981', flexShrink: 0 }} />
+                                ) : (
+                                  <span className="w-3.5 h-3.5 rounded-full border border-zinc-500 shrink-0 inline-block" />
+                                )}
+                                <span className={todo.completed ? 'line-through text-zinc-500' : 'text-zinc-300'}>
+                                  {todo.text}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Image */}
+                        {n.data.imageUrl && (
+                          <img
+                            src={n.data.imageUrl}
+                            alt=""
+                            className="w-full h-32 object-cover rounded-xl mt-2"
+                          />
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               ) : (
                 <div className="h-full flex items-center justify-center text-zinc-500 text-sm">
@@ -410,7 +499,11 @@ export function PresentationViewer({
             className="p-1 rounded text-zinc-400 hover:text-white"
             title={isTimerRunning ? 'Pausar cronómetro' : 'Reanudar cronómetro'}
           >
-            {isTimerRunning ? <Pause size={13} /> : <Play size={13} />}
+            {isTimerRunning ? (
+              <PausePanelIcon style={{ width: 14, height: 14 }} />
+            ) : (
+              <PlayIcon style={{ width: 14, height: 14 }} />
+            )}
           </button>
 
           <button
@@ -418,7 +511,7 @@ export function PresentationViewer({
             className="p-1 rounded text-zinc-400 hover:text-white"
             title="Reiniciar cronómetro"
           >
-            <RotateCcw size={13} />
+            <ResetIcon style={{ width: 14, height: 14 }} />
           </button>
         </div>
 
@@ -430,7 +523,7 @@ export function PresentationViewer({
             className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:hover:bg-zinc-800 text-white transition flex items-center justify-center shadow-md"
             title="Diapositiva anterior (←)"
           >
-            <ChevronLeft size={18} />
+            <ArrowLeftSmallIcon style={{ width: 18, height: 18 }} />
           </button>
 
           <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800/60 border border-zinc-700/60 text-xs font-medium">
@@ -445,7 +538,7 @@ export function PresentationViewer({
             className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:hover:bg-zinc-800 text-white transition flex items-center justify-center shadow-md"
             title="Siguiente diapositiva (→ o Espacio)"
           >
-            <ChevronRight size={18} />
+            <ArrowRightSmallIcon style={{ width: 18, height: 18 }} />
           </button>
         </div>
 
@@ -455,11 +548,11 @@ export function PresentationViewer({
             onClick={() => setShowThumbnails(!showThumbnails)}
             className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition ${
               showThumbnails
-                ? 'bg-indigo-600 text-white'
+                ? 'bg-[#1e96eb] text-white'
                 : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
             }`}
           >
-            <Layers size={13} />
+            <AllDocsIcon style={{ width: 14, height: 14 }} />
             <span>Índice de Diapositivas</span>
           </button>
 
@@ -478,7 +571,7 @@ export function PresentationViewer({
                   }}
                   className={`w-full text-left p-2 rounded-xl text-xs flex items-center gap-2 transition ${
                     idx === currentSlideIndex
-                      ? 'bg-indigo-600/30 text-indigo-300 border border-indigo-500/40'
+                      ? 'bg-[#1e96eb]/20 text-[#1e96eb] border border-[#1e96eb]/40'
                       : 'hover:bg-zinc-800 text-zinc-300'
                   }`}
                 >

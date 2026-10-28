@@ -1,20 +1,18 @@
 import { useState } from 'react'
 import {
-  Sparkles,
-  List,
-  Calendar,
-  SlidersHorizontal,
-  PanelRightClose,
-  MoreHorizontal,
-  Plus,
-  X,
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Send,
-  Loader2,
-  Trash2
-} from 'lucide-react'
+  TocIcon,
+  JournalIcon,
+  PropertyIcon,
+  MoreHorizontalIcon,
+  PlusIcon,
+  CloseIcon,
+  DoneIcon,
+  ToggleDownIcon,
+  ToggleRightIcon,
+  SendIcon,
+  DeleteIcon,
+  AiIcon
+} from '@blocksuite/icons/rc'
 import { db, type WorkspaceItem, type CustomPropertyItem } from '../../db'
 import { syncEngine } from '../../lib/syncEngine'
 import {
@@ -240,21 +238,21 @@ export function RightSidebar({
   }
 
   return (
-    <aside className="w-80 h-full bg-[#141416] border-l border-[#242428] flex flex-col shrink-0 select-none text-zinc-300 text-xs z-20">
-      {/* Top Header Icon Tabs */}
-      <div className="h-12 border-b border-[#242428] flex items-center justify-between px-3 shrink-0">
+    <aside className="w-72 sm:w-80 h-full bg-[var(--app-bg-secondary)] border-l border-[var(--app-border)] flex flex-col shrink-0 select-none text-[var(--app-text-primary)] text-sm z-20">
+      {/* Top Header Icon Tabs (Notion Style) */}
+      <div className="h-11 border-b border-[var(--app-border)] flex items-center justify-between px-3 shrink-0">
         <div className="flex items-center gap-1">
           {/* Outline Tab */}
           <button
             onClick={() => onTabChange('outline')}
             className={`p-1.5 rounded-md transition ${
               activeTab === 'outline'
-                ? 'bg-[#2a2a30] text-zinc-100 shadow-xs'
-                : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#1e1e22]'
+                ? 'bg-[var(--app-hover)] text-[var(--app-accent)] shadow-xs font-semibold'
+                : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
             }`}
             title="Esquema del documento"
           >
-            <List size={16} />
+            <TocIcon className="w-4 h-4" />
           </button>
 
           {/* Journal / Calendar Tab */}
@@ -262,12 +260,12 @@ export function RightSidebar({
             onClick={() => onTabChange('history')}
             className={`p-1.5 rounded-md transition ${
               activeTab === 'history'
-                ? 'bg-[#2a2a30] text-zinc-100 shadow-xs'
-                : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#1e1e22]'
+                ? 'bg-[var(--app-hover)] text-[var(--app-accent)] shadow-xs font-semibold'
+                : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
             }`}
             title="Diarios e Historial"
           >
-            <Calendar size={16} />
+            <JournalIcon className="w-4 h-4" />
           </button>
 
           {/* Properties Tab */}
@@ -275,37 +273,50 @@ export function RightSidebar({
             onClick={() => onTabChange('properties')}
             className={`p-1.5 rounded-md transition ${
               activeTab === 'properties'
-                ? 'bg-[#2a2a30] text-zinc-100 shadow-xs'
-                : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#1e1e22]'
+                ? 'bg-[var(--app-hover)] text-[var(--app-accent)] shadow-xs font-semibold'
+                : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
             }`}
             title="Propiedades del documento"
           >
-            <SlidersHorizontal size={16} />
+            <PropertyIcon className="w-4 h-4" />
+          </button>
+
+          {/* AI Assistant Tab */}
+          <button
+            onClick={() => onTabChange('ai')}
+            className={`p-1.5 rounded-md transition ${
+              activeTab === 'ai'
+                ? 'bg-[var(--app-hover)] text-[var(--app-accent)] shadow-xs font-semibold'
+                : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
+            }`}
+            title="Asistente de IA"
+          >
+            <AiIcon className="w-4 h-4" />
           </button>
         </div>
 
         {/* Close Right Sidebar Button */}
         <button
           onClick={onClose}
-          className="p-1.5 rounded-md text-zinc-400 hover:text-zinc-200 hover:bg-[#1e1e22] transition"
-          title="Ocultar panel derecho"
+          className="p-1.5 rounded-md text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition"
+          title="Cerrar panel lateral"
         >
-          <PanelRightClose size={16} />
+          <CloseIcon className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Tab 1: Properties Inspector (Matches Screenshot) */}
+      {/* Tab 1: Properties Inspector */}
       {activeTab === 'properties' && (
-        <div className="flex-1 overflow-y-auto divide-y divide-[#242428] py-2">
+        <div className="flex-1 overflow-y-auto divide-y divide-[var(--affine-divider-color)] py-2 text-sm">
           {/* Section: Propiedades */}
           <div className="px-3 pb-3">
             <button
               onClick={() => setPropertiesExpanded(!propertiesExpanded)}
-              className="w-full flex items-center justify-between py-2 text-zinc-200 font-medium text-xs hover:text-white transition"
+              className="w-full flex items-center justify-between py-2 text-[var(--affine-text-primary-color)] font-semibold text-sm hover:text-[#1e96eb] transition"
             >
               <div className="flex items-center gap-1.5">
                 <span>Propiedades</span>
-                {propertiesExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                {propertiesExpanded ? <ToggleDownIcon className="w-4 h-4" /> : <ToggleRightIcon className="w-4 h-4" />}
               </div>
             </button>
 
@@ -320,26 +331,30 @@ export function RightSidebar({
                   if (!builtIn && !custom) return null
 
                   const name = builtIn?.name || custom?.name || propId
-                  const Icon = builtIn?.icon || SlidersHorizontal
+                  const Icon = builtIn?.icon
                   const visibility = visibilityMap[propId] || 'always_show'
                   const visibilityLabel = VISIBILITY_LABELS[visibility]
 
                   return (
                     <div
                       key={propId}
-                      className="group flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-[#1c1c20] transition relative"
+                      className="group flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-[var(--affine-hover-color)] transition relative"
                     >
                       {/* Left: Icon + Name */}
                       <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
-                        <Icon size={14} className="text-zinc-400 shrink-0" />
-                        <span className="truncate text-zinc-300 group-hover:text-zinc-100">
+                        {Icon ? (
+                          <Icon size={14} className="text-[var(--affine-text-secondary-color)] shrink-0" />
+                        ) : (
+                          <PropertyIcon className="w-3.5 h-3.5 text-[var(--affine-text-secondary-color)] shrink-0" />
+                        )}
+                        <span className="truncate text-[var(--affine-text-primary-color)]">
                           {name}
                         </span>
                       </div>
 
                       {/* Right: Visibility label & ... menu */}
                       <div className="flex items-center gap-1 shrink-0">
-                        <span className="text-[11px] text-zinc-500 font-normal">
+                        <span className="text-[11px] text-[var(--affine-text-secondary-color)] font-normal">
                           {visibilityLabel}
                         </span>
 
@@ -348,60 +363,60 @@ export function RightSidebar({
                             e.stopPropagation()
                             setActiveMenuPropId(activeMenuPropId === propId ? null : propId)
                           }}
-                          className="p-1 rounded text-zinc-500 hover:text-zinc-200 hover:bg-[#28282e] transition"
+                          className="p-1 rounded text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] hover:bg-[var(--affine-hover-color)] transition"
                         >
-                          <MoreHorizontal size={13} />
+                          <MoreHorizontalIcon className="w-3.5 h-3.5" />
                         </button>
                       </div>
 
                       {/* Property Options Dropdown Menu */}
                       {activeMenuPropId === propId && (
                         <div
-                          className="absolute right-2 top-8 z-30 w-48 bg-[#1f1f24] border border-[#2d2d34] rounded-lg shadow-xl py-1 text-xs text-zinc-300"
+                          className="absolute right-2 top-8 z-30 w-48 bg-[var(--affine-background-overlay-panel-color)] border border-[var(--affine-border-color)] rounded-xl shadow-[var(--affine-popover-shadow)] py-1 text-xs text-[var(--affine-text-primary-color)] backdrop-blur-md"
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <div className="px-3 py-1 text-[10px] uppercase font-semibold text-zinc-500 tracking-wider">
+                          <div className="px-3 py-1 text-[10px] uppercase font-semibold text-[var(--affine-text-secondary-color)] tracking-wider">
                             Visibilidad
                           </div>
                           <button
                             onClick={() => handleSetVisibility(propId, 'always_show')}
-                            className="w-full text-left px-3 py-1.5 hover:bg-[#2c2c34] flex items-center justify-between"
+                            className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] flex items-center justify-between transition"
                           >
                             <span>Siempre mostrar</span>
-                            {visibility === 'always_show' && <Check size={12} className="text-blue-400" />}
+                            {visibility === 'always_show' && <DoneIcon className="w-3.5 h-3.5 text-[#1e96eb]" />}
                           </button>
                           <button
                             onClick={() => handleSetVisibility(propId, 'always_hide')}
-                            className="w-full text-left px-3 py-1.5 hover:bg-[#2c2c34] flex items-center justify-between"
+                            className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] flex items-center justify-between transition"
                           >
                             <span>Siempre ocultar</span>
-                            {visibility === 'always_hide' && <Check size={12} className="text-blue-400" />}
+                            {visibility === 'always_hide' && <DoneIcon className="w-3.5 h-3.5 text-[#1e96eb]" />}
                           </button>
                           <button
                             onClick={() => handleSetVisibility(propId, 'hide_empty')}
-                            className="w-full text-left px-3 py-1.5 hover:bg-[#2c2c34] flex items-center justify-between"
+                            className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] flex items-center justify-between transition"
                           >
                             <span>Ocultar cuando esté vacío</span>
-                            {visibility === 'hide_empty' && <Check size={12} className="text-blue-400" />}
+                            {visibility === 'hide_empty' && <DoneIcon className="w-3.5 h-3.5 text-[#1e96eb]" />}
                           </button>
 
-                          <div className="border-t border-[#2d2d34] my-1" />
+                          <div className="border-t border-[var(--affine-divider-color)] my-1" />
 
                           <button
                             onClick={() => {
                               setEditingPropId(editingPropId === propId ? null : propId)
                               setActiveMenuPropId(null)
                             }}
-                            className="w-full text-left px-3 py-1.5 hover:bg-[#2c2c34] text-zinc-300"
+                            className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] transition"
                           >
                             Editar valor
                           </button>
 
                           <button
                             onClick={() => handleRemoveProperty(propId)}
-                            className="w-full text-left px-3 py-1.5 hover:bg-rose-950/40 text-rose-400 flex items-center gap-1.5"
+                            className="w-full text-left px-3 py-1.5 hover:bg-rose-500/10 text-rose-500 flex items-center gap-1.5 transition"
                           >
-                            <Trash2 size={12} />
+                            <DeleteIcon className="w-3.5 h-3.5" />
                             <span>Eliminar propiedad</span>
                           </button>
                         </div>
@@ -414,16 +429,16 @@ export function RightSidebar({
 
             {/* Quick Inline Value Editor for Open Property */}
             {editingPropId && (
-              <div className="mt-2 p-2.5 bg-[#19191d] rounded-lg border border-[#2a2a30]">
+              <div className="mt-2 p-2.5 bg-[var(--affine-background-primary-color)] rounded-xl border border-[var(--affine-border-color)]">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="font-semibold text-[11px] text-zinc-200">
+                  <span className="font-semibold text-[11px] text-[var(--affine-text-primary-color)]">
                     Modificar {editingPropId}
                   </span>
                   <button
                     onClick={() => setEditingPropId(null)}
-                    className="p-0.5 rounded text-zinc-400 hover:text-white"
+                    className="p-0.5 rounded text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)]"
                   >
-                    <X size={12} />
+                    <CloseIcon className="w-3 h-3" />
                   </button>
                 </div>
 
@@ -440,7 +455,7 @@ export function RightSidebar({
                             onClick={() => handleRemoveTag(t)}
                             className="hover:text-indigo-100"
                           >
-                            <X size={10} />
+                            <CloseIcon className="w-2.5 h-2.5" />
                           </button>
                         </span>
                       ))}
@@ -452,7 +467,7 @@ export function RightSidebar({
                         onChange={(e) => setNewTagInput(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
                         placeholder="Nueva etiqueta..."
-                        className="flex-1 bg-[#121214] border border-[#2d2d34] rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none focus:border-indigo-500"
+                        className="flex-1 bg-[var(--app-bg-primary)] border border-[var(--app-border)] rounded px-2 py-1 text-xs text-[var(--app-text-primary)] focus:outline-none focus:border-[var(--app-accent)]"
                       />
                       <button
                         onClick={handleAddTag}
@@ -468,7 +483,7 @@ export function RightSidebar({
                   <select
                     value={workspace.documentMode || 'Estándar'}
                     onChange={(e) => handleUpdateFieldValue('documentMode', e.target.value)}
-                    className="w-full bg-[#121214] border border-[#2d2d34] rounded px-2 py-1.5 text-xs text-zinc-200 focus:outline-none"
+                    className="w-full bg-[var(--app-bg-primary)] border border-[var(--app-border)] rounded px-2 py-1.5 text-xs text-[var(--app-text-primary)] focus:outline-none"
                   >
                     <option value="Estándar">Página estándar (Documento)</option>
                     <option value="Sin bordes">Sin bordes (Lienzo infinito)</option>
@@ -527,7 +542,7 @@ export function RightSidebar({
                       }
                       onBlur={(e) => handleUpdateCustomPropValue(editingPropId, e.target.value)}
                       placeholder="Valor de propiedad..."
-                      className="w-full bg-[#121214] border border-[#2d2d34] rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none"
+                      className="w-full bg-[var(--app-bg-primary)] border border-[var(--app-border)] rounded px-2 py-1 text-xs text-[var(--app-text-primary)] focus:outline-none"
                     />
                   </div>
                 )}
@@ -535,15 +550,15 @@ export function RightSidebar({
             )}
           </div>
 
-          {/* Section: Agregar más propiedades (Matches Screenshot) */}
+          {/* Section: Agregar más propiedades */}
           <div className="px-3 pt-3">
             <button
               onClick={() => setAddPropertiesExpanded(!addPropertiesExpanded)}
-              className="w-full flex items-center justify-between py-2 text-zinc-200 font-medium text-xs hover:text-white transition"
+              className="w-full flex items-center justify-between py-2 text-[var(--affine-text-primary-color)] font-medium text-xs hover:text-[#1e96eb] transition"
             >
               <div className="flex items-center gap-1.5">
                 <span>Agregar más propiedades</span>
-                {addPropertiesExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                {addPropertiesExpanded ? <ToggleDownIcon className="w-3.5 h-3.5" /> : <ToggleRightIcon className="w-3.5 h-3.5" />}
               </div>
             </button>
 
@@ -556,22 +571,22 @@ export function RightSidebar({
                   return (
                     <div
                       key={item.id}
-                      className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-[#1c1c20] transition group text-xs"
+                      className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-[var(--affine-hover-color)] transition group text-xs"
                     >
-                      <div className="flex items-center gap-2 text-zinc-400 group-hover:text-zinc-200 min-w-0">
+                      <div className="flex items-center gap-2 text-[var(--affine-text-secondary-color)] group-hover:text-[var(--affine-text-primary-color)] min-w-0">
                         <Icon size={14} className="shrink-0" />
                         <span className="truncate">{item.name}</span>
                       </div>
 
                       {isAdded ? (
-                        <span className="text-[11px] text-zinc-500 font-normal">Added</span>
+                        <span className="text-[11px] text-[var(--affine-text-secondary-color)] font-normal">Added</span>
                       ) : (
                         <button
                           onClick={() => handleAddProperty(item)}
-                          className="p-1 rounded text-zinc-400 hover:text-white hover:bg-[#28282e] transition"
+                          className="p-1 rounded text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] hover:bg-[var(--affine-hover-color)] transition"
                           title={`Agregar ${item.name}`}
                         >
-                          <Plus size={13} />
+                          <PlusIcon className="w-3.5 h-3.5" />
                         </button>
                       )}
                     </div>
@@ -587,12 +602,12 @@ export function RightSidebar({
       {activeTab === 'outline' && (
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <span className="font-semibold text-zinc-200 text-xs">Esquema del Documento</span>
-            <span className="text-[10px] text-zinc-500">{headings.length} secciones</span>
+            <span className="font-semibold text-[var(--affine-text-primary-color)] text-xs">Esquema del Documento</span>
+            <span className="text-[10px] text-[var(--affine-text-secondary-color)]">{headings.length} secciones</span>
           </div>
 
           {headings.length === 0 ? (
-            <div className="text-center py-8 text-zinc-500 text-xs">
+            <div className="text-center py-8 text-[var(--affine-text-secondary-color)] text-xs">
               No hay encabezados en esta página.<br />
               Usa H1, H2 o H3 en el editor para estructurar tu documento.
             </div>
@@ -602,12 +617,12 @@ export function RightSidebar({
                 <button
                   key={h.id}
                   onClick={() => onScrollToHeading && onScrollToHeading(h.text)}
-                  className={`w-full text-left py-1 px-2 rounded hover:bg-[#1f1f24] transition truncate ${
+                  className={`w-full text-left py-1.5 px-2 rounded hover:bg-[var(--affine-hover-color)] transition truncate ${
                     h.level === 1
-                      ? 'font-semibold text-zinc-200'
+                      ? 'font-semibold text-[var(--affine-text-primary-color)]'
                       : h.level === 2
-                      ? 'pl-4 text-zinc-400 hover:text-zinc-200'
-                      : 'pl-6 text-zinc-500 hover:text-zinc-300 text-[11px]'
+                      ? 'pl-4 text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)]'
+                      : 'pl-6 text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] text-[11px]'
                   }`}
                 >
                   {h.text}
@@ -622,28 +637,28 @@ export function RightSidebar({
       {activeTab === 'ai' && (
         <div className="flex-1 flex flex-col p-3 overflow-hidden">
           <div className="flex items-center gap-2 mb-3">
-            <Sparkles size={16} className="text-blue-400" />
-            <span className="font-semibold text-zinc-200 text-xs">Asistente de IA</span>
+            <AiIcon className="w-4 h-4 text-[#1e96eb]" />
+            <span className="font-semibold text-[var(--affine-text-primary-color)] text-xs">Asistente de IA (AFFiNE AI)</span>
           </div>
 
           <div className="space-y-1.5 mb-3">
-            <span className="text-[11px] text-zinc-500">Acciones rápidas:</span>
+            <span className="text-[11px] text-[var(--affine-text-secondary-color)]">Acciones rápidas:</span>
             <div className="grid grid-cols-1 gap-1">
               <button
                 onClick={() => handleTriggerAI('Resumir')}
-                className="text-left px-2.5 py-1.5 rounded bg-[#1c1c20] hover:bg-[#26262c] text-zinc-300 text-xs transition"
+                className="text-left px-2.5 py-1.5 rounded-lg bg-[var(--affine-background-primary-color)] hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] text-xs transition border border-[var(--affine-border-color)]"
               >
                 📋 Resumir página
               </button>
               <button
                 onClick={() => handleTriggerAI('Generar checklist y tareas')}
-                className="text-left px-2.5 py-1.5 rounded bg-[#1c1c20] hover:bg-[#26262c] text-zinc-300 text-xs transition"
+                className="text-left px-2.5 py-1.5 rounded-lg bg-[var(--affine-background-primary-color)] hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] text-xs transition border border-[var(--affine-border-color)]"
               >
                 ✅ Generar checklist de tareas
               </button>
               <button
                 onClick={() => handleTriggerAI('Proponer estructura y esquema')}
-                className="text-left px-2.5 py-1.5 rounded bg-[#1c1c20] hover:bg-[#26262c] text-zinc-300 text-xs transition"
+                className="text-left px-2.5 py-1.5 rounded-lg bg-[var(--affine-background-primary-color)] hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] text-xs transition border border-[var(--affine-border-color)]"
               >
                 📑 Sugerir esquema y temas
               </button>
@@ -651,15 +666,15 @@ export function RightSidebar({
           </div>
 
           {/* AI Result Area */}
-          <div className="flex-1 overflow-y-auto bg-[#18181c] rounded-lg p-2.5 border border-[#26262c] mb-3 text-xs leading-relaxed text-zinc-300">
+          <div className="flex-1 overflow-y-auto bg-[var(--affine-background-primary-color)] rounded-xl p-3 border border-[var(--affine-border-color)] mb-3 text-xs leading-relaxed text-[var(--affine-text-primary-color)]">
             {isGeneratingAI ? (
-              <div className="flex items-center justify-center h-full gap-2 text-zinc-400">
-                <Loader2 size={16} className="animate-spin text-blue-400" />
+              <div className="flex items-center justify-center h-full gap-2 text-[var(--affine-text-secondary-color)]">
+                <span className="animate-spin text-[#1e96eb]">⟳</span>
                 <span>Analizando documento...</span>
               </div>
             ) : aiResponse ? (
               <div>
-                <pre className="whitespace-pre-wrap font-sans text-xs text-zinc-200">
+                <pre className="whitespace-pre-wrap font-sans text-xs text-[var(--affine-text-primary-color)]">
                   {aiResponse}
                 </pre>
                 {onApplyAIContent && (
@@ -668,15 +683,15 @@ export function RightSidebar({
                       onApplyAIContent(aiResponse)
                       setAiResponse(null)
                     }}
-                    className="mt-3 w-full py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded font-medium text-xs transition"
+                    className="mt-3 w-full py-1.5 bg-[#1e96eb] hover:bg-[#1a85d1] text-white rounded-lg font-medium text-xs transition shadow-xs"
                   >
                     Insertar en la nota
                   </button>
                 )}
               </div>
             ) : (
-              <span className="text-zinc-500 text-center block pt-6">
-                Escribe una instrucción o selecciona una acción rápida para redactar ideas.
+              <span className="text-[var(--affine-text-secondary-color)] text-center block pt-6">
+                Escribe una instrucción o selecciona una acción rápida para redactar ideas con IA.
               </span>
             )}
           </div>
@@ -694,7 +709,7 @@ export function RightSidebar({
                 }
               }}
               placeholder="Pregunta o pide redactar algo..."
-              className="flex-1 bg-[#121214] border border-[#2d2d34] rounded-lg px-2.5 py-1.5 text-xs text-zinc-200 focus:outline-none focus:border-blue-500"
+              className="flex-1 bg-[var(--affine-background-primary-color)] border border-[var(--affine-border-color)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--affine-text-primary-color)] placeholder:text-[var(--affine-placeholder-color)] focus:outline-none focus:border-[#1e96eb]"
             />
             <button
               onClick={() => {
@@ -703,9 +718,9 @@ export function RightSidebar({
                   setAiPrompt('')
                 }
               }}
-              className="p-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition"
+              className="p-2 bg-[#1e96eb] hover:bg-[#1a85d1] text-white rounded-lg transition"
             >
-              <Send size={13} />
+              <SendIcon className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
@@ -714,11 +729,11 @@ export function RightSidebar({
       {/* Tab 4: History / Journal */}
       {activeTab === 'history' && (
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          <span className="font-semibold text-zinc-200 text-xs">Registro de Actividad</span>
+          <span className="font-semibold text-[var(--affine-text-primary-color)] text-xs">Registro de Actividad</span>
           <div className="space-y-2 text-xs">
-            <div className="p-2 rounded bg-[#1a1a1e] border border-[#26262a]">
-              <span className="text-[10px] text-zinc-500">Última actualización:</span>
-              <p className="text-zinc-300 font-medium mt-0.5">
+            <div className="p-2.5 rounded-xl bg-[var(--affine-background-primary-color)] border border-[var(--affine-border-color)]">
+              <span className="text-[10px] text-[var(--affine-text-secondary-color)]">Última actualización:</span>
+              <p className="text-[var(--affine-text-primary-color)] font-medium mt-0.5">
                 {new Date(workspace.updatedAt).toLocaleString('es-ES', {
                   day: '2-digit',
                   month: 'short',
@@ -728,9 +743,9 @@ export function RightSidebar({
                 })}
               </p>
             </div>
-            <div className="p-2 rounded bg-[#1a1a1e] border border-[#26262a]">
-              <span className="text-[10px] text-zinc-500">Fecha de creación:</span>
-              <p className="text-zinc-300 font-medium mt-0.5">
+            <div className="p-2.5 rounded-xl bg-[var(--affine-background-primary-color)] border border-[var(--affine-border-color)]">
+              <span className="text-[10px] text-[var(--affine-text-secondary-color)]">Fecha de creación:</span>
+              <p className="text-[var(--affine-text-primary-color)] font-medium mt-0.5">
                 {new Date(workspace.createdAt).toLocaleString('es-ES', {
                   day: '2-digit',
                   month: 'short',
@@ -740,9 +755,9 @@ export function RightSidebar({
                 })}
               </p>
             </div>
-            <div className="p-2 rounded bg-[#1a1a1e] border border-[#26262a]">
-              <span className="text-[10px] text-zinc-500">Identificador único (UUID):</span>
-              <p className="text-zinc-400 font-mono text-[11px] mt-0.5 truncate select-all">
+            <div className="p-2.5 rounded-xl bg-[var(--affine-background-primary-color)] border border-[var(--affine-border-color)]">
+              <span className="text-[10px] text-[var(--affine-text-secondary-color)]">Identificador único (UUID):</span>
+              <p className="text-[var(--affine-text-secondary-color)] font-mono text-[11px] mt-0.5 truncate select-all">
                 {workspace.id}
               </p>
             </div>

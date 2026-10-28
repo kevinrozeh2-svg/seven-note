@@ -1,12 +1,15 @@
 import { memo, useState, useRef } from 'react'
 import { Handle, Position } from '@xyflow/react'
-import { Trash2, Upload, Image as ImageIcon } from 'lucide-react'
+import { DeleteIcon, UploadIcon, ImageIcon, EditIcon, LinkIcon } from '@blocksuite/icons/rc'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
+import { areNodePropsEqual } from './nodeUtils'
 
 export const ImageNode = memo(({ id, data, selected }: any) => {
   const [imageUrl, setImageUrl] = useState<string | null>(data.imageUrl ?? null)
   const [caption, setCaption] = useState(data.caption ?? '')
+  const [showUrlInput, setShowUrlInput] = useState(false)
+  const [urlInput, setUrlInput] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const save = async (updates: any) => {
@@ -33,9 +36,21 @@ export const ImageNode = memo(({ id, data, selected }: any) => {
     reader.onload = async () => {
       const base64 = reader.result as string
       setImageUrl(base64)
-      save({ imageUrl: base64 })
+      const newCaption = caption || file.name.replace(/\.[^/.]+$/, '')
+      setCaption(newCaption)
+      save({ imageUrl: base64, caption: newCaption })
     }
     reader.readAsDataURL(file)
+    e.target.value = ''
+  }
+
+  const handleSaveUrl = () => {
+    if (urlInput.trim()) {
+      setImageUrl(urlInput.trim())
+      save({ imageUrl: urlInput.trim() })
+      setShowUrlInput(false)
+      setUrlInput('')
+    }
   }
 
   const handleDelete = async () => {
@@ -49,35 +64,53 @@ export const ImageNode = memo(({ id, data, selected }: any) => {
 
   return (
     <div
-      className={`relative w-[280px] rounded-xl shadow-md transition-all duration-150 border-2 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 ${
-        selected ? 'ring-2 ring-indigo-500 ring-offset-2 dark:ring-offset-slate-950 shadow-xl' : 'hover:shadow-lg'
-      }`}
+      className="relative w-[280px] rounded-lg transition-[box-shadow,border-color] duration-150 border overflow-hidden"
+      style={{
+        backgroundColor: 'var(--app-bg-primary)',
+        borderColor: selected ? 'var(--app-accent)' : 'var(--app-border)',
+        boxShadow: selected ? '0 0 0 1.5px var(--app-accent), var(--app-shadow-card-hover)' : 'var(--app-shadow-card)'
+      }}
     >
-      <Handle type="target" position={Position.Top} className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white dark:!border-slate-900" />
-      <Handle type="source" position={Position.Bottom} className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white dark:!border-slate-900" />
-      <Handle type="target" position={Position.Left} className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white dark:!border-slate-900" />
-      <Handle type="source" position={Position.Right} className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white dark:!border-slate-900" />
+      <Handle type="target" position={Position.Top} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
+      <Handle type="source" position={Position.Bottom} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
+      <Handle type="target" position={Position.Left} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
+      <Handle type="source" position={Position.Right} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
 
       {/* Header bar */}
-      <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-100 dark:border-slate-800">
-        <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
-          <ImageIcon size={13} />
-          <span>Imagen</span>
+      <div
+        className="flex items-center justify-between px-3 py-1.5 border-b"
+        style={{ borderColor: 'var(--affine-border-color)' }}
+      >
+        <div
+          className="flex items-center gap-1.5 text-xs font-medium"
+          style={{ color: 'var(--affine-text-secondary-color)' }}
+        >
+          <ImageIcon style={{ width: 13, height: 13 }} />
+          <span>Foto / Imagen</span>
         </div>
         <div className="flex items-center gap-1">
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400"
-            title="Subir imagen"
+            className="p-1 rounded transition flex items-center gap-1 text-[11px]"
+            style={{ color: 'var(--affine-text-secondary-color)' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--affine-hover-color)'
+              e.currentTarget.style.color = 'var(--affine-text-primary-color)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent'
+              e.currentTarget.style.color = 'var(--affine-text-secondary-color)'
+            }}
+            title="Elegir foto de celular o PC"
           >
-            <Upload size={13} />
+            <UploadIcon style={{ width: 13, height: 13 }} />
           </button>
           <button
             onClick={handleDelete}
-            className="p-1 rounded hover:bg-rose-500/20 text-slate-500 hover:text-rose-600 transition"
+            className="p-1 rounded text-rose-500 hover:bg-rose-500/10 transition"
             title="Eliminar tarjeta"
           >
-            <Trash2 size={13} />
+            <DeleteIcon style={{ width: 13, height: 13 }} />
           </button>
         </div>
       </div>
@@ -91,20 +124,82 @@ export const ImageNode = memo(({ id, data, selected }: any) => {
       />
 
       {/* Image body */}
-      <div className="p-2">
+      <div className="p-2 space-y-2">
         {imageUrl ? (
-          <div className="relative rounded-lg overflow-hidden max-h-[220px] bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-            <img src={imageUrl} alt="Subida" className="w-full h-auto object-cover rounded-md" />
+          <div className="relative group rounded-lg overflow-hidden border" style={{ borderColor: 'var(--affine-border-color)' }}>
+            <img src={imageUrl} alt={caption || 'Foto'} className="w-full h-auto max-h-[260px] object-cover rounded-md" />
+            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="px-2.5 py-1 bg-white/90 text-zinc-900 rounded-md text-xs font-medium shadow-md hover:bg-white flex items-center gap-1 transition"
+              >
+                <EditIcon style={{ width: 12, height: 12 }} />
+                <span>Cambiar</span>
+              </button>
+            </div>
+          </div>
+        ) : showUrlInput ? (
+          <div className="p-2 rounded-lg border space-y-2" style={{ backgroundColor: 'var(--affine-background-secondary-color)', borderColor: 'var(--affine-border-color)' }}>
+            <input
+              type="url"
+              value={urlInput}
+              onChange={(e) => setUrlInput(e.target.value)}
+              placeholder="https://ejemplo.com/imagen.jpg"
+              autoFocus
+              className="w-full px-2 py-1 text-xs rounded border outline-none bg-[var(--affine-background-primary-color)] text-[var(--affine-text-primary-color)] border-[var(--affine-border-color)]"
+              onKeyDown={(e) => e.key === 'Enter' && handleSaveUrl()}
+            />
+            <div className="flex justify-end gap-1.5">
+              <button
+                type="button"
+                onClick={() => setShowUrlInput(false)}
+                className="px-2 py-0.5 text-[11px] rounded text-[var(--affine-text-secondary-color)] hover:bg-[var(--affine-hover-color)]"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveUrl}
+                className="px-2 py-0.5 text-[11px] rounded bg-[#1e96eb] text-white font-medium"
+              >
+                Guardar URL
+              </button>
+            </div>
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="w-full py-10 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 flex flex-col items-center justify-center gap-2 text-slate-400 hover:text-indigo-500 transition"
-          >
-            <Upload size={24} />
-            <span className="text-xs font-medium">Subir imagen offline</span>
-          </button>
+          <div className="space-y-1.5">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full py-7 rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition cursor-pointer"
+              style={{
+                borderColor: 'var(--affine-border-color)',
+                backgroundColor: 'var(--affine-background-secondary-color)',
+                color: 'var(--affine-text-secondary-color)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = '#1e96eb'
+                e.currentTarget.style.color = '#1e96eb'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = 'var(--affine-border-color)'
+                e.currentTarget.style.color = 'var(--affine-text-secondary-color)'
+              }}
+            >
+              <UploadIcon style={{ width: 22, height: 22 }} />
+              <span className="text-xs font-semibold">Elegir foto del almacenamiento</span>
+              <span className="text-[10px] opacity-75">Celular (Galería/Cámara) o PC</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowUrlInput(true)}
+              className="w-full py-1 text-[11px] text-[var(--affine-text-secondary-color)] hover:text-[#1e96eb] transition flex items-center justify-center gap-1"
+            >
+              <LinkIcon style={{ width: 11, height: 11 }} />
+              <span>O insertar mediante URL</span>
+            </button>
+          </div>
         )}
 
         <input
@@ -115,9 +210,10 @@ export const ImageNode = memo(({ id, data, selected }: any) => {
             save({ caption: e.target.value })
           }}
           placeholder="Añadir pie de foto..."
-          className="mt-2 w-full text-xs text-center bg-transparent border-none outline-none text-slate-500 dark:text-slate-400 placeholder-slate-400"
+          className="w-full text-xs text-center bg-transparent border-none outline-none"
+          style={{ color: 'var(--affine-text-secondary-color)' }}
         />
       </div>
     </div>
   )
-})
+}, areNodePropsEqual)

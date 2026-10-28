@@ -1,43 +1,266 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+@import "./theme/affine-theme.css";
+
+/* ==========================================================================
+   Seven Note Design System (Notion & Milanote Human-Crafted Aesthetic)
+   Specification: DESIGN.md (VoltAgent/awesome-design-md + Notion / Milanote UI)
+   ========================================================================== */
 
 @layer base {
-  * {
-    box-sizing: border-box;
+  :root {
+    --app-ui-base-font: 16px;
+
+    /* Typography Stacks */
+    --app-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol";
+    --app-font-serif: Lyon-Text, Georgia, YuMincho, "Yu Mincho", "Hiragino Mincho ProN", "Songti TC", serif;
+    --app-font-mono: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+    /* Notion Warm Neutrals (Light Mode) */
+    --app-bg-primary: #ffffff;
+    --app-bg-secondary: #fbfbfa; /* Notion iconic warm ivory paper sidebar */
+    --app-bg-tertiary: #f7f6f5;  /* Subtle inset / cards */
+    --app-bg-overlay: #ffffff;   /* Popovers and modals */
+    --app-bg-canvas: #f0f0ee;    /* Milanote authentic warm paper canvas */
+
+    /* Notion Ink (Near-black for reduced eye-strain) */
+    --app-text-primary: #37352f;
+    --app-text-secondary: #787774;
+    --app-text-muted: #9b9a97;
+    --app-text-disabled: #b7b5b0;
+
+    /* Borders & Dividers */
+    --app-border: rgba(55, 53, 47, 0.09);
+    --app-border-strong: rgba(55, 53, 47, 0.16);
+    --app-divider: rgba(55, 53, 47, 0.09);
+
+    /* States */
+    --app-hover: rgba(55, 53, 47, 0.055);
+    --app-hover-filled: #f1f1ef;
+    --app-active: rgba(55, 53, 47, 0.09);
+
+    /* Accents */
+    --app-accent: #2383e2; /* Notion Blue */
+    --app-accent-hover: #1c73c8;
+    --app-accent-soft: rgba(35, 131, 226, 0.12);
+    --app-brand-purple: #5645d4;
+
+    /* Milanote Physical Shadows (No AI-glow) */
+    --app-shadow-card: 0 1px 3px rgba(15, 15, 15, 0.06), 0 1px 2px rgba(15, 15, 15, 0.04);
+    --app-shadow-card-hover: 0 4px 14px rgba(15, 15, 15, 0.08), 0 1px 3px rgba(15, 15, 15, 0.04);
+    --app-shadow-popover: 0 4px 16px rgba(15, 15, 15, 0.12), 0 1px 4px rgba(15, 15, 15, 0.06);
+    --app-shadow-dock: 0 6px 20px rgba(15, 15, 15, 0.09), 0 1px 4px rgba(15, 15, 15, 0.06);
+
+    /* Canvas Grid */
+    --app-canvas-dot: #e2e1de;
+
+    /* Backwards-compatibility bridge for existing --affine tokens */
+    --affine-font-family: var(--app-font-sans);
+    --affine-font-code-family: var(--app-font-mono);
+    --affine-background-primary-color: var(--app-bg-primary);
+    --affine-background-secondary-color: var(--app-bg-secondary);
+    --affine-background-tertiary-color: var(--app-bg-tertiary);
+    --affine-background-overlay-panel-color: var(--app-bg-overlay);
+    --affine-text-primary-color: var(--app-text-primary);
+    --affine-text-secondary-color: var(--app-text-secondary);
+    --affine-text-disable-color: var(--app-text-disabled);
+    --affine-border-color: var(--app-border);
+    --affine-divider-color: var(--app-divider);
+    --affine-hover-color: var(--app-hover);
+    --affine-hover-color-filled: var(--app-hover-filled);
+    --affine-icon-color: var(--app-text-secondary);
+    --affine-placeholder-color: var(--app-text-muted);
+    --affine-primary-color: var(--app-accent);
+    --affine-background-code-block: #f7f6f5;
+    --affine-toolbar-shadow: var(--app-shadow-dock);
+    --affine-menu-shadow: var(--app-shadow-popover);
+    --affine-popover-shadow: var(--app-shadow-popover);
+    --affine-button-shadow: 0 1px 2px rgba(15, 15, 15, 0.06);
   }
 
-  html, body, #root {
+  /* Dynamic interface scaling support */
+  html[data-ui-scale="90"] {
+    --app-ui-base-font: 14.4px;
+  }
+  html[data-ui-scale="100"] {
+    --app-ui-base-font: 16px;
+  }
+  html[data-ui-scale="110"] {
+    --app-ui-base-font: 17.6px;
+  }
+  html[data-ui-scale="120"] {
+    --app-ui-base-font: 19.2px;
+  }
+  html[data-ui-scale="130"] {
+    --app-ui-base-font: 20.8px;
+  }
+
+  * {
+    box-sizing: border-box;
+    -webkit-overflow-scrolling: touch;
+    -webkit-tap-highlight-color: rgba(255, 255, 255, 0);
+  }
+
+  html {
+    font-size: var(--app-ui-base-font, 16px);
+  }
+
+  body, #root {
     width: 100%;
     height: 100%;
     margin: 0;
     padding: 0;
     overflow: hidden;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: var(--app-font-sans);
+    font-size: 1rem;
+    background-color: var(--app-bg-primary);
+    color: var(--app-text-primary);
+    caret-color: var(--app-accent);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Dark Theme (Warm Charcoal, Notion / Milanote dark aesthetic) */
+  html.dark, html[data-theme="dark"], .dark {
+    color-scheme: dark;
+    --app-bg-primary: #191919;
+    --app-bg-secondary: #202020;
+    --app-bg-tertiary: #262626;
+    --app-bg-overlay: #2c2c2c;
+    --app-bg-canvas: #191919;
+
+    --app-text-primary: #e6e6e5;
+    --app-text-secondary: #9b9b9b;
+    --app-text-muted: #666666;
+    --app-text-disabled: #525252;
+
+    --app-border: rgba(255, 255, 255, 0.08);
+    --app-border-strong: rgba(255, 255, 255, 0.15);
+    --app-divider: rgba(255, 255, 255, 0.08);
+
+    --app-hover: rgba(255, 255, 255, 0.055);
+    --app-hover-filled: #2a2a2a;
+    --app-active: rgba(255, 255, 255, 0.1);
+
+    --app-accent: #2e8eea;
+    --app-accent-hover: #489bf2;
+    --app-accent-soft: rgba(46, 142, 234, 0.18);
+
+    --app-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+    --app-shadow-card-hover: 0 4px 14px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.2);
+    --app-shadow-popover: 0 6px 24px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.3);
+    --app-shadow-dock: 0 8px 28px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.3);
+
+    --app-canvas-dot: #2a2a2a;
+
+    /* Legacy affine bindings */
+    --affine-theme-mode: dark;
+    --affine-background-primary-color: var(--app-bg-primary);
+    --affine-background-secondary-color: var(--app-bg-secondary);
+    --affine-background-tertiary-color: var(--app-bg-tertiary);
+    --affine-background-overlay-panel-color: var(--app-bg-overlay);
+    --affine-text-primary-color: var(--app-text-primary);
+    --affine-text-secondary-color: var(--app-text-secondary);
+    --affine-text-disable-color: var(--app-text-disabled);
+    --affine-border-color: var(--app-border);
+    --affine-divider-color: var(--app-divider);
+    --affine-hover-color: var(--app-hover);
+    --affine-hover-color-filled: var(--app-hover-filled);
+    --affine-icon-color: var(--app-text-secondary);
+    --affine-placeholder-color: var(--app-text-muted);
+    --affine-primary-color: var(--app-accent);
+    --affine-background-code-block: #242424;
+    --affine-toolbar-shadow: var(--app-shadow-dock);
+    --affine-menu-shadow: var(--app-shadow-popover);
+    --affine-popover-shadow: var(--app-shadow-popover);
   }
 }
 
-/* TipTap Editor Styling */
+/* Notion Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--app-border-strong);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--app-text-muted);
+}
+
+/* Notion Selection Highlight */
+::selection {
+  background-color: var(--app-accent-soft);
+}
+
+/* TipTap Editor Styling - Authentic Notion Typography */
 .ProseMirror {
   outline: none !important;
+  color: var(--app-text-primary);
+  font-family: var(--app-font-sans);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.ProseMirror p {
+  margin-top: 2px;
+  margin-bottom: 6px;
 }
 
 .ProseMirror p.is-editor-empty:first-child::before {
-  color: #94a3b8;
+  color: var(--app-text-muted);
   content: attr(data-placeholder);
   float: left;
   height: 0;
   pointer-events: none;
 }
 
+.ProseMirror h1 {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+  margin-top: 1.75rem;
+  margin-bottom: 0.5rem;
+  color: var(--app-text-primary);
+}
+
+.ProseMirror h2 {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+  margin-top: 1.4rem;
+  margin-bottom: 0.4rem;
+  color: var(--app-text-primary);
+}
+
+.ProseMirror h3 {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.35;
+  margin-top: 1.15rem;
+  margin-bottom: 0.35rem;
+  color: var(--app-text-primary);
+}
+
+/* TipTap Task List (Notion Checkbox Style) */
 ul[data-type="taskList"] {
   list-style: none;
   padding: 0;
+  margin: 0.4rem 0;
 }
 
 ul[data-type="taskList"] li {
   display: flex;
   align-items: flex-start;
-  gap: 0.5rem;
-  margin-bottom: 0.35rem;
+  gap: 0.55rem;
+  margin-bottom: 0.25rem;
 }
 
 ul[data-type="taskList"] li > label {
@@ -49,25 +272,338 @@ ul[data-type="taskList"] li > label input[type="checkbox"] {
   cursor: pointer;
   width: 1rem;
   height: 1rem;
-  border-radius: 0.25rem;
-  accent-color: #6366f1;
+  border-radius: 4px;
+  border: 1px solid var(--app-border-strong);
+  accent-color: var(--app-accent);
 }
 
-/* Custom Scrollbars */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+ul[data-type="taskList"] li[data-checked="true"] > div {
+  text-decoration: line-through;
+  color: var(--app-text-muted);
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
+/* TipTap Tables Styling (Notion Clean Table) */
+.ProseMirror table {
+  border-collapse: collapse;
+  margin: 1rem 0;
+  width: 100%;
+  table-layout: auto;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--app-border);
 }
 
-::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.3);
-  border-radius: 3px;
+.ProseMirror td,
+.ProseMirror th {
+  border: 1px solid var(--app-border);
+  padding: 6px 10px;
+  vertical-align: top;
+  box-sizing: border-box;
+  font-size: 14px;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.5);
+.ProseMirror th {
+  font-weight: 600;
+  background-color: var(--app-bg-secondary);
+  color: var(--app-text-secondary);
 }
+
+.ProseMirror td {
+  background-color: var(--app-bg-primary);
+}
+
+/* TipTap Blockquote (Notion Left Border) */
+.ProseMirror blockquote {
+  border-left: 3px solid var(--app-text-primary);
+  padding-left: 0.85rem;
+  margin: 0.85rem 0;
+  color: var(--app-text-primary);
+  font-size: 15px;
+}
+
+/* TipTap Code Block (Notion Inset Box) */
+.ProseMirror pre {
+  background: var(--affine-background-code-block);
+  border: 1px solid var(--app-border);
+  color: var(--app-text-primary);
+  font-family: var(--app-font-mono);
+  font-size: 13.5px;
+  line-height: 1.5;
+  padding: 0.75rem 1rem;
+  border-radius: 6px;
+  margin: 0.85rem 0;
+  overflow-x: auto;
+}
+
+/* TipTap Lowlight Code Syntax Highlighting */
+.ProseMirror pre code .hljs-comment,
+.ProseMirror pre code .hljs-quote {
+  color: var(--app-text-muted);
+  font-style: italic;
+}
+.ProseMirror pre code .hljs-keyword,
+.ProseMirror pre code .hljs-selector-tag,
+.ProseMirror pre code .hljs-subst {
+  color: #8b5cf6;
+  font-weight: 600;
+}
+.ProseMirror pre code .hljs-number,
+.ProseMirror pre code .hljs-literal,
+.ProseMirror pre code .hljs-variable,
+.ProseMirror pre code .hljs-template-variable {
+  color: #ea580c;
+}
+.ProseMirror pre code .hljs-string,
+.ProseMirror pre code .hljs-doctag {
+  color: #16a34a;
+}
+.ProseMirror pre code .hljs-title,
+.ProseMirror pre code .hljs-section,
+.ProseMirror pre code .hljs-selector-id {
+  color: #0284c7;
+  font-weight: 600;
+}
+.ProseMirror pre code .hljs-type,
+.ProseMirror pre code .hljs-class .hljs-title {
+  color: #0284c7;
+}
+.ProseMirror pre code .hljs-tag,
+.ProseMirror pre code .hljs-name,
+.ProseMirror pre code .hljs-attribute {
+  color: #db2777;
+}
+.ProseMirror pre code .hljs-regexp,
+.ProseMirror pre code .hljs-link {
+  color: #0d9488;
+}
+.ProseMirror pre code .hljs-symbol,
+.ProseMirror pre code .hljs-bullet {
+  color: #7c3aed;
+}
+.ProseMirror pre code .hljs-built_in,
+.ProseMirror pre code .hljs-builtin-name {
+  color: #ca8a04;
+}
+.ProseMirror pre code .hljs-meta {
+  color: var(--app-text-secondary);
+}
+
+/* Notion Callout Blocks (Soft Tactile Containers) */
+.notion-callout, .callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin: 12px 0;
+  font-size: 14.5px;
+  line-height: 1.5;
+  background-color: var(--app-bg-secondary);
+  border: 1px solid var(--app-border);
+  color: var(--app-text-primary);
+}
+
+.callout-idea, .affine-callout-yellow {
+  background-color: #fff9db !important;
+  border-color: #f5eeaf !important;
+  color: #49420d !important;
+}
+.dark .callout-idea, .dark .affine-callout-yellow {
+  background-color: #3a341b !important;
+  border-color: #574e22 !important;
+  color: #fef08a !important;
+}
+
+.callout-info, .affine-callout-blue {
+  background-color: #e0f0fd !important;
+  border-color: #bde0fb !important;
+  color: #11446e !important;
+}
+.dark .callout-info, .dark .affine-callout-blue {
+  background-color: #183048 !important;
+  border-color: #23496e !important;
+  color: #bae6fd !important;
+}
+
+.callout-success, .affine-callout-green {
+  background-color: #dcf5e3 !important;
+  border-color: #b6e8c4 !important;
+  color: #184a25 !important;
+}
+.dark .callout-success, .dark .affine-callout-green {
+  background-color: #1a3424 !important;
+  border-color: #285338 !important;
+  color: #bbf7d0 !important;
+}
+
+.callout-warning, .affine-callout-red {
+  background-color: #fce4ec !important;
+  border-color: #f8b8cc !important;
+  color: #6e1d38 !important;
+}
+.dark .callout-warning, .dark .affine-callout-red {
+  background-color: #3d1d2b !important;
+  border-color: #612b43 !important;
+  color: #fbcfe8 !important;
+}
+
+/* Notion & Milanote UI Utility Classes */
+.app-hover {
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.app-hover:hover {
+  background-color: var(--app-hover);
+}
+.app-hover:active {
+  background-color: var(--app-active);
+}
+
+.affine-toolbar-dock {
+  background-color: var(--app-bg-overlay);
+  border: 1px solid var(--app-border);
+  box-shadow: var(--app-shadow-dock);
+  backdrop-filter: blur(16px);
+  border-radius: 10px;
+}
+
+.affine-panel {
+  background-color: var(--app-bg-overlay);
+  border: 1px solid var(--app-border);
+  box-shadow: var(--app-shadow-popover);
+  border-radius: 8px;
+}
+
+.affine-modal-card {
+  background-color: var(--app-bg-overlay);
+  border: 1px solid var(--app-border);
+  box-shadow: var(--app-shadow-popover);
+  border-radius: 10px;
+}
+
+/* Notion Sidebar Items */
+.affine-sidebar-item {
+  display: flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--app-text-primary);
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.affine-sidebar-item:hover {
+  background-color: var(--app-hover);
+}
+.affine-sidebar-item.active {
+  background-color: var(--app-hover);
+  font-weight: 500;
+}
+
+/* Notion Category Divider */
+.affine-category-divider {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--app-text-muted);
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.12s ease;
+}
+.affine-category-divider:hover {
+  color: var(--app-text-primary);
+}
+
+/* Notion Segmented Control */
+.affine-segmented-container {
+  display: inline-flex;
+  align-items: center;
+  background-color: var(--app-hover);
+  padding: 2px;
+  border-radius: 6px;
+  border: 1px solid var(--app-border);
+}
+
+.affine-segmented-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  user-select: none;
+}
+.affine-segmented-tab:hover {
+  color: var(--app-text-primary);
+}
+.affine-segmented-tab.active {
+  background-color: var(--app-bg-primary);
+  color: var(--app-text-primary);
+  box-shadow: 0 1px 2px rgba(15, 15, 15, 0.08);
+  font-weight: 600;
+}
+
+/* Notion Primary Action Button */
+.affine-button-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  background-color: var(--app-accent);
+  color: #ffffff;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.12s ease, transform 0.05s ease;
+  user-select: none;
+  border: none;
+  box-shadow: 0 1px 2px rgba(15, 15, 15, 0.1);
+}
+.affine-button-primary:hover {
+  background-color: var(--app-accent-hover);
+}
+.affine-button-primary:active {
+  transform: scale(0.98);
+}
+
+/* Notion Icon Button */
+.affine-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  color: var(--app-text-secondary);
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.affine-icon-btn:hover {
+  background-color: var(--app-hover);
+  color: var(--app-text-primary);
+}
+.affine-icon-btn:active {
+  background-color: var(--app-active);
+}
+
+/* ReactFlow Panels must always sit above full-screen canvas and drawing layers */
+.react-flow__panel {
+  z-index: 40 !important;
+  pointer-events: auto !important;
+}
+

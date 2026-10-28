@@ -1,25 +1,39 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
-  FileText,
-  Network,
-  Star,
-  Info,
-  MoreHorizontal,
-  Lock,
-  Sparkles,
-  List,
-  Calendar,
-  SlidersHorizontal,
-  PanelRightClose,
-  PanelRight,
-  Copy,
-  Trash2,
-  Maximize2,
-  Presentation,
-  GripVertical
-} from 'lucide-react'
-import { db, seedInitialData, type ViewMode, type WorkspaceItem } from './db'
+  PageIcon,
+  EdgelessIcon,
+  SidebarIcon,
+  RightSidebarIcon,
+  SplitViewIcon,
+  FavoriteIcon,
+  FavoritedIcon,
+  InfoIcon,
+  MoreHorizontalIcon,
+  PresentationIcon,
+  ShareIcon,
+  AiOutlineIcon,
+  TocIcon,
+  JournalIcon,
+  PropertyIcon,
+  CopyIcon,
+  KeyboardIcon,
+  DeleteIcon,
+  SunPanelIcon,
+  MoonPanelIcon,
+  SearchIcon,
+  DownloadIcon
+} from '@blocksuite/icons/rc'
+import {
+  db,
+  seedInitialData,
+  type ViewMode,
+  type WorkspaceItem,
+  DEFAULT_SPACE_ID,
+  createSpace,
+  updateSpace,
+  deleteSpace
+} from './db'
 import { syncEngine, type SyncEngineStatus } from './lib/syncEngine'
 import { Sidebar } from './components/sidebar/Sidebar'
 import { DocEditor } from './components/editor/DocEditor'
@@ -33,8 +47,22 @@ import { TemplatesModal } from './components/modals/TemplatesModal'
 import { AIModal } from './components/modals/AIModal'
 import { AllDocsModal } from './components/modals/AllDocsModal'
 import { ImportModal } from './components/modals/ImportModal'
+import { ShortcutsModal } from './components/modals/ShortcutsModal'
+import { CreateWorkspaceModal } from './components/modals/CreateWorkspaceModal'
+import { CollectionsModal } from './components/modals/CollectionsModal'
+import { TagsModal } from './components/modals/TagsModal'
+import { KnowledgeGraphModal } from './components/modals/KnowledgeGraphModal'
+import { FindInPage } from './components/search/FindInPage'
+import { WorkbenchTabs, type WorkbenchTab } from './components/tabs/WorkbenchTabs'
 import { PresentationViewer } from './components/presentation/PresentationViewer'
-import { type AppTemplate } from './lib/templates'
+import { type AppTemplate, APP_TEMPLATES } from './lib/templates'
+import {
+  exportDocumentAsMarkdown,
+  exportDocumentAsHtml,
+  exportDocumentAsJson,
+  copyAsPlainText
+} from './lib/exportUtils'
+import { Toaster, toast } from 'sonner'
 
 export default function App() {
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string>('untitled-workspace')
@@ -47,6 +75,34 @@ export default function App() {
     return localStorage.getItem('seven_note_theme') !== 'light'
   })
 
+  // Interface scaling (Zoom UI)
+  const UI_SCALES = ['90', '100', '110', '120', '130']
+  const [uiScale, setUiScale] = useState<string>(() => {
+    return localStorage.getItem('seven_note_ui_scale') || '100'
+  })
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-ui-scale', uiScale)
+    localStorage.setItem('seven_note_ui_scale', uiScale)
+  }, [uiScale])
+
+  const handleStepUiScale = (dir: 1 | -1) => {
+    setUiScale((current) => {
+      const idx = UI_SCALES.indexOf(current)
+      const nextIdx = Math.max(0, Math.min(UI_SCALES.length - 1, (idx === -1 ? 1 : idx) + dir))
+      const nextScale = UI_SCALES[nextIdx]
+      toast.info(`Escala de interfaz: ${nextScale}%`)
+      return nextScale
+    })
+  }
+
+  // Workspaces (Spaces) management
+  const spaces = useLiveQuery(() => db.spaces.toArray()) ?? []
+  const [currentSpaceId, setCurrentSpaceId] = useState<string>(() => {
+    return localStorage.getItem('seven_note_active_space_id') || DEFAULT_SPACE_ID
+  })
+  const [isCreateWorkspaceOpen, setIsCreateWorkspaceOpen] = useState(false)
+
   // Modals state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
@@ -56,18 +112,183 @@ export default function App() {
   const [isAIOpen, setIsAIOpen] = useState(false)
   const [isAllDocsOpen, setIsAllDocsOpen] = useState(false)
   const [isImportOpen, setIsImportOpen] = useState(false)
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false)
+  const [isCollectionsOpen, setIsCollectionsOpen] = useState(false)
+  const [isTagsOpen, setIsTagsOpen] = useState(false)
+  const [selectedTagForModal, setSelectedTagForModal] = useState<string | null>(null)
+  const [isKnowledgeGraphOpen, setIsKnowledgeGraphOpen] = useState(false)
+  const [isFindInPageOpen, setIsFindInPageOpen] = useState(false)
+  const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false)
+  const [isViewDropdownOpen, setIsViewDropdownOpen] = useState(false)
+  const [isMilanotePresetsOpen, setIsMilanotePresetsOpen] = useState(false)
+
+  // Workbench tabs state
+  const [tabs, setTabs] = useState<WorkbenchTab[]>(() => {
+    try {
+      const saved = localStorage.getItem('seven_note_workbench_tabs')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      }
+    } catch (e) {
+      // fallback
+    }
+    return [{ id: 'tab-initial', workspaceId: 'untitled-workspace', pinned: false }]
+  })
+  const [activeTabId, setActiveTabId] = useState<string>('tab-initial')
+
+  useEffect(() => {
+    localStorage.setItem('seven_note_workbench_tabs', JSON.stringify(tabs))
+  }, [tabs])
+
+  const selectWorkspaceWithTab = (wsId: string) => {
+    setCurrentWorkspaceId(wsId)
+    setTabs((prev) => {
+      const existing = prev.find((t) => t.workspaceId === wsId)
+      if (existing) {
+        setActiveTabId(existing.id)
+        return prev
+      }
+      const newTab: WorkbenchTab = {
+        id: `tab-${crypto.randomUUID()}`,
+        workspaceId: wsId,
+        pinned: false
+      }
+      setActiveTabId(newTab.id)
+      return [...prev, newTab]
+    })
+  }
+
+  const handleSelectTab = (tabId: string) => {
+    const tab = tabs.find((t) => t.id === tabId)
+    if (tab) {
+      setActiveTabId(tabId)
+      setCurrentWorkspaceId(tab.workspaceId)
+    }
+  }
+
+  const handleCloseTab = (tabId: string) => {
+    const tabIndex = tabs.findIndex((t) => t.id === tabId)
+    if (tabIndex === -1) return
+
+    const remaining = tabs.filter((t) => t.id !== tabId)
+    if (remaining.length === 0) {
+      const newId = crypto.randomUUID()
+      const now = Date.now()
+      db.workspaces.add({
+        id: newId,
+        parentId: null,
+        spaceId: currentSpaceId,
+        title: 'Untitled',
+        icon: '',
+        color: '#1e96eb',
+        viewMode: 'doc',
+        docContent: '<p></p>',
+        createdAt: now,
+        updatedAt: now,
+        isFavorite: false,
+        isDeleted: false,
+        syncStatus: 'pending'
+      })
+      const fallbackTab: WorkbenchTab = {
+        id: `tab-${crypto.randomUUID()}`,
+        workspaceId: newId,
+        pinned: false
+      }
+      setTabs([fallbackTab])
+      setActiveTabId(fallbackTab.id)
+      setCurrentWorkspaceId(newId)
+    } else {
+      setTabs(remaining)
+      if (activeTabId === tabId) {
+        const nextActive = remaining[Math.min(tabIndex, remaining.length - 1)]
+        setActiveTabId(nextActive.id)
+        setCurrentWorkspaceId(nextActive.workspaceId)
+      }
+    }
+  }
+
+  const handleCloseOtherTabs = (tabId: string) => {
+    const keep = tabs.filter((t) => t.id === tabId || t.pinned)
+    setTabs(keep)
+    setActiveTabId(tabId)
+    const activeWs = tabs.find((t) => t.id === tabId)
+    if (activeWs) setCurrentWorkspaceId(activeWs.workspaceId)
+  }
+
+  const handleNewTab = async () => {
+    const newId = crypto.randomUUID()
+    const now = Date.now()
+    await db.workspaces.add({
+      id: newId,
+      parentId: null,
+      spaceId: currentSpaceId,
+      title: 'Untitled',
+      icon: '',
+      color: '#1e96eb',
+      viewMode: 'doc',
+      docContent: '<p></p>',
+      createdAt: now,
+      updatedAt: now,
+      isFavorite: false,
+      isDeleted: false,
+      syncStatus: 'pending'
+    })
+    const newTab: WorkbenchTab = {
+      id: `tab-${crypto.randomUUID()}`,
+      workspaceId: newId,
+      pinned: false
+    }
+    setTabs((prev) => [...prev, newTab])
+    setActiveTabId(newTab.id)
+    setCurrentWorkspaceId(newId)
+  }
+
+  const handleTogglePinTab = (tabId: string) => {
+    setTabs((prev) =>
+      prev.map((t) => (t.id === tabId ? { ...t, pinned: !t.pinned } : t))
+    )
+  }
+
+  const handleDuplicateTab = async (tabId: string) => {
+    const sourceTab = tabs.find((t) => t.id === tabId)
+    if (!sourceTab) return
+    const sourceWs = await db.workspaces.get(sourceTab.workspaceId)
+    if (!sourceWs) return
+
+    const newId = crypto.randomUUID()
+    const now = Date.now()
+    await db.workspaces.add({
+      ...sourceWs,
+      id: newId,
+      title: `${sourceWs.title} (Copia)`,
+      createdAt: now,
+      updatedAt: now,
+      syncStatus: 'pending'
+    })
+
+    const newTab: WorkbenchTab = {
+      id: `tab-${crypto.randomUUID()}`,
+      workspaceId: newId,
+      pinned: false
+    }
+    setTabs((prev) => [...prev, newTab])
+    setActiveTabId(newTab.id)
+    setCurrentWorkspaceId(newId)
+    toast.success('Pestaña duplicada')
+  }
 
   // Top header popovers
   const [isInfoOpen, setIsInfoOpen] = useState(false)
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false)
   const [copiedLink, setCopiedLink] = useState(false)
+  const [isEditingHeaderTitle, setIsEditingHeaderTitle] = useState(false)
 
   // Sync engine status
   const [syncStatus, setSyncStatus] = useState<SyncEngineStatus>(syncEngine.getStatus())
 
   // Reactive DB queries
   const workspaces = useLiveQuery(() => db.workspaces.toArray()) ?? []
-  const allNodes = useLiveQuery(() => db.canvasNodes.toArray()) ?? []
 
   // Initialize DB and subscribe to sync
   useEffect(() => {
@@ -79,17 +300,24 @@ export default function App() {
     // Listen for custom sub-board navigation events
     const handleNavigate = (e: any) => {
       if (e.detail?.workspaceId) {
-        setCurrentWorkspaceId(e.detail.workspaceId)
+        selectWorkspaceWithTab(e.detail.workspaceId)
       }
     }
 
     // Listen for custom mode switch events
     const handleSwitchMode = (e: any) => {
-      if (e.detail?.mode) {
-        setViewMode(e.detail.mode)
+      const targetMode = e.detail?.mode
+      const targetWsId = e.detail?.workspaceId || currentWorkspaceId
+      if (targetMode && targetWsId) {
+        db.workspaces.update(targetWsId, {
+          viewMode: targetMode,
+          documentMode: targetMode === 'canvas' ? 'Sin bordes' : targetMode === 'doc' ? 'Estándar' : 'Dividido',
+          updatedAt: Date.now(),
+          syncStatus: 'pending'
+        })
       }
       if (e.detail?.workspaceId) {
-        setCurrentWorkspaceId(e.detail.workspaceId)
+        selectWorkspaceWithTab(e.detail.workspaceId)
       }
     }
 
@@ -101,11 +329,41 @@ export default function App() {
       setIsPresentationMode(true)
     }
 
-    // Escape exits presentation mode
+    // Global keyboard shortcuts (Escape, ?, Ctrl+/, Ctrl+\, Ctrl+F)
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isPresentationMode) {
         setIsPresentationMode(false)
         setPresentationFrameId(undefined)
+        return
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        setIsFindInPageOpen((prev) => !prev)
+        return
+      }
+
+      const target = e.target as HTMLElement
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return
+      }
+
+      if (e.key === '?' || ((e.ctrlKey || e.metaKey) && e.key === '/')) {
+        e.preventDefault()
+        setIsShortcutsOpen((prev) => !prev)
+      } else if ((e.ctrlKey || e.metaKey) && e.key === '\\') {
+        e.preventDefault()
+        setSidebarOpen((prev) => !prev)
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === '=' || e.key === '+')) {
+        e.preventDefault()
+        handleStepUiScale(1)
+      } else if ((e.ctrlKey || e.metaKey) && e.key === '-') {
+        e.preventDefault()
+        handleStepUiScale(-1)
+      } else if ((e.ctrlKey || e.metaKey) && e.key === '0') {
+        e.preventDefault()
+        setUiScale('100')
+        toast.info('Escala de interfaz: 100% (predeterminada)')
       }
     }
 
@@ -121,26 +379,97 @@ export default function App() {
       window.removeEventListener('seven-note-start-presentation', handleStartPresentation)
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [isPresentationMode])
+  }, [isPresentationMode, currentWorkspaceId])
 
   // Handle dark mode class on document
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark')
+      document.documentElement.setAttribute('data-theme', 'dark')
       localStorage.setItem('seven_note_theme', 'dark')
     } else {
       document.documentElement.classList.remove('dark')
+      document.documentElement.setAttribute('data-theme', 'light')
       localStorage.setItem('seven_note_theme', 'light')
     }
   }, [darkMode])
 
-  // Select active workspace or fallback to first available
-  const activeWorkspaces = workspaces.filter((w) => !w.isDeleted)
+  // Keep currentSpaceId in sync with spaces
+  useEffect(() => {
+    if (spaces.length > 0 && !spaces.some((s) => s.id === currentSpaceId)) {
+      const fallbackId = spaces[0].id
+      setCurrentSpaceId(fallbackId)
+      localStorage.setItem('seven_note_active_space_id', fallbackId)
+    }
+  }, [spaces, currentSpaceId])
+
+  // Select active workspace items belonging to current space
+  const currentSpaceWorkspaces = workspaces.filter(
+    (w) => (w.spaceId || DEFAULT_SPACE_ID) === currentSpaceId
+  )
+  const activeWorkspaces = currentSpaceWorkspaces.filter((w) => !w.isDeleted)
   const currentWorkspace: WorkspaceItem | undefined =
     activeWorkspaces.find((w) => w.id === currentWorkspaceId) || activeWorkspaces[0]
 
+  // Space switcher actions
+  const handleSelectSpace = async (spaceId: string) => {
+    setCurrentSpaceId(spaceId)
+    localStorage.setItem('seven_note_active_space_id', spaceId)
+
+    const targetSpacePages = workspaces.filter(
+      (w) => !w.isDeleted && (w.spaceId || DEFAULT_SPACE_ID) === spaceId
+    )
+    if (targetSpacePages.length > 0) {
+      setCurrentWorkspaceId(targetSpacePages[0].id)
+    } else {
+      // Auto-create initial page if space has no pages
+      const sp = spaces.find((s) => s.id === spaceId)
+      const newPageId = crypto.randomUUID()
+      const now = Date.now()
+      await db.workspaces.add({
+        id: newPageId,
+        parentId: null,
+        spaceId: spaceId,
+        title: 'Página inicial',
+        icon: sp?.icon || '📄',
+        color: sp?.color || '#1e96eb',
+        viewMode: 'doc',
+        docContent: `<h1>✨ ${sp?.name || 'Nuevo Espacio'}</h1><p>¡Bienvenido a tu espacio de trabajo! Comienza a escribir o planificar aquí.</p>`,
+        createdAt: now,
+        updatedAt: now,
+        isFavorite: false,
+        isDeleted: false,
+        syncStatus: 'pending'
+      })
+      setCurrentWorkspaceId(newPageId)
+    }
+  }
+
+  const handleCreateSpace = async (name: string, icon: string, color: string) => {
+    const { space, initialPageId } = await createSpace(name, icon, color)
+    setCurrentSpaceId(space.id)
+    localStorage.setItem('seven_note_active_space_id', space.id)
+    setCurrentWorkspaceId(initialPageId)
+  }
+
+  const handleRenameSpace = async (id: string, newName: string) => {
+    await updateSpace(id, { name: newName })
+  }
+
+  const handleDeleteSpace = async (id: string) => {
+    const sp = spaces.find((s) => s.id === id)
+    if (!confirm(`¿Eliminar el espacio "${sp?.name || 'Espacio'}" y todos sus documentos asociados?`)) {
+      return
+    }
+    await deleteSpace(id)
+    const remaining = spaces.filter((s) => s.id !== id)
+    if (remaining.length > 0) {
+      await handleSelectSpace(remaining[0].id)
+    }
+  }
+
   // Update view mode
-  const setViewMode = async (mode: ViewMode) => {
+  const setViewMode = useCallback(async (mode: ViewMode) => {
     if (!currentWorkspace) return
     try {
       await db.workspaces.update(currentWorkspace.id, {
@@ -153,7 +482,11 @@ export default function App() {
     } catch (e) {
       console.error('Error changing view mode', e)
     }
-  }
+  }, [currentWorkspace])
+
+  const handleSwitchToDoc = useCallback(() => {
+    setViewMode('doc')
+  }, [setViewMode])
 
   // Update title
   const handleTitleChange = async (newTitle: string) => {
@@ -194,7 +527,7 @@ export default function App() {
     })
     const journalTitle = `Diario: ${todayStr}`
 
-    // Check if journal for today exists
+    // Check if journal for today exists in current space
     const existing = activeWorkspaces.find(
       (w) => w.isJournal && (w.title === journalTitle || w.journalDate === todayStr)
     )
@@ -224,6 +557,7 @@ export default function App() {
     await db.workspaces.add({
       id: newId,
       parentId: null,
+      spaceId: currentSpaceId,
       folder: 'First Folder',
       title: journalTitle,
       icon: '📅',
@@ -255,6 +589,89 @@ export default function App() {
     syncEngine.scheduleSync(1000)
   }
 
+  // One-click loader for Milanote authentic screenshot boards
+  const handleLoadMilanotePreset = async (presetId: 'milanote-inspiration' | 'milanote-research' | 'milanote-project-plan') => {
+    const template = APP_TEMPLATES.find((t) => t.id === presetId)
+    if (!template) return
+
+    const existing = workspaces.find((w) => w.templateName === template.title || w.title === template.title)
+    if (existing) {
+      setCurrentWorkspaceId(existing.id)
+      setViewMode('canvas')
+      toast.success(`Cargado: ${template.title}`)
+      return
+    }
+
+    const newWsId = crypto.randomUUID()
+    const now = Date.now()
+    const cleanTitle = template.title.replace(' (Milanote)', '').replace(' (Milanote Dark)', '')
+    await db.workspaces.add({
+      id: newWsId,
+      parentId: null,
+      spaceId: currentSpaceId,
+      title: cleanTitle,
+      icon: template.icon,
+      color: presetId === 'milanote-project-plan' ? '#8b5cf6' : '#1e96eb',
+      viewMode: 'canvas',
+      docContent: `<h1>${cleanTitle}</h1>`,
+      createdAt: now,
+      updatedAt: now,
+      isFavorite: false,
+      isDeleted: false,
+      syncStatus: 'pending',
+      templateName: template.title
+    })
+
+    if (template.nodes) {
+      const createdNodeIds: string[] = []
+      for (const nodeDef of template.nodes) {
+        const newNodeId = crypto.randomUUID()
+        createdNodeIds.push(newNodeId)
+        await db.canvasNodes.add({
+          id: newNodeId,
+          workspaceId: newWsId,
+          type: nodeDef.type,
+          positionX: nodeDef.positionX,
+          positionY: nodeDef.positionY,
+          data: {
+            ...nodeDef.data,
+            workspaceId: newWsId
+          },
+          createdAt: now,
+          updatedAt: now,
+          isDeleted: false,
+          syncStatus: 'pending'
+        })
+      }
+
+      if (template.edges) {
+        for (const edgeDef of template.edges) {
+          const sourceId = createdNodeIds[edgeDef.sourceIndex]
+          const targetId = createdNodeIds[edgeDef.targetIndex]
+          if (sourceId && targetId) {
+            await db.canvasEdges.add({
+              id: crypto.randomUUID(),
+              workspaceId: newWsId,
+              source: sourceId,
+              target: targetId,
+              label: edgeDef.label || '',
+              animated: true,
+              color: edgeDef.color || '#ec4899',
+              createdAt: now,
+              updatedAt: now,
+              isDeleted: false,
+              syncStatus: 'pending'
+            })
+          }
+        }
+      }
+    }
+
+    setCurrentWorkspaceId(newWsId)
+    setViewMode('canvas')
+    toast.success(`Tablero de Milanote "${cleanTitle}" creado con éxito`)
+  }
+
   // Apply template (Supports both Edgeless Canvas and Document templates)
   const handleApplyTemplate = async (template: AppTemplate) => {
     if (!currentWorkspace) return
@@ -271,7 +688,14 @@ export default function App() {
         syncStatus: 'pending'
       })
 
-      // 2. Insert canvas nodes
+      // 2. Clean up initial placeholder docframe if it is the only card
+      const existingWorkspaceNodes = await db.canvasNodes.where('workspaceId').equals(currentWorkspace.id).toArray()
+      const isPlaceholderOnly = existingWorkspaceNodes.length === 1 && existingWorkspaceNodes[0].id === `docframe-${currentWorkspace.id}`
+      if (isPlaceholderOnly) {
+        await db.canvasNodes.delete(`docframe-${currentWorkspace.id}`)
+      }
+
+      // 3. Insert canvas nodes
       const createdNodeIds: string[] = []
       for (const nodeDef of template.nodes) {
         const newNodeId = crypto.randomUUID()
@@ -351,25 +775,100 @@ export default function App() {
     return { words, chars, time }
   }
 
+  // Handle Calendar Date Jump or Creation for Daily Journal
+  const handleSelectJournalDate = async (date: Date) => {
+    const dateStr = date.toLocaleDateString('es-ES', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    })
+    const journalTitle = `Diario: ${dateStr}`
+
+    const existing = workspaces.find(
+      (w) =>
+        !w.isDeleted &&
+        (w.spaceId || DEFAULT_SPACE_ID) === currentSpaceId &&
+        (w.title === journalTitle || w.journalDate === dateStr)
+    )
+
+    if (existing) {
+      selectWorkspaceWithTab(existing.id)
+      return
+    }
+
+    const newId = crypto.randomUUID()
+    const now = Date.now()
+    const journalDoc = `
+      <h1>📅 Diario: ${dateStr}</h1>
+      <p><em>"Cada día es una nueva oportunidad para avanzar y aprender."</em></p>
+      
+      <h3>🎯 Enfoque Principal</h3>
+      <ul data-type="taskList">
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div>Meta prioritaria del día: </div></li>
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div>Reuniones o notas clave: </div></li>
+      </ul>
+
+      <h3>💡 Notas & Reflexiones</h3>
+      <p>Anota ideas, descubrimientos o reflexiones del día...</p>
+    `
+
+    await db.workspaces.add({
+      id: newId,
+      parentId: null,
+      spaceId: currentSpaceId,
+      folder: 'First Folder',
+      title: journalTitle,
+      icon: '📅',
+      color: '#0ea5e9',
+      viewMode: 'doc',
+      docContent: journalDoc,
+      createdAt: now,
+      updatedAt: now,
+      isFavorite: false,
+      isDeleted: false,
+      syncStatus: 'pending',
+      isJournal: true,
+      journalDate: dateStr,
+      activeProperties: ['tags', 'isJournal', 'createdAt', 'updatedAt']
+    })
+
+    selectWorkspaceWithTab(newId)
+    toast.success(`Diario para ${dateStr} abierto`)
+  }
+
   const stats = getStats()
   const activeViewMode: ViewMode = currentWorkspace?.viewMode || 'canvas'
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#121214] text-zinc-100 font-sans">
+    <div className="flex h-screen w-screen overflow-hidden bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] font-sans">
       {/* 1. Left Sidebar Navigation */}
       {sidebarOpen && !isPresentationMode && (
         <Sidebar
+          spaces={spaces}
+          currentSpaceId={currentSpaceId}
+          onSelectSpace={handleSelectSpace}
+          onOpenCreateSpace={() => setIsCreateWorkspaceOpen(true)}
+          onRenameSpace={handleRenameSpace}
+          onDeleteSpace={handleDeleteSpace}
           workspaces={workspaces}
           currentWorkspaceId={currentWorkspace?.id || ''}
-          onSelectWorkspace={(id) => setCurrentWorkspaceId(id)}
+          onSelectWorkspace={selectWorkspaceWithTab}
           onToggleSidebar={() => setSidebarOpen(false)}
           onOpenSettings={() => setIsSettingsOpen(true)}
           onOpenSearch={() => setIsSearchOpen(true)}
           onOpenAllDocs={() => setIsAllDocsOpen(true)}
           onOpenDailyJournal={handleOpenDailyJournal}
+          onSelectJournalDate={handleSelectJournalDate}
           onOpenTrash={() => setIsTrashOpen(true)}
           onOpenImport={() => setIsImportOpen(true)}
           onOpenTemplates={() => setIsTemplatesOpen(true)}
+          onOpenShortcuts={() => setIsShortcutsOpen(true)}
+          onOpenTags={(tag) => {
+            setSelectedTagForModal(tag || null)
+            setIsTagsOpen(true)
+          }}
+          onOpenCollections={() => setIsCollectionsOpen(true)}
+          onOpenKnowledgeGraph={() => setIsKnowledgeGraphOpen(true)}
           syncStatus={syncStatus}
           darkMode={darkMode}
           onToggleDarkMode={() => setDarkMode(!darkMode)}
@@ -377,98 +876,208 @@ export default function App() {
       )}
 
       {/* 2. Main Content Center Column */}
-      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-[#121214]">
-        {/* Top Header Bar (Matches Screenshots 1 & 2) */}
+      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-[var(--affine-background-primary-color)]">
+        {/* Top Workbench Tabs Header */}
         {!isPresentationMode && (
-          <header className="h-12 border-b border-[#242428] bg-[#121214] px-3.5 flex items-center justify-between shrink-0 z-20 select-none">
-            {/* Left section: Grip dots ::: , Segmented Mode Switcher [ 📄 | ☍ ], title, star, info, more */}
+          <WorkbenchTabs
+            tabs={tabs}
+            activeTabId={activeTabId}
+            workspaces={activeWorkspaces}
+            onSelectTab={handleSelectTab}
+            onCloseTab={handleCloseTab}
+            onCloseOtherTabs={handleCloseOtherTabs}
+            onNewTab={handleNewTab}
+            onTogglePinTab={handleTogglePinTab}
+            onDuplicateTab={handleDuplicateTab}
+          />
+        )}
+        {/* Top Header Bar (Notion & Milanote Clean Human-Crafted Aesthetic) */}
+        {!isPresentationMode && (
+          <header className="h-11 border-b border-[var(--app-border)] bg-[var(--app-bg-primary)] px-3 flex items-center justify-between shrink-0 z-20 select-none text-sm transition-colors duration-150">
+            {/* Left section: Sidebar toggle, Mode Switcher [ Page | Edgeless ], Title, Favorite, Info, More */}
             <div className="flex items-center gap-2 min-w-0">
-              {/* Grip Dots / Sidebar Toggle ::: */}
+              {/* Sidebar Toggle */}
               <button
                 onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-[#202024] transition"
-                title={sidebarOpen ? 'Ocultar barra lateral' : 'Mostrar barra lateral'}
+                className="p-1.5 rounded-md text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition"
+                title={sidebarOpen ? 'Ocultar barra lateral (Ctrl+\\)' : 'Mostrar barra lateral (Ctrl+\\)'}
               >
-                <GripVertical size={16} />
+                <SidebarIcon className="w-4.5 h-4.5" />
               </button>
 
-              {/* Segmented Control [ 📄 | ☍ ] (Matches Screenshot) */}
-              <div className="flex items-center p-0.5 rounded-lg bg-[#1a1a1e] border border-[#27272c]">
+              {/* Notion Segmented Mode Switcher */}
+              <div className="inline-flex items-center bg-[var(--app-hover)] p-0.5 rounded-md border border-[var(--app-border)]">
                 <button
                   onClick={() => setViewMode('doc')}
-                  className={`p-1 rounded-md transition ${
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] text-xs transition ${
                     activeViewMode === 'doc'
-                      ? 'bg-[#292930] text-zinc-100 shadow-xs'
-                      : 'text-zinc-400 hover:text-zinc-200'
+                      ? 'bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] shadow-xs font-semibold'
+                      : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)]'
                   }`}
-                  title="Modo Documento (📄)"
+                  title="Modo Página / Documento (Alt+S)"
                 >
-                  <FileText size={14} />
+                  <PageIcon className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline font-medium">Página</span>
                 </button>
                 <button
                   onClick={() => setViewMode('canvas')}
-                  className={`p-1 rounded-md transition ${
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] text-xs transition ${
                     activeViewMode === 'canvas'
-                      ? 'bg-[#292930] text-zinc-100 shadow-xs'
-                      : 'text-zinc-400 hover:text-zinc-200'
+                      ? 'bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] shadow-xs font-semibold'
+                      : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)]'
                   }`}
-                  title="Modo Lienzo / Sin bordes (☍)"
+                  title="Modo Tablero de Tarjetas (Milanote)"
                 >
-                  <Network size={14} />
+                  <EdgelessIcon className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline font-medium">Tablero</span>
                 </button>
               </div>
 
-              {/* Document Title synced */}
-              <span className="font-semibold text-xs sm:text-sm text-zinc-200 truncate max-w-[140px] sm:max-w-[240px]">
-                {currentWorkspace?.title || 'Untitled'}
-              </span>
+              {/* Milanote Boards Preset Switcher */}
+              <div className="relative">
+                <button
+                  onClick={() => setIsMilanotePresetsOpen(!isMilanotePresetsOpen)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 border border-neutral-200/80 dark:border-neutral-700 transition"
+                  title="Cargar tableros de ejemplo de Milanote"
+                >
+                  <span>Tableros Milanote</span>
+                  <span className="text-[10px] opacity-60">⌵</span>
+                </button>
+
+                {isMilanotePresetsOpen && (
+                  <div
+                    className="absolute left-0 top-8 z-50 w-64 bg-white dark:bg-[#252525] border border-neutral-200 dark:border-neutral-700 rounded-xl shadow-xl p-1.5 text-xs text-neutral-800 dark:text-neutral-200 animate-in fade-in zoom-in-95"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="px-2.5 py-1 text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
+                      Modelos de Referencia
+                    </div>
+                    <button
+                      onClick={() => {
+                        handleLoadMilanotePreset('milanote-inspiration')
+                        setIsMilanotePresetsOpen(false)
+                      }}
+                      className="w-full text-left px-2.5 py-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg flex items-center gap-2.5 transition"
+                    >
+                      <span className="text-base">🎨</span>
+                      <div>
+                        <div className="font-bold text-xs">Tablero de inspiración</div>
+                        <div className="text-[10px] text-neutral-400">Modo claro, paletas y collage</div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleLoadMilanotePreset('milanote-research')
+                        setIsMilanotePresetsOpen(false)
+                      }}
+                      className="w-full text-left px-2.5 py-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg flex items-center gap-2.5 transition"
+                    >
+                      <span className="text-base">🔍</span>
+                      <div>
+                        <div className="font-bold text-xs">Investigación</div>
+                        <div className="text-[10px] text-neutral-400">Diseño Danés, audio, Word doc</div>
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => {
+                        handleLoadMilanotePreset('milanote-project-plan')
+                        setIsMilanotePresetsOpen(false)
+                      }}
+                      className="w-full text-left px-2.5 py-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg flex items-center gap-2.5 transition"
+                    >
+                      <span className="text-base">🎬</span>
+                      <div>
+                        <div className="font-bold text-xs">Plano del proyecto</div>
+                        <div className="text-[10px] text-neutral-400">Modo oscuro, presupuesto, skater</div>
+                      </div>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Document Icon & Title synced (Inline editable like Notion) */}
+              <div className="flex items-center gap-1.5 min-w-0 max-w-[180px] sm:max-w-[300px]">
+                {currentWorkspace?.icon ? (
+                  <span className="text-sm shrink-0">{currentWorkspace.icon}</span>
+                ) : (
+                  <span className="text-[var(--app-text-secondary)] shrink-0">
+                    {activeViewMode === 'canvas' ? (
+                      <EdgelessIcon className="w-4 h-4" />
+                    ) : (
+                      <PageIcon className="w-4 h-4" />
+                    )}
+                  </span>
+                )}
+                {isEditingHeaderTitle ? (
+                  <input
+                    type="text"
+                    value={currentWorkspace?.title === 'Untitled' ? '' : (currentWorkspace?.title || '')}
+                    onChange={(e) => handleTitleChange(e.target.value || 'Untitled')}
+                    onBlur={() => setIsEditingHeaderTitle(false)}
+                    onKeyDown={(e) => e.key === 'Enter' && setIsEditingHeaderTitle(false)}
+                    autoFocus
+                    placeholder="Untitled"
+                    className="font-medium text-xs text-[var(--app-text-primary)] bg-[var(--app-bg-primary)] px-1.5 py-0.5 rounded border border-[var(--app-accent)] outline-none w-full"
+                  />
+                ) : (
+                  <span
+                    onClick={() => setIsEditingHeaderTitle(true)}
+                    className="font-medium text-xs text-[var(--app-text-primary)] truncate cursor-pointer hover:bg-[var(--app-hover)] px-1.5 py-0.5 rounded transition"
+                    title="Haz clic para renombrar documento"
+                  >
+                    {currentWorkspace?.title || 'Untitled'}
+                  </span>
+                )}
+              </div>
 
               {/* Star Favorite Button */}
               <button
                 onClick={handleToggleFavorite}
-                className="p-1.5 rounded-md hover:bg-[#202024] text-zinc-400 hover:text-zinc-100 transition"
+                className="p-1.5 rounded-md hover:bg-[var(--app-hover)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] transition"
                 title={currentWorkspace?.isFavorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
               >
-                <Star
-                  size={14}
-                  className={currentWorkspace?.isFavorite ? 'text-amber-400 fill-amber-400' : ''}
-                />
+                {currentWorkspace?.isFavorite ? (
+                  <FavoritedIcon className="w-4.5 h-4.5 text-amber-500" />
+                ) : (
+                  <FavoriteIcon className="w-4.5 h-4.5" />
+                )}
               </button>
 
               {/* Info Button ⓘ */}
               <div className="relative">
                 <button
                   onClick={() => setIsInfoOpen(!isInfoOpen)}
-                  className="p-1.5 rounded-md hover:bg-[#202024] text-zinc-400 hover:text-zinc-100 transition"
+                  className="p-1.5 rounded-md hover:bg-[var(--app-hover)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] transition"
                   title="Información del documento"
                 >
-                  <Info size={14} />
+                  <InfoIcon className="w-4.5 h-4.5" />
                 </button>
 
                 {isInfoOpen && (
                   <div
-                    className="absolute left-0 top-8 z-40 w-64 bg-[#1b1b1e] border border-[#2c2c32] rounded-xl shadow-2xl p-3 text-xs text-zinc-300"
+                    className="absolute left-0 top-9 z-40 w-72 bg-[var(--app-bg-overlay)] border border-[var(--app-border)] rounded-lg shadow-[var(--app-shadow-popover)] p-3 text-xs text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 duration-100"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <div className="font-semibold text-zinc-100 pb-2 border-b border-[#292930] mb-2">
-                      Estadísticas de la página
+                    <div className="font-semibold pb-2 border-b border-[var(--app-divider)] mb-2 flex items-center justify-between">
+                      <span className="text-xs font-semibold">Estadísticas de la página</span>
+                      <span className="text-[10px] text-[var(--app-text-muted)] uppercase font-mono">Info</span>
                     </div>
-                    <div className="space-y-1.5 text-[11px]">
+                    <div className="space-y-1.5 text-xs">
                       <div className="flex justify-between">
-                        <span className="text-zinc-500">Palabras:</span>
-                        <span className="font-mono text-zinc-200">{stats.words}</span>
+                        <span className="text-[var(--app-text-secondary)]">Palabras:</span>
+                        <span className="font-mono font-medium">{stats.words}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-zinc-500">Caracteres:</span>
-                        <span className="font-mono text-zinc-200">{stats.chars}</span>
+                        <span className="text-[var(--app-text-secondary)]">Caracteres:</span>
+                        <span className="font-mono font-medium">{stats.chars}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-zinc-500">Tiempo de lectura:</span>
-                        <span className="font-mono text-zinc-200">~{stats.time} min</span>
+                        <span className="text-[var(--app-text-secondary)]">Tiempo de lectura:</span>
+                        <span className="font-mono font-medium">~{stats.time} min</span>
                       </div>
-                      <div className="flex justify-between pt-1 border-t border-[#292930]">
-                        <span className="text-zinc-500">Modo:</span>
-                        <span className="capitalize text-blue-400">{currentWorkspace?.viewMode}</span>
+                      <div className="flex justify-between pt-1 border-t border-[var(--app-divider)]">
+                        <span className="text-[var(--app-text-secondary)]">Modo:</span>
+                        <span className="capitalize font-semibold text-[var(--app-accent)]">{currentWorkspace?.viewMode}</span>
                       </div>
                     </div>
                   </div>
@@ -479,42 +1088,195 @@ export default function App() {
               <div className="relative">
                 <button
                   onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
-                  className="p-1.5 rounded-md hover:bg-[#202024] text-zinc-400 hover:text-zinc-100 transition"
+                  className="p-1.5 rounded-md hover:bg-[var(--app-hover)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] transition"
                   title="Más acciones"
                 >
-                  <MoreHorizontal size={14} />
+                  <MoreHorizontalIcon className="w-4.5 h-4.5" />
                 </button>
 
                 {isMoreMenuOpen && (
                   <div
-                    className="absolute left-0 top-8 z-40 w-52 bg-[#1b1b1e] border border-[#2c2c32] rounded-xl shadow-2xl py-1 text-xs text-zinc-300"
+                    className="absolute left-0 top-10 z-40 w-60 bg-[var(--affine-background-overlay-panel-color)] border border-[var(--affine-border-color)] rounded-xl shadow-[var(--affine-menu-shadow)] py-1.5 text-xs text-[var(--affine-text-primary-color)] animate-in fade-in zoom-in-95 duration-100"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button
                       onClick={() => {
-                        setViewMode(activeViewMode === 'canvas' ? 'doc' : 'canvas')
+                        setViewMode('doc')
                         setIsMoreMenuOpen(false)
                       }}
-                      className="w-full text-left px-3 py-1.5 hover:bg-[#26262c] flex items-center gap-2"
+                      className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center gap-2.5 text-sm"
                     >
-                      <Maximize2 size={13} className="text-indigo-400" />
-                      <span>{activeViewMode === 'canvas' ? 'Modo Documento' : 'Modo Sin bordes (Lienzo)'}</span>
+                      <PageIcon className="w-4.5 h-4.5 text-[var(--affine-primary-color)]" />
+                      <span>Modo Página</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setViewMode('canvas')
+                        setIsMoreMenuOpen(false)
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center gap-2.5 text-sm"
+                    >
+                      <EdgelessIcon className="w-4.5 h-4.5 text-[var(--affine-primary-color)]" />
+                      <span>Modo Tablero (Milanote)</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setViewMode(activeViewMode === 'split' ? 'doc' : 'split')
+                        setIsMoreMenuOpen(false)
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center gap-2.5 text-sm"
+                    >
+                      <SplitViewIcon className="w-4.5 h-4.5" />
+                      <span>{activeViewMode === 'split' ? 'Cerrar vista dividida' : 'Vista dividida'}</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setIsKnowledgeGraphOpen(true)
+                        setIsMoreMenuOpen(false)
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center justify-between text-sm"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <span className="text-indigo-400">🌐</span>
+                        <span>Grafo Global de Conocimiento</span>
+                      </div>
+                      <span className="text-[10px] text-indigo-400 font-mono">Obsidian</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setIsFindInPageOpen(true)
+                        setIsMoreMenuOpen(false)
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center justify-between text-sm"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <SearchIcon className="w-4.5 h-4.5 text-[var(--affine-primary-color)]" />
+                        <span>Buscar en página</span>
+                      </div>
+                      <kbd className="text-[10px] bg-[var(--affine-background-tertiary-color)] px-1.5 py-0.5 rounded text-[var(--affine-text-secondary-color)] border border-[var(--affine-border-color)]">
+                        Ctrl F
+                      </kbd>
                     </button>
 
                     <button
                       onClick={() => {
                         navigator.clipboard.writeText(window.location.href)
                         setCopiedLink(true)
+                        toast.success('Enlace copiado al portapapeles')
                         setTimeout(() => setCopiedLink(false), 2000)
                         setIsMoreMenuOpen(false)
                       }}
-                      className="w-full text-left px-3 py-1.5 hover:bg-[#26262c] flex items-center gap-2"
+                      className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center gap-2.5 text-sm"
                     >
-                      <Copy size={13} />
-                      <span>{copiedLink ? 'Enlace copiado!' : 'Copiar enlace a nota'}</span>
+                      <CopyIcon className="w-4.5 h-4.5" />
+                      <span>{copiedLink ? '¡Enlace copiado!' : 'Copiar enlace a nota'}</span>
                     </button>
 
-                    <div className="border-t border-[#292930] my-1" />
+                    <div className="border-t border-[var(--affine-divider-color)] my-1" />
+
+                    {/* Export suite */}
+                    <div className="px-3.5 py-1 text-[11px] font-semibold text-[var(--affine-text-secondary-color)] uppercase">
+                      Exportar
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        if (currentWorkspace) exportDocumentAsMarkdown(currentWorkspace)
+                        setIsMoreMenuOpen(false)
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center gap-2.5 text-sm"
+                    >
+                      <DownloadIcon className="w-4.5 h-4.5" />
+                      <span>Exportar como Markdown (.md)</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        if (currentWorkspace) exportDocumentAsHtml(currentWorkspace)
+                        setIsMoreMenuOpen(false)
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center gap-2.5 text-sm"
+                    >
+                      <DownloadIcon className="w-4.5 h-4.5" />
+                      <span>Exportar como HTML (.html)</span>
+                    </button>
+
+                    <button
+                      onClick={async () => {
+                        if (currentWorkspace) {
+                          const nodes = await db.canvasNodes.where('workspaceId').equals(currentWorkspace.id).and((n) => !n.isDeleted).toArray()
+                          exportDocumentAsJson(currentWorkspace, nodes)
+                        }
+                        setIsMoreMenuOpen(false)
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center gap-2.5 text-sm"
+                    >
+                      <DownloadIcon className="w-4.5 h-4.5" />
+                      <span>Exportar copia JSON (.json)</span>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        if (currentWorkspace) copyAsPlainText(currentWorkspace.docContent)
+                        setIsMoreMenuOpen(false)
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center gap-2.5 text-sm"
+                    >
+                      <CopyIcon className="w-4.5 h-4.5" />
+                      <span>Copiar como texto plano</span>
+                    </button>
+
+                    <div className="border-t border-[var(--affine-divider-color)] my-1" />
+
+                    {/* Quick Scale controls in More Menu */}
+                    <div className="px-3.5 py-1.5 text-[11px] font-semibold text-[var(--affine-text-secondary-color)] uppercase">
+                      Escala de interfaz: {uiScale}%
+                    </div>
+                    <div className="flex items-center gap-1 px-3 pb-1">
+                      <button
+                        onClick={() => handleStepUiScale(-1)}
+                        className="flex-1 py-1 px-2 rounded-lg bg-[var(--affine-hover-color)] hover:bg-[var(--affine-hover-color-filled)] text-xs font-semibold text-center transition"
+                      >
+                        - Reducir
+                      </button>
+                      <button
+                        onClick={() => {
+                          setUiScale('100')
+                          toast.info('Escala restablecida al 100%')
+                        }}
+                        className="py-1 px-2 rounded-lg bg-[var(--affine-hover-color)] hover:bg-[var(--affine-hover-color-filled)] text-xs font-mono font-semibold transition"
+                      >
+                        100%
+                      </button>
+                      <button
+                        onClick={() => handleStepUiScale(1)}
+                        className="flex-1 py-1 px-2 rounded-lg bg-[var(--affine-hover-color)] hover:bg-[var(--affine-hover-color-filled)] text-xs font-semibold text-center transition"
+                      >
+                        + Aumentar
+                      </button>
+                    </div>
+
+                    <div className="border-t border-[var(--affine-divider-color)] my-1" />
+
+                    <button
+                      onClick={() => {
+                        setIsShortcutsOpen(true)
+                        setIsMoreMenuOpen(false)
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center justify-between text-sm"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <KeyboardIcon className="w-4.5 h-4.5 text-[var(--affine-primary-color)]" />
+                        <span>Atajos de teclado</span>
+                      </div>
+                      <kbd className="text-[10px] bg-[var(--affine-background-tertiary-color)] px-1.5 py-0.5 rounded text-[var(--affine-text-secondary-color)] border border-[var(--affine-border-color)]">?</kbd>
+                    </button>
+
+                    <div className="border-t border-[var(--affine-divider-color)] my-1" />
 
                     <button
                       onClick={() => {
@@ -526,9 +1288,9 @@ export default function App() {
                         }
                         setIsMoreMenuOpen(false)
                       }}
-                      className="w-full text-left px-3 py-1.5 hover:bg-rose-950/40 text-rose-400 flex items-center gap-2"
+                      className="w-full text-left px-3.5 py-2 hover:bg-rose-500/10 text-rose-500 flex items-center gap-2.5 text-sm"
                     >
-                      <Trash2 size={13} />
+                      <DeleteIcon className="w-4.5 h-4.5" />
                       <span>Eliminar página</span>
                     </button>
                   </div>
@@ -536,21 +1298,45 @@ export default function App() {
               </div>
             </div>
 
-            {/* Right section: Presentation Icon 📽️, Tabs (if in Doc mode), and Blue "Compartir" pill button */}
-            <div className="flex items-center gap-2">
-              {/* Presentation Icon (Matches Screenshot 2) */}
+            {/* Center: Milanote Iconic Centered Editorial Serif Title */}
+            <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center pointer-events-auto z-10">
+              {isEditingHeaderTitle ? (
+                <input
+                  type="text"
+                  value={currentWorkspace?.title === 'Untitled' ? '' : (currentWorkspace?.title || '')}
+                  onChange={(e) => handleTitleChange(e.target.value || 'Untitled')}
+                  onBlur={() => setIsEditingHeaderTitle(false)}
+                  onKeyDown={(e) => e.key === 'Enter' && setIsEditingHeaderTitle(false)}
+                  autoFocus
+                  placeholder="Título del tablero..."
+                  className="font-serif font-bold text-base md:text-lg text-center text-[var(--app-text-primary)] bg-[var(--app-bg-primary)] px-2 py-0.5 rounded border border-[var(--app-accent)] outline-none min-w-[200px]"
+                />
+              ) : (
+                <h1
+                  onClick={() => setIsEditingHeaderTitle(true)}
+                  className="font-serif font-bold text-base md:text-lg text-[var(--app-text-primary)] hover:opacity-75 transition cursor-pointer select-none tracking-tight text-center truncate max-w-[220px] md:max-w-[400px]"
+                  title="Haz clic para renombrar tablero"
+                >
+                  {currentWorkspace?.title || 'Tablero de inspiración'}
+                </h1>
+              )}
+            </div>
+
+            {/* Right section: Presentation Icon, Exportar, Mirar, Collabs + Compartir, and Sin clasificar */}
+            <div className="flex items-center gap-1">
+              {/* Presentation Icon */}
               <button
                 onClick={() => setIsPresentationMode(true)}
-                className="p-1.5 rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-[#202024] transition"
-                title="Modo Presentación pantalla completa"
+                className="p-1.5 rounded-md text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition"
+                title="Modo Presentación pantalla completa (F5)"
               >
-                <Presentation size={16} />
+                <PresentationIcon className="w-4.5 h-4.5" />
               </button>
 
               {/* Right Sidebar Tabs (shown when in doc mode or when right sidebar is toggled) */}
               {activeViewMode === 'doc' && (
                 <>
-                  <div className="w-[1px] h-4 bg-[#2f2f35] mx-1" />
+                  <div className="w-[1px] h-4 bg-[var(--app-border)] mx-0.5" />
                   <div className="flex items-center gap-0.5">
                     <button
                       onClick={() => {
@@ -559,12 +1345,12 @@ export default function App() {
                       }}
                       className={`p-1.5 rounded-md transition ${
                         rightSidebarOpen && rightSidebarTab === 'ai'
-                          ? 'bg-[#28282e] text-zinc-100'
-                          : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#202024]'
+                          ? 'bg-[var(--app-hover)] text-[var(--app-accent)] font-medium'
+                          : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
                       }`}
-                      title="IA Asistente"
+                      title="IA Copilot"
                     >
-                      <Sparkles size={15} />
+                      <AiOutlineIcon className="w-4 h-4" />
                     </button>
 
                     <button
@@ -574,12 +1360,12 @@ export default function App() {
                       }}
                       className={`p-1.5 rounded-md transition ${
                         rightSidebarOpen && rightSidebarTab === 'outline'
-                          ? 'bg-[#28282e] text-zinc-100'
-                          : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#202024]'
+                          ? 'bg-[var(--app-hover)] text-[var(--app-accent)] font-medium'
+                          : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
                       }`}
                       title="Esquema"
                     >
-                      <List size={15} />
+                      <TocIcon className="w-4 h-4" />
                     </button>
 
                     <button
@@ -589,12 +1375,12 @@ export default function App() {
                       }}
                       className={`p-1.5 rounded-md transition ${
                         rightSidebarOpen && rightSidebarTab === 'history'
-                          ? 'bg-[#28282e] text-zinc-100'
-                          : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#202024]'
+                          ? 'bg-[var(--app-hover)] text-[var(--app-accent)] font-medium'
+                          : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
                       }`}
                       title="Diarios / Historial"
                     >
-                      <Calendar size={15} />
+                      <JournalIcon className="w-4 h-4" />
                     </button>
 
                     <button
@@ -604,32 +1390,143 @@ export default function App() {
                       }}
                       className={`p-1.5 rounded-md transition ${
                         rightSidebarOpen && rightSidebarTab === 'properties'
-                          ? 'bg-[#28282e] text-zinc-100'
-                          : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#202024]'
+                          ? 'bg-[var(--app-hover)] text-[var(--app-accent)] font-medium'
+                          : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
                       }`}
                       title="Propiedades"
                     >
-                      <SlidersHorizontal size={15} />
+                      <PropertyIcon className="w-4 h-4" />
                     </button>
 
                     <button
                       onClick={() => setRightSidebarOpen(!rightSidebarOpen)}
-                      className="p-1.5 rounded-md text-zinc-400 hover:text-zinc-200 hover:bg-[#202024] transition ml-0.5"
+                      className="p-1.5 rounded-md text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition"
                       title={rightSidebarOpen ? 'Ocultar panel derecho' : 'Mostrar panel derecho'}
                     >
-                      {rightSidebarOpen ? <PanelRightClose size={15} /> : <PanelRight size={15} />}
+                      <RightSidebarIcon className="w-4 h-4" />
                     </button>
                   </div>
                 </>
               )}
 
-              {/* Blue "Compartir" Button (Matches Screenshot: blue pill `#1a73e8` / `#2563eb`) */}
+              {/* Milanote Exportar ⌵ Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
+                  className="h-7 px-2.5 rounded-md hover:bg-[var(--app-hover)] text-xs font-medium text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] flex items-center gap-1 transition select-none"
+                  title="Exportar tablero"
+                >
+                  <span>Exportar</span>
+                  <span className="text-[10px] opacity-60">⌵</span>
+                </button>
+
+                {isExportDropdownOpen && (
+                  <div
+                    className="absolute right-0 top-8 z-50 w-52 bg-white dark:bg-[#252525] border border-neutral-200 dark:border-neutral-700 rounded-xl shadow-xl py-1 text-xs text-neutral-800 dark:text-neutral-200 animate-in fade-in zoom-in-95"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      onClick={() => {
+                        if (currentWorkspace) exportDocumentAsMarkdown(currentWorkspace)
+                        setIsExportDropdownOpen(false)
+                      }}
+                      className="w-full text-left px-3 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center gap-2"
+                    >
+                      <DownloadIcon className="w-4 h-4 text-blue-500" />
+                      <span>Exportar como Markdown (.md)</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (currentWorkspace) exportDocumentAsHtml(currentWorkspace)
+                        setIsExportDropdownOpen(false)
+                      }}
+                      className="w-full text-left px-3 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center gap-2"
+                    >
+                      <DownloadIcon className="w-4 h-4 text-emerald-500" />
+                      <span>Exportar como HTML (.html)</span>
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (currentWorkspace) {
+                          const nodes = await db.canvasNodes.where('workspaceId').equals(currentWorkspace.id).and((n) => !n.isDeleted).toArray()
+                          exportDocumentAsJson(currentWorkspace, nodes)
+                        }
+                        setIsExportDropdownOpen(false)
+                      }}
+                      className="w-full text-left px-3 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center gap-2"
+                    >
+                      <DownloadIcon className="w-4 h-4 text-purple-500" />
+                      <span>Exportar copia JSON (.json)</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Milanote Mirar ⌵ Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setIsViewDropdownOpen(!isViewDropdownOpen)}
+                  className="h-7 px-2.5 rounded-md hover:bg-[var(--app-hover)] text-xs font-medium text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] flex items-center gap-1 transition select-none"
+                  title="Opciones de visualización"
+                >
+                  <span>Mirar</span>
+                  <span className="text-[10px] opacity-60">⌵</span>
+                </button>
+
+                {isViewDropdownOpen && (
+                  <div
+                    className="absolute right-0 top-8 z-50 w-52 bg-white dark:bg-[#252525] border border-neutral-200 dark:border-neutral-700 rounded-xl shadow-xl py-1 text-xs text-neutral-800 dark:text-neutral-200 animate-in fade-in zoom-in-95"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      onClick={() => {
+                        setIsPresentationMode(true)
+                        setIsViewDropdownOpen(false)
+                      }}
+                      className="w-full text-left px-3 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center gap-2"
+                    >
+                      <PresentationIcon className="w-4 h-4 text-indigo-500" />
+                      <span>Modo Presentación (F5)</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setDarkMode(!darkMode)
+                        setIsViewDropdownOpen(false)
+                      }}
+                      className="w-full text-left px-3 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center gap-2"
+                    >
+                      {darkMode ? <SunPanelIcon className="w-4 h-4 text-amber-500" /> : <MoonPanelIcon className="w-4 h-4 text-indigo-500" />}
+                      <span>{darkMode ? 'Cambiar a Modo Claro' : 'Cambiar a Modo Oscuro'}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Milanote Collaborators & Compartir Button */}
               <button
                 onClick={() => setIsShareOpen(true)}
-                className="px-3.5 py-1.5 rounded-md bg-[#1a73e8] hover:bg-blue-600 active:bg-blue-700 text-white font-medium text-xs flex items-center gap-1.5 shadow-sm transition"
+                className="h-7 px-2.5 rounded-md hover:bg-[var(--app-hover)] text-xs font-medium text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] flex items-center gap-1.5 transition select-none"
+                title="Compartir tablero con colaboradores"
               >
-                <Lock size={12} className="stroke-[2.5]" />
+                <div className="flex items-center -space-x-1">
+                  <div className="w-5 h-5 rounded-full bg-amber-500 text-white font-bold text-[9px] flex items-center justify-center border border-white dark:border-neutral-900 shadow-xs" title="Natali">
+                    N
+                  </div>
+                  <div className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold text-[9px] flex items-center justify-center border border-white dark:border-neutral-900 shadow-xs" title="Kevin">
+                    K
+                  </div>
+                </div>
                 <span>Compartir</span>
+                <ShareIcon className="w-3 h-3 text-neutral-400" />
+              </button>
+
+              {/* Milanote [0 Sin clasificar] Pill Button */}
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent('seven-note-toggle-unsorted'))}
+                className="h-7 px-2.5 rounded-md bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 font-semibold text-xs flex items-center gap-1 border border-neutral-200/80 dark:border-neutral-700 transition select-none ml-1 shadow-2xs"
+                title="Abrir bandeja Sin clasificar de Milanote"
+              >
+                <span>0 Sin clasificar</span>
               </button>
             </div>
           </header>
@@ -637,13 +1534,19 @@ export default function App() {
 
         {/* Main Document / Canvas View */}
         <main className="flex-1 relative flex overflow-hidden">
+          {/* Find In Page Floating Search (Ctrl+F) */}
+          <FindInPage
+            isOpen={isFindInPageOpen}
+            onClose={() => setIsFindInPageOpen(false)}
+          />
+
           {currentWorkspace ? (
             activeViewMode === 'doc' ? (
               <div className="flex-1 h-full overflow-hidden">
                 <DocEditor
                   workspace={currentWorkspace}
                   allWorkspaces={activeWorkspaces}
-                  onSelectWorkspace={(id) => setCurrentWorkspaceId(id)}
+                  onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
                   onTitleChange={handleTitleChange}
                   onToggleViewMode={() => setViewMode('canvas')}
                   onOpenAIModal={() => setIsAIOpen(true)}
@@ -655,7 +1558,8 @@ export default function App() {
                 <CanvasBoard
                   workspaceId={currentWorkspace.id}
                   currentWorkspace={currentWorkspace}
-                  onSwitchToDoc={() => setViewMode('doc')}
+                  onSwitchToDoc={handleSwitchToDoc}
+                  darkMode={darkMode}
                 />
               </div>
             ) : (
@@ -665,7 +1569,7 @@ export default function App() {
                   <DocEditor
                     workspace={currentWorkspace}
                     allWorkspaces={activeWorkspaces}
-                    onSelectWorkspace={(id) => setCurrentWorkspaceId(id)}
+                    onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
                     onTitleChange={handleTitleChange}
                     onToggleViewMode={() => setViewMode('canvas')}
                     onOpenAIModal={() => setIsAIOpen(true)}
@@ -676,7 +1580,8 @@ export default function App() {
                   <CanvasBoard
                     workspaceId={currentWorkspace.id}
                     currentWorkspace={currentWorkspace}
-                    onSwitchToDoc={() => setViewMode('doc')}
+                    onSwitchToDoc={handleSwitchToDoc}
+                    darkMode={darkMode}
                   />
                 </div>
               </div>
@@ -706,15 +1611,40 @@ export default function App() {
       <CommandPalette
         isOpen={isSearchOpen}
         onClose={() => setIsSearchOpen(false)}
-        workspaces={workspaces}
-        nodes={allNodes}
-        onSelectWorkspace={(id) => setCurrentWorkspaceId(id)}
+        workspaces={currentSpaceWorkspaces}
+        onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
+        darkMode={darkMode}
+        onToggleDarkMode={() => setDarkMode(!darkMode)}
+        onCreateWorkspace={async () => {
+          const newId = crypto.randomUUID()
+          const now = Date.now()
+          await db.workspaces.add({
+            id: newId,
+            parentId: null,
+            spaceId: currentSpaceId,
+            title: 'Untitled',
+            icon: '',
+            color: '#3b82f6',
+            viewMode: 'canvas',
+            docContent: '<p></p>',
+            createdAt: now,
+            updatedAt: now,
+            isFavorite: false,
+            isDeleted: false,
+            syncStatus: 'pending'
+          })
+          selectWorkspaceWithTab(newId)
+          toast.success('Página creada')
+        }}
+        onToggleViewMode={() => setViewMode(activeViewMode === 'canvas' ? 'doc' : 'canvas')}
       />
 
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         syncStatus={syncStatus}
+        uiScale={uiScale}
+        onUiScaleChange={setUiScale}
       />
 
       <TrashModal
@@ -744,15 +1674,16 @@ export default function App() {
       <AllDocsModal
         isOpen={isAllDocsOpen}
         onClose={() => setIsAllDocsOpen(false)}
-        workspaces={workspaces}
+        workspaces={currentSpaceWorkspaces}
         currentWorkspaceId={currentWorkspace?.id || ''}
-        onSelectWorkspace={(id) => setCurrentWorkspaceId(id)}
+        onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
         onCreateWorkspace={() => {
           const newId = crypto.randomUUID()
           const now = Date.now()
           db.workspaces.add({
             id: newId,
             parentId: null,
+            spaceId: currentSpaceId,
             title: 'Untitled',
             icon: '',
             color: '#3b82f6',
@@ -764,7 +1695,7 @@ export default function App() {
             isDeleted: false,
             syncStatus: 'pending'
           })
-          setCurrentWorkspaceId(newId)
+          selectWorkspaceWithTab(newId)
         }}
         onToggleFavorite={async (e, ws) => {
           e.stopPropagation()
@@ -779,7 +1710,47 @@ export default function App() {
       <ImportModal
         isOpen={isImportOpen}
         onClose={() => setIsImportOpen(false)}
-        onWorkspaceImported={(newId) => setCurrentWorkspaceId(newId)}
+        onWorkspaceImported={(newId) => selectWorkspaceWithTab(newId)}
+        currentSpaceId={currentSpaceId}
+      />
+
+      <CreateWorkspaceModal
+        isOpen={isCreateWorkspaceOpen}
+        onClose={() => setIsCreateWorkspaceOpen(false)}
+        onCreate={handleCreateSpace}
+      />
+
+      <ShortcutsModal
+        isOpen={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
+      />
+
+      <CollectionsModal
+        isOpen={isCollectionsOpen}
+        onClose={() => setIsCollectionsOpen(false)}
+        spaceId={currentSpaceId}
+        workspaces={currentSpaceWorkspaces}
+        onSelectWorkspace={selectWorkspaceWithTab}
+      />
+
+      <TagsModal
+        isOpen={isTagsOpen}
+        onClose={() => {
+          setIsTagsOpen(false)
+          setSelectedTagForModal(null)
+        }}
+        spaceId={currentSpaceId}
+        workspaces={currentSpaceWorkspaces}
+        onSelectWorkspace={selectWorkspaceWithTab}
+        initialSelectedTag={selectedTagForModal}
+      />
+
+      <KnowledgeGraphModal
+        isOpen={isKnowledgeGraphOpen}
+        onClose={() => setIsKnowledgeGraphOpen(false)}
+        workspaces={activeWorkspaces}
+        currentWorkspaceId={currentWorkspaceId}
+        onSelectWorkspace={selectWorkspaceWithTab}
       />
 
       {/* 5. AFFiNE Fullscreen Presentation Mode Player */}
@@ -790,9 +1761,11 @@ export default function App() {
           setPresentationFrameId(undefined)
         }}
         workspace={currentWorkspace}
-        nodes={allNodes.filter((n) => n.workspaceId === currentWorkspace?.id)}
         initialFrameId={presentationFrameId}
       />
+
+      {/* 6. Pro Sonner Notification Toaster */}
+      <Toaster richColors position="bottom-right" closeButton theme={darkMode ? 'dark' : 'light'} />
     </div>
   )
 }

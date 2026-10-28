@@ -1,4 +1,4 @@
-import { X, Shuffle, Trash2 } from 'lucide-react'
+import { CloseIcon, DeleteIcon, ResetIcon } from '@blocksuite/icons/rc'
 
 const POPULAR_EMOJIS = [
   '📄', '📝', '🚀', '💡', '🎨', '📊', '🎯', '⭐', '📚', '🔥',
@@ -32,18 +32,38 @@ export function EmojiPickerPopover({
 
   return (
     <div
-      className="absolute top-12 left-0 z-40 w-64 bg-[#18181b] border border-[#27272a] rounded-xl shadow-2xl p-3 animate-in fade-in zoom-in-95 duration-100"
+      className="absolute top-12 left-0 z-40 w-64 rounded-xl border p-3 animate-in fade-in zoom-in-95 duration-100"
+      style={{
+        backgroundColor: 'var(--affine-background-overlay-panel-color)',
+        borderColor: 'var(--affine-border-color)',
+        boxShadow: 'var(--affine-popover-shadow)',
+        color: 'var(--affine-text-primary-color)'
+      }}
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="flex items-center justify-between pb-2 border-b border-[#27272a] mb-2">
-        <span className="text-xs font-semibold text-zinc-200">Elegir Icono</span>
+      <div
+        className="flex items-center justify-between pb-2 border-b mb-2"
+        style={{ borderColor: 'var(--affine-border-color)' }}
+      >
+        <span className="text-xs font-semibold" style={{ color: 'var(--affine-text-primary-color)' }}>
+          Elegir Icono
+        </span>
         <div className="flex items-center gap-1">
           <button
             onClick={handleRandom}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-[#27272a] transition"
+            className="p-1 rounded transition"
+            style={{ color: 'var(--affine-text-secondary-color)' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--affine-hover-color)'
+              e.currentTarget.style.color = 'var(--affine-text-primary-color)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent'
+              e.currentTarget.style.color = 'var(--affine-text-secondary-color)'
+            }}
             title="Icono aleatorio"
           >
-            <Shuffle size={13} />
+            <ResetIcon style={{ width: 13, height: 13 }} />
           </button>
           {currentIcon && (
             <button
@@ -51,17 +71,26 @@ export function EmojiPickerPopover({
                 onRemoveEmoji()
                 onClose()
               }}
-              className="p-1 rounded text-rose-400 hover:text-rose-300 hover:bg-rose-950/40 transition"
+              className="p-1 rounded text-rose-500 hover:bg-rose-500/10 transition"
               title="Quitar icono"
             >
-              <Trash2 size={13} />
+              <DeleteIcon style={{ width: 13, height: 13 }} />
             </button>
           )}
           <button
             onClick={onClose}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-[#27272a] transition"
+            className="p-1 rounded transition"
+            style={{ color: 'var(--affine-text-secondary-color)' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.backgroundColor = 'var(--affine-hover-color)'
+              e.currentTarget.style.color = 'var(--affine-text-primary-color)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.backgroundColor = 'transparent'
+              e.currentTarget.style.color = 'var(--affine-text-secondary-color)'
+            }}
           >
-            <X size={13} />
+            <CloseIcon style={{ width: 13, height: 13 }} />
           </button>
         </div>
       </div>
@@ -75,7 +104,10 @@ export function EmojiPickerPopover({
               onSelectEmoji(emoji)
               onClose()
             }}
-            className="text-lg p-1.5 rounded-lg hover:bg-[#28282e] hover:scale-110 active:scale-95 transition flex items-center justify-center"
+            className="text-lg p-1.5 rounded-lg hover:scale-110 active:scale-95 transition flex items-center justify-center"
+            style={{ color: 'inherit' }}
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'var(--affine-hover-color)')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
           >
             {emoji}
           </button>

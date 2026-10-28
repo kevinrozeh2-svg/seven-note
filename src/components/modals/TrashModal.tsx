@@ -1,5 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Trash2, RotateCcw, X } from 'lucide-react'
+import {
+  CloseIcon,
+  DeleteIcon,
+  DeletePermanentlyIcon,
+  ResetIcon
+} from '@blocksuite/icons/rc'
 import { db, type WorkspaceItem } from '../../db'
 import { syncEngine } from '../../lib/syncEngine'
 
@@ -61,56 +66,63 @@ export function TrashModal({ isOpen, onClose }: TrashModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
-      <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+      <div className="w-full max-w-lg rounded-xl border border-[var(--app-border)] shadow-[var(--app-shadow-modal)] overflow-hidden flex flex-col max-h-[80vh] bg-[var(--app-bg-overlay)] text-[var(--app-text-primary)]">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800">
-          <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
-            <Trash2 size={18} />
-            <h2 className="text-base font-bold text-slate-900 dark:text-white">
-              Papelera de Reciclaje
-            </h2>
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--app-border)] shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-md flex items-center justify-center bg-rose-500/10 text-rose-500">
+              <DeleteIcon style={{ width: 16, height: 16 }} />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-[var(--app-text-primary)]">
+                Papelera de Reciclaje
+              </h2>
+              <p className="text-[11px] text-[var(--app-text-secondary)]">
+                Restaura o elimina definitivamente tus documentos
+              </p>
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400"
+            className="p-1 rounded-md text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition"
           >
-            <X size={18} />
+            <CloseIcon style={{ width: 16, height: 16 }} />
           </button>
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
           {deletedWorkspaces.length === 0 ? (
-            <div className="py-12 text-center text-xs text-slate-400">
+            <div className="py-12 text-center text-xs text-[var(--app-text-secondary)]">
               La papelera está vacía.
             </div>
           ) : (
             deletedWorkspaces.map((ws) => (
               <div
                 key={ws.id}
-                className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 text-xs"
+                className="flex items-center justify-between p-2.5 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-xs transition"
               >
-                <div className="flex items-center gap-2 truncate">
-                  <span>{ws.icon || '📄'}</span>
-                  <span className="font-medium text-slate-800 dark:text-slate-200 truncate">
+                <div className="flex items-center gap-2.5 truncate">
+                  <span className="text-base">{ws.icon || '📄'}</span>
+                  <span className="font-medium text-[var(--app-text-primary)] truncate">
                     {ws.title}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     onClick={() => handleRestore(ws.id)}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 transition font-medium"
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition font-medium text-xs"
                   >
-                    <RotateCcw size={12} />
+                    <ResetIcon style={{ width: 12, height: 12 }} />
                     <span>Restaurar</span>
                   </button>
                   <button
                     onClick={() => handlePermanentDelete(ws.id)}
-                    className="p-1 rounded hover:bg-rose-100 dark:hover:bg-rose-950/60 text-rose-500 transition"
+                    className="p-1 rounded-md text-rose-500 hover:bg-rose-500/10 transition"
                     title="Eliminar permanentemente"
                   >
-                    <Trash2 size={13} />
+                    <DeletePermanentlyIcon style={{ width: 14, height: 14 }} />
                   </button>
                 </div>
               </div>
@@ -120,16 +132,16 @@ export function TrashModal({ isOpen, onClose }: TrashModalProps) {
 
         {/* Footer */}
         {deletedWorkspaces.length > 0 && (
-          <div className="px-6 py-3 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-between">
+          <div className="px-5 py-2.5 border-t border-[var(--app-border)] bg-[var(--app-bg-secondary)] flex items-center justify-between shrink-0">
             <button
               onClick={handleEmptyTrash}
-              className="text-xs text-rose-600 dark:text-rose-400 hover:underline font-medium"
+              className="text-xs text-rose-500 hover:underline font-medium"
             >
               Vaciar papelera
             </button>
             <button
               onClick={onClose}
-              className="px-3 py-1 text-xs rounded-md bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium"
+              className="px-3 py-1 text-xs rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] font-medium transition"
             >
               Cerrar
             </button>

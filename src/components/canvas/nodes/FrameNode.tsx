@@ -1,12 +1,12 @@
 import { memo, useState, useEffect } from 'react'
 import { Handle, Position } from '@xyflow/react'
 import {
-  Trash2,
-  Presentation,
-  Move
-} from 'lucide-react'
+  DeleteIcon,
+  PresentationIcon
+} from '@blocksuite/icons/rc'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
+import { areNodePropsEqual } from './nodeUtils'
 
 const FRAME_COLORS: Record<string, { border: string; bg: string; badge: string }> = {
   indigo: {
@@ -105,19 +105,21 @@ export const FrameNode = memo(({ id, data, selected }: any) => {
     const startY = e.clientY
     const startW = width
     const startH = height
+    let finalW = startW
+    let finalH = startH
 
     const onMouseMove = (moveEvt: MouseEvent) => {
-      const newW = Math.max(280, startW + (moveEvt.clientX - startX))
-      const newH = Math.max(180, startH + (moveEvt.clientY - startY))
-      setWidth(newW)
-      setHeight(newH)
+      finalW = Math.max(280, startW + (moveEvt.clientX - startX))
+      finalH = Math.max(180, startH + (moveEvt.clientY - startY))
+      setWidth(finalW)
+      setHeight(finalH)
     }
 
     const onMouseUp = () => {
       setIsResizing(false)
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('mouseup', onMouseUp)
-      save({ width, height })
+      save({ width: finalW, height: finalH })
     }
 
     window.addEventListener('mousemove', onMouseMove)
@@ -127,38 +129,42 @@ export const FrameNode = memo(({ id, data, selected }: any) => {
   return (
     <div
       style={{ width: `${width}px`, height: `${height}px` }}
-      className={`relative rounded-2xl border-2 border-dashed ${colorStyle.border} ${colorStyle.bg} ${isResizing ? 'opacity-90 ring-1 ring-indigo-400' : ''} transition-all duration-75 flex flex-col justify-between group ${
+      className={`relative rounded-2xl border-2 border-dashed ${colorStyle.border} ${colorStyle.bg} ${isResizing ? 'opacity-90 ring-1 ring-indigo-400' : ''} transition-[border-color,background-color] duration-75 flex flex-col justify-between group ${
         isResizing ? 'cursor-se-resize select-none' : ''
       } ${
-        selected ? 'ring-2 ring-indigo-500 ring-offset-2 ring-offset-[#121214] shadow-2xl' : ''
+        selected ? 'ring-2 ring-indigo-500 ring-offset-2 ring-offset-[var(--app-bg-canvas)] shadow-2xl' : ''
       }`}
     >
       {/* 4 Handles for connection arrows */}
       <Handle
-        type="target"
+        id="top"
+        type="source"
         position={Position.Top}
         className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white dark:!border-zinc-900"
       />
       <Handle
+        id="bottom"
         type="source"
         position={Position.Bottom}
         className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white dark:!border-zinc-900"
       />
       <Handle
-        type="target"
+        id="left"
+        type="source"
         position={Position.Left}
         className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white dark:!border-zinc-900"
       />
       <Handle
+        id="right"
         type="source"
         position={Position.Right}
         className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white dark:!border-zinc-900"
       />
 
-      {/* Frame Top Header Pill (AFFiNE Slide / Frame Header) */}
-      <div className="absolute -top-4 left-3 z-20 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#18181b] border border-[#2b2b32] shadow-lg text-xs">
+      {/* Frame Top Header Pill (Notion / Milanote Frame Header) */}
+      <div className="absolute -top-3.5 left-3 z-20 flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[var(--app-bg-overlay)] border border-[var(--app-border)] shadow-[var(--app-shadow-card)] text-xs text-[var(--app-text-primary)]">
         {/* Frame index badge */}
-        <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${colorStyle.badge}`}>
+        <span className={`px-1.5 py-0.2 rounded text-[10px] font-semibold ${colorStyle.badge}`}>
           #{frameIndex}
         </span>
 
@@ -179,12 +185,12 @@ export const FrameNode = memo(({ id, data, selected }: any) => {
                 save({ title, frameTitle: title })
               }
             }}
-            className="bg-[#242428] border border-zinc-700 rounded px-1.5 py-0.5 text-xs text-zinc-100 outline-none w-32"
+            className="bg-[var(--app-bg-secondary)] border border-[var(--app-border)] rounded px-1.5 py-0.5 text-xs text-[var(--app-text-primary)] outline-none w-32"
           />
         ) : (
           <span
             onDoubleClick={() => setIsEditingTitle(true)}
-            className="font-medium text-zinc-200 cursor-text hover:text-white transition max-w-[200px] truncate"
+            className="font-medium text-[var(--app-text-primary)] cursor-text hover:opacity-80 transition max-w-[200px] truncate"
             title="Doble clic para renombrar marco"
           >
             {title}
@@ -194,19 +200,19 @@ export const FrameNode = memo(({ id, data, selected }: any) => {
         {/* Play Presentation Slide button */}
         <button
           onClick={handleStartPresentation}
-          className="p-1 rounded-md hover:bg-[#25252a] text-zinc-400 hover:text-indigo-400 transition ml-1"
+          className="p-1 rounded-md hover:bg-[var(--app-hover)] text-[var(--app-text-secondary)] hover:text-[var(--app-accent)] transition ml-0.5"
           title="Presentar desde esta diapositiva"
         >
-          <Presentation size={13} />
+          <PresentationIcon style={{ width: 13, height: 13 }} />
         </button>
 
         {/* Delete Frame */}
         <button
           onClick={handleDelete}
-          className="p-1 rounded-md hover:bg-rose-950/50 text-zinc-500 hover:text-rose-400 transition"
+          className="p-1 rounded-md hover:bg-rose-500/10 text-[var(--app-text-muted)] hover:text-rose-500 transition"
           title="Eliminar marco"
         >
-          <Trash2 size={12} />
+          <DeleteIcon style={{ width: 12, height: 12 }} />
         </button>
       </div>
 
@@ -221,8 +227,10 @@ export const FrameNode = memo(({ id, data, selected }: any) => {
         className="absolute bottom-1 right-1 w-5 h-5 cursor-se-resize flex items-center justify-center text-zinc-500 hover:text-zinc-200 group-hover:opacity-100 opacity-60 transition"
         title="Arrastra para redimensionar el marco"
       >
-        <Move size={12} className="rotate-45" />
+        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M9 1L1 9M9 5L5 9M9 9H9.01" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+        </svg>
       </div>
     </div>
   )
-})
+}, areNodePropsEqual)

@@ -1,16 +1,15 @@
 import { useState } from 'react'
 import {
-  X,
-  Share2,
-  Copy,
-  Check,
-  Globe,
-  FileText,
-  FileCode,
-  Printer,
-  FileJson,
-  ShieldCheck
-} from 'lucide-react'
+  CloseIcon,
+  ShareIcon,
+  CopyIcon,
+  DoneIcon,
+  WebIcon,
+  PageIcon,
+  CodeIcon,
+  PrinterIcon,
+  AdminIcon
+} from '@blocksuite/icons/rc'
 import { db, type WorkspaceItem } from '../../db'
 
 interface ShareModalProps {
@@ -35,20 +34,72 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
     setTimeout(() => setCopiedLink(false), 2000)
   }
 
-  // Convert HTML content into simple markdown
+  // Convert HTML content into high-fidelity markdown
   const getMarkdownContent = () => {
-    const rawText = workspace.docContent
-      .replace(/<h1>(.*?)<\/h1>/gi, '# $1\n\n')
-      .replace(/<h2>(.*?)<\/h2>/gi, '## $1\n\n')
-      .replace(/<h3>(.*?)<\/h3>/gi, '### $1\n\n')
-      .replace(/<p>(.*?)<\/p>/gi, '$1\n\n')
-      .replace(/<strong>(.*?)<\/strong>/gi, '**$1**')
-      .replace(/<em>(.*?)<\/em>/gi, '*$1*')
-      .replace(/<code>(.*?)<\/code>/gi, '`$1`')
-      .replace(/<li.*?>(.*?)<\/li>/gi, '- $1\n')
+    let md = workspace.docContent || ''
+
+    // 1. Code blocks with language
+    md = md.replace(/<pre><code(?:\s+class="language-([a-zA-Z0-9_-]+)")?>([\s\S]*?)<\/code><\/pre>/gi, (_, lang, code) => {
+      const cleanCode = code
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&')
+      return `\n\`\`\`${lang || ''}\n${cleanCode.trim()}\n\`\`\`\n\n`
+    })
+
+    // 2. Callout containers
+    md = md.replace(/<div\s+class="callout(?:\s+callout-([a-zA-Z]+))?"[^>]*>([\s\S]*?)<\/div>/gi, (_, type, content) => {
+      const cleanContent = content.replace(/<[^>]*>/g, '').trim()
+      const alertType = type ? type.toUpperCase() : 'NOTE'
+      return `\n> [!${alertType}]\n> ${cleanContent.replace(/\n/g, '\n> ')}\n\n`
+    })
+
+    // 3. Details / Toggle blocks
+    md = md.replace(/<details[^>]*>\s*<summary[^>]*>([\s\S]*?)<\/summary>([\s\S]*?)<\/details>/gi, (_, summary, body) => {
+      const cleanSum = summary.replace(/<[^>]*>/g, '').trim()
+      const cleanBody = body.replace(/<[^>]*>/g, '').trim()
+      return `\n<details>\n<summary>${cleanSum}</summary>\n\n${cleanBody}\n</details>\n\n`
+    })
+
+    // 4. Blockquotes
+    md = md.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, (_, quote) => {
+      const cleanQuote = quote.replace(/<[^>]*>/g, '').trim()
+      return `\n> ${cleanQuote.replace(/\n/g, '\n> ')}\n\n`
+    })
+
+    // 5. Task list items (checked vs unchecked)
+    md = md.replace(/<li[^>]*data-type="taskItem"[^>]*data-checked="true"[^>]*>([\s\S]*?)<\/li>/gi, '- [x] $1\n')
+    md = md.replace(/<li[^>]*data-type="taskItem"[^>]*data-checked="false"[^>]*>([\s\S]*?)<\/li>/gi, '- [ ] $1\n')
+    md = md.replace(/<li[^>]*data-checked="true"[^>]*>([\s\S]*?)<\/li>/gi, '- [x] $1\n')
+    md = md.replace(/<li[^>]*data-checked="false"[^>]*>([\s\S]*?)<\/li>/gi, '- [ ] $1\n')
+
+    // 6. Regular list items
+    md = md.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, '- $1\n')
+
+    // 7. Headings & paragraphs & formatting
+    md = md
+      .replace(/<h1>([\s\S]*?)<\/h1>/gi, '\n# $1\n\n')
+      .replace(/<h2>([\s\S]*?)<\/h2>/gi, '\n## $1\n\n')
+      .replace(/<h3>([\s\S]*?)<\/h3>/gi, '\n### $1\n\n')
+      .replace(/<p>([\s\S]*?)<\/p>/gi, '$1\n\n')
+      .replace(/<strong>([\s\S]*?)<\/strong>/gi, '**$1**')
+      .replace(/<em>([\s\S]*?)<\/em>/gi, '*$1*')
+      .replace(/<code>([\s\S]*?)<\/code>/gi, '`$1`')
+      .replace(/<hr\s*\/?>/gi, '\n---\n\n')
+      .replace(/<br\s*\/?>/gi, '\n')
       .replace(/<[^>]*>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&amp;/g, '&')
       .trim()
-    return `# ${workspace.title}\n\n${rawText}`
+
+    // Title deduplication
+    const titleHeader = `# ${workspace.title}`
+    if (md.startsWith(titleHeader)) {
+      return md
+    }
+    return `${titleHeader}\n\n${md}`
   }
 
   const exportMarkdown = () => {
@@ -80,7 +131,7 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
     h1 { border-bottom: 1px solid #eee; padding-bottom: 8px; }
     ul[data-type="taskList"] { list-style: none; padding-left: 0; }
     ul[data-type="taskList"] li { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-    blockquote { border-left: 3px solid #6366f1; padding-left: 12px; color: #555; }
+    blockquote { border-left: 3px solid #1e96eb; padding-left: 12px; color: #555; }
     .callout { padding: 12px; border-radius: 8px; background: #f3f4f6; margin: 16px 0; }
   </style>
 </head>
@@ -129,38 +180,51 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
       <div
-        className="bg-[#18181b] border border-[#27272a] rounded-2xl max-w-md w-full shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+        className="rounded-xl max-w-md w-full border border-[var(--app-border)] shadow-[var(--app-shadow-modal)] overflow-hidden flex flex-col bg-[var(--app-bg-overlay)] text-[var(--app-text-primary)]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-5 py-4 border-b border-[#27272a] flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Share2 size={18} className="text-blue-400" />
-            <h3 className="text-sm font-semibold text-zinc-100">Compartir y Exportar (AFFiNE)</h3>
+        <div className="px-5 py-3.5 border-b border-[var(--app-border)] flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-7 h-7 rounded-md flex items-center justify-center bg-[var(--app-hover)] text-[var(--app-text-primary)]">
+              <ShareIcon style={{ width: 16, height: 16 }} />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-[var(--app-text-primary)]">
+                Compartir y Exportar
+              </h3>
+              <p className="text-[11px] text-[var(--app-text-secondary)]">
+                Enlace web y formatos compatibles con Notion y Markdown
+              </p>
+            </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-[#27272a] transition"
+            className="p-1 rounded-md text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition"
           >
-            <X size={16} />
+            <CloseIcon style={{ width: 16, height: 16 }} />
           </button>
         </div>
 
-        <div className="p-5 space-y-4 text-xs text-zinc-300">
+        <div className="p-5 space-y-4 text-xs">
           {/* Document summary */}
-          <div className="p-3 bg-[#131315] rounded-xl border border-[#242428] flex items-center gap-3">
+          <div className="p-3 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)] flex items-center gap-3">
             <span className="text-2xl">{workspace.icon || '📄'}</span>
             <div className="min-w-0 flex-1">
-              <h4 className="font-semibold text-zinc-100 truncate">{workspace.title || 'Untitled'}</h4>
-              <p className="text-[11px] text-zinc-500">Última edición hoy • Modo {workspace.viewMode}</p>
+              <h4 className="font-semibold text-xs text-[var(--app-text-primary)] truncate">
+                {workspace.title || 'Untitled'}
+              </h4>
+              <p className="text-[11px] text-[var(--app-text-secondary)]">
+                Modo {workspace.viewMode}
+              </p>
             </div>
           </div>
 
           {/* Share link input */}
           <div>
-            <label className="block text-[11px] font-medium text-zinc-400 mb-1.5">
+            <label className="block text-[11px] font-medium mb-1.5 text-[var(--app-text-secondary)]">
               Enlace directo al documento
             </label>
             <div className="flex gap-2">
@@ -168,58 +232,68 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
                 type="text"
                 readOnly
                 value={shareUrl}
-                className="flex-1 bg-[#121214] border border-[#2d2d34] rounded-lg px-3 py-2 text-xs text-zinc-300 font-mono select-all focus:outline-none"
+                className="flex-1 rounded-md px-3 py-1.5 text-xs font-mono select-all focus:outline-none border border-[var(--app-border)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)]"
               />
               <button
                 onClick={handleCopy}
-                className={`px-3 py-2 rounded-lg font-medium flex items-center gap-1.5 transition ${
-                  copiedLink
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-blue-600 hover:bg-blue-500 text-white'
-                }`}
+                className="px-3 py-1.5 rounded-md font-medium flex items-center gap-1.5 transition text-[var(--app-bg-primary)] bg-[var(--app-text-primary)] hover:opacity-90 shadow-xs"
               >
-                {copiedLink ? <Check size={14} /> : <Copy size={14} />}
+                {copiedLink ? (
+                  <DoneIcon style={{ width: 14, height: 14 }} />
+                ) : (
+                  <CopyIcon style={{ width: 14, height: 14 }} />
+                )}
                 <span>{copiedLink ? 'Copiado' : 'Copiar'}</span>
               </button>
             </div>
           </div>
 
           {/* Web Access Settings */}
-          <div className="pt-2 border-t border-[#27272a] space-y-3">
+          <div className="pt-3 border-t border-[var(--app-border)] space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
-                <Globe size={16} className={isPublic ? 'text-blue-400' : 'text-zinc-500'} />
+                <WebIcon
+                  style={{
+                    width: 16,
+                    height: 16,
+                    color: isPublic ? 'var(--app-accent)' : 'var(--app-text-secondary)'
+                  }}
+                />
                 <div>
-                  <p className="font-medium text-zinc-200">Publicar en la Web</p>
-                  <p className="text-[11px] text-zinc-500">
+                  <p className="font-medium text-xs text-[var(--app-text-primary)]">
+                    Publicar en la Web
+                  </p>
+                  <p className="text-[11px] text-[var(--app-text-secondary)]">
                     Cualquiera con el enlace podrá acceder al documento
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setIsPublic(!isPublic)}
-                className={`w-10 h-5 rounded-full p-0.5 transition-colors ${
-                  isPublic ? 'bg-blue-600' : 'bg-[#27272a]'
-                }`}
+                className="w-9 h-5 rounded-full p-0.5 transition-colors relative"
+                style={{
+                  backgroundColor: isPublic ? 'var(--app-accent)' : 'var(--app-hover)'
+                }}
               >
                 <div
-                  className={`w-4 h-4 rounded-full bg-white transition-transform ${
-                    isPublic ? 'translate-x-5' : 'translate-x-0'
-                  }`}
+                  className="w-4 h-4 rounded-full bg-white transition-transform"
+                  style={{
+                    transform: isPublic ? 'translateX(16px)' : 'translateX(0)'
+                  }}
                 />
               </button>
             </div>
 
             {isPublic && (
-              <div className="flex items-center justify-between p-2.5 bg-[#141416] rounded-lg border border-[#242428]">
-                <div className="flex items-center gap-2 text-zinc-400">
-                  <ShieldCheck size={14} />
+              <div className="flex items-center justify-between p-2 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-secondary)]">
+                <div className="flex items-center gap-2 text-[var(--app-text-secondary)]">
+                  <AdminIcon style={{ width: 14, height: 14 }} />
                   <span>Nivel de permisos:</span>
                 </div>
                 <select
                   value={permission}
                   onChange={(e) => setPermission(e.target.value as any)}
-                  className="bg-[#1f1f24] border border-[#2e2e36] rounded px-2 py-1 text-xs text-zinc-200 focus:outline-none"
+                  className="rounded-md px-2 py-1 text-xs focus:outline-none border border-[var(--app-border)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)]"
                 >
                   <option value="view">Solo lectura</option>
                   <option value="edit">Permitir edición</option>
@@ -228,49 +302,53 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
             )}
           </div>
 
-          {/* Quick Exports (Matching AFFiNE) */}
-          <div className="pt-2 border-t border-[#27272a]">
-            <label className="block text-[11px] font-medium text-zinc-400 mb-2">
-              Exportar documento & lienzo
+          {/* Quick Exports */}
+          <div className="pt-3 border-t border-[var(--app-border)]">
+            <label className="block text-[11px] font-medium mb-2 text-[var(--app-text-secondary)]">
+              Exportar documento y lienzo
             </label>
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={exportMarkdown}
-                className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-[#222226] hover:bg-[#2a2a30] text-zinc-200 font-medium transition"
+                className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] font-medium transition"
               >
-                <FileCode size={14} className="text-blue-400" />
+                <CodeIcon style={{ width: 14, height: 14 }} />
                 <span>Markdown (.md)</span>
               </button>
 
               <button
                 onClick={handleCopyMarkdown}
-                className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-[#222226] hover:bg-[#2a2a30] text-zinc-200 font-medium transition"
+                className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] font-medium transition"
               >
-                {copiedMd ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} className="text-sky-400" />}
-                <span>{copiedMd ? 'Copiado!' : 'Copiar MD'}</span>
+                {copiedMd ? (
+                  <DoneIcon style={{ width: 14, height: 14, color: '#10b981' }} />
+                ) : (
+                  <CopyIcon style={{ width: 14, height: 14 }} />
+                )}
+                <span>{copiedMd ? '¡Copiado!' : 'Copiar MD'}</span>
               </button>
 
               <button
                 onClick={exportHTML}
-                className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-[#222226] hover:bg-[#2a2a30] text-zinc-200 font-medium transition"
+                className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] font-medium transition"
               >
-                <FileText size={14} className="text-amber-400" />
+                <PageIcon style={{ width: 14, height: 14 }} />
                 <span>Página (.html)</span>
               </button>
 
               <button
                 onClick={handlePrintPDF}
-                className="flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-[#222226] hover:bg-[#2a2a30] text-zinc-200 font-medium transition"
+                className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] font-medium transition"
               >
-                <Printer size={14} className="text-rose-400" />
+                <PrinterIcon style={{ width: 14, height: 14 }} />
                 <span>Imprimir / PDF</span>
               </button>
 
               <button
                 onClick={exportJSONSnapshot}
-                className="col-span-2 flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-[#222226] hover:bg-[#2a2a30] text-zinc-200 font-medium transition"
+                className="col-span-2 flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] font-medium transition"
               >
-                <FileJson size={14} className="text-emerald-400" />
+                <CodeIcon style={{ width: 14, height: 14 }} />
                 <span>Instantánea completa JSON (Lienzo + Doc)</span>
               </button>
             </div>

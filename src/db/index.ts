@@ -3,6 +3,17 @@ import Dexie, { type Table } from 'dexie'
 export type ViewMode = 'doc' | 'canvas' | 'split'
 export type SyncStatus = 'synced' | 'pending' | 'failed'
 
+export const DEFAULT_SPACE_ID = 'default-workspace'
+
+export interface SpaceItem {
+  id: string
+  name: string
+  icon?: string
+  color?: string
+  createdAt: number
+  updatedAt: number
+}
+
 export interface CustomPropertyItem {
   id: string
   name: string
@@ -14,6 +25,7 @@ export interface CustomPropertyItem {
 export interface WorkspaceItem {
   id: string
   parentId: string | null
+  spaceId?: string // Workspace environment / tenant ID (defaults to DEFAULT_SPACE_ID)
   folder?: string | null
   title: string
   icon: string
@@ -55,6 +67,13 @@ export type CanvasNodeType =
   | 'shape'
   | 'text'
   | 'frame'
+  | 'mindmap'
+  | 'colorPalette'
+  | 'voiceNote'
+  | 'file'
+  | 'audio'
+  | 'table'
+  | 'comment'
 
 export interface CanvasTodoItem {
   id: string
@@ -62,9 +81,10 @@ export interface CanvasTodoItem {
   completed: boolean
 }
 
-export type ShapeKind = 'rect' | 'roundedRect' | 'ellipse' | 'diamond' | 'triangle' | 'star'
+export type ShapeKind = 'rect' | 'roundedRect' | 'ellipse' | 'diamond' | 'triangle' | 'star' | 'cylinder'
 
 export interface CanvasNodeData {
+  [key: string]: any
   title?: string
   content?: string
   color?: string
@@ -96,6 +116,14 @@ export interface CanvasNodeData {
   // Text specific properties
   textAlign?: 'left' | 'center' | 'right'
   isLocked?: boolean
+
+  // Milanote Color Palette specific
+  paletteColors?: string[]
+  swatches?: any[]
+
+  // Milanote Voice Note specific
+  audioDataUrl?: string
+  audioDuration?: number
 }
 
 export interface CanvasNodeItem {
@@ -123,6 +151,8 @@ export interface CanvasEdgeItem {
   label?: string
   animated?: boolean
   color?: string
+  edgeType?: 'default' | 'bezier' | 'smoothstep' | 'straight'
+  markerEndType?: 'arrow' | 'none'
   createdAt: number
   updatedAt: number
   isDeleted: boolean
@@ -149,12 +179,34 @@ export interface SyncLogItem {
   message: string
 }
 
+export interface CollectionItem {
+  id: string
+  spaceId: string
+  name: string
+  icon?: string
+  color?: string
+  docIds: string[]
+  createdAt: number
+  updatedAt: number
+}
+
+export interface TagItem {
+  id: string
+  spaceId: string
+  name: string
+  color: string
+  createdAt: number
+}
+
 export class SevenNoteDatabase extends Dexie {
   workspaces!: Table<WorkspaceItem, string>
   canvasNodes!: Table<CanvasNodeItem, string>
   canvasEdges!: Table<CanvasEdgeItem, string>
   offlineAssets!: Table<OfflineAsset, string>
   syncLogs!: Table<SyncLogItem, string>
+  spaces!: Table<SpaceItem, string>
+  collections!: Table<CollectionItem, string>
+  tags!: Table<TagItem, string>
 
   constructor() {
     super('SevenNoteDB')
@@ -165,6 +217,24 @@ export class SevenNoteDatabase extends Dexie {
       offlineAssets: 'id, workspaceId, createdAt, syncStatus',
       syncLogs: 'id, timestamp, status'
     })
+    this.version(2).stores({
+      workspaces: 'id, parentId, spaceId, updatedAt, isDeleted, isFavorite, syncStatus',
+      canvasNodes: 'id, workspaceId, type, updatedAt, isDeleted, syncStatus',
+      canvasEdges: 'id, workspaceId, source, target, updatedAt, isDeleted, syncStatus',
+      offlineAssets: 'id, workspaceId, createdAt, syncStatus',
+      syncLogs: 'id, timestamp, status',
+      spaces: 'id, name, createdAt, updatedAt'
+    })
+    this.version(3).stores({
+      workspaces: 'id, parentId, spaceId, updatedAt, isDeleted, isFavorite, syncStatus',
+      canvasNodes: 'id, workspaceId, type, updatedAt, isDeleted, syncStatus',
+      canvasEdges: 'id, workspaceId, source, target, updatedAt, isDeleted, syncStatus',
+      offlineAssets: 'id, workspaceId, createdAt, syncStatus',
+      syncLogs: 'id, timestamp, status',
+      spaces: 'id, name, createdAt, updatedAt',
+      collections: 'id, spaceId, name, createdAt, updatedAt',
+      tags: 'id, spaceId, name, color, createdAt'
+    })
   }
 }
 
@@ -172,6 +242,29 @@ export const db = new SevenNoteDatabase()
 
 // Seed default initial data if database is empty
 export async function seedInitialData() {
+  const spaceCount = await db.spaces.count()
+  if (spaceCount === 0) {
+    await db.spaces.add({
+      id: DEFAULT_SPACE_ID,
+      name: 'Demo Workspace',
+      icon: '⚡',
+      color: '#1e96eb',
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    })
+  }
+
+  // Ensure any existing workspaces without spaceId are attributed to DEFAULT_SPACE_ID
+  const withoutSpace = await db.workspaces.filter((w) => !w.spaceId).toArray()
+  if (withoutSpace.length > 0) {
+    await db.workspaces.bulkUpdate(
+      withoutSpace.map((w) => ({
+        key: w.id,
+        changes: { spaceId: DEFAULT_SPACE_ID }
+      }))
+    )
+  }
+
   const count = await db.workspaces.count()
   if (count > 0) return
 
@@ -203,6 +296,7 @@ export async function seedInitialData() {
     {
       id: untitledId,
       parentId: null,
+      spaceId: DEFAULT_SPACE_ID,
       folder: 'First Folder',
       title: 'Untitled',
       icon: '',
@@ -240,6 +334,7 @@ export async function seedInitialData() {
     {
       id: rootWorkspaceId,
       parentId: null,
+      spaceId: DEFAULT_SPACE_ID,
       title: 'Bienvenido a Seven Note',
       icon: '🚀',
       color: '#6366f1',
@@ -254,6 +349,7 @@ export async function seedInitialData() {
     {
       id: subboard1Id,
       parentId: rootWorkspaceId,
+      spaceId: DEFAULT_SPACE_ID,
       title: 'Inspiración & Moodboard',
       icon: '🎨',
       color: '#ec4899',
@@ -378,4 +474,181 @@ export async function seedInitialData() {
       syncStatus: 'pending'
     }
   ])
+}
+
+// Workspace Management Helpers
+export async function createSpace(
+  name: string,
+  icon: string = '💼',
+  color: string = '#1e96eb'
+): Promise<{ space: SpaceItem; initialPageId: string }> {
+  const now = Date.now()
+  const spaceId = `space-${crypto.randomUUID()}`
+  const trimmedName = name.trim() || 'Nuevo Espacio'
+
+  const space: SpaceItem = {
+    id: spaceId,
+    name: trimmedName,
+    icon: icon || '💼',
+    color: color || '#1e96eb',
+    createdAt: now,
+    updatedAt: now
+  }
+
+  await db.spaces.add(space)
+
+  // Create an initial starter page for this workspace
+  const initialPageId = crypto.randomUUID()
+  await db.workspaces.add({
+    id: initialPageId,
+    parentId: null,
+    spaceId: spaceId,
+    title: 'Página inicial',
+    icon: icon || '📄',
+    color: color || '#1e96eb',
+    viewMode: 'doc',
+    docContent: `<h1>✨ ${trimmedName}</h1><p>¡Bienvenido a tu nuevo espacio de trabajo! Puedes empezar a crear notas, diagramas y listas de tareas aquí.</p>`,
+    createdAt: now,
+    updatedAt: now,
+    isFavorite: false,
+    isDeleted: false,
+    syncStatus: 'pending',
+    activeProperties: [
+      'tags',
+      'createdAt',
+      'updatedAt'
+    ],
+    propertyVisibility: {
+      tags: 'always_show',
+      createdAt: 'always_show',
+      updatedAt: 'always_show'
+    }
+  })
+
+  return { space, initialPageId }
+}
+
+export async function updateSpace(id: string, updates: Partial<SpaceItem>): Promise<void> {
+  await db.spaces.update(id, {
+    ...updates,
+    updatedAt: Date.now()
+  })
+}
+
+export async function deleteSpace(id: string): Promise<void> {
+  // Delete all canvas nodes and edges belonging to pages in this space
+  const pages = await db.workspaces.where('spaceId').equals(id).toArray()
+  for (const page of pages) {
+    await db.canvasNodes.where('workspaceId').equals(page.id).delete()
+    await db.canvasEdges.where('workspaceId').equals(page.id).delete()
+  }
+  // Delete all pages in this space
+  await db.workspaces.where('spaceId').equals(id).delete()
+  // Delete the space itself
+  await db.spaces.delete(id)
+}
+
+// Collections helpers
+export async function createCollection(
+  spaceId: string,
+  name: string,
+  icon = '📁',
+  color = '#1e96eb'
+): Promise<CollectionItem> {
+  const now = Date.now()
+  const collection: CollectionItem = {
+    id: `col-${crypto.randomUUID()}`,
+    spaceId,
+    name: name.trim() || 'Nueva Colección',
+    icon,
+    color,
+    docIds: [],
+    createdAt: now,
+    updatedAt: now
+  }
+  await db.collections.add(collection)
+  return collection
+}
+
+export async function updateCollection(id: string, updates: Partial<CollectionItem>): Promise<void> {
+  await db.collections.update(id, {
+    ...updates,
+    updatedAt: Date.now()
+  })
+}
+
+export async function deleteCollection(id: string): Promise<void> {
+  await db.collections.delete(id)
+}
+
+export async function toggleDocInCollection(collectionId: string, docId: string): Promise<void> {
+  const col = await db.collections.get(collectionId)
+  if (!col) return
+  const exists = col.docIds.includes(docId)
+  const newDocIds = exists ? col.docIds.filter((id) => id !== docId) : [...col.docIds, docId]
+  await db.collections.update(collectionId, {
+    docIds: newDocIds,
+    updatedAt: Date.now()
+  })
+}
+
+// Tags helpers (AFFiNE color system)
+export const AFFINE_TAG_COLORS = [
+  { name: 'Azul', hex: '#1e96eb' },
+  { name: 'Púrpura', hex: '#8b5cf6' },
+  { name: 'Verde', hex: '#22c55e' },
+  { name: 'Amarillo', hex: '#eab308' },
+  { name: 'Naranja', hex: '#f97316' },
+  { name: 'Rojo', hex: '#eb4335' },
+  { name: 'Turquesa', hex: '#14b8a6' },
+  { name: 'Magenta', hex: '#ec4899' },
+  { name: 'Gris', hex: '#71717a' }
+]
+
+export async function getOrCreateTag(spaceId: string, tagName: string, colorHex?: string): Promise<TagItem> {
+  const cleanName = tagName.trim()
+  const existing = await db.tags.where('spaceId').equals(spaceId).and((t) => t.name.toLowerCase() === cleanName.toLowerCase()).first()
+  if (existing) return existing
+
+  const color = colorHex || AFFINE_TAG_COLORS[Math.floor(Math.random() * AFFINE_TAG_COLORS.length)].hex
+  const tag: TagItem = {
+    id: `tag-${crypto.randomUUID()}`,
+    spaceId,
+    name: cleanName,
+    color,
+    createdAt: Date.now()
+  }
+  await db.tags.add(tag)
+  return tag
+}
+
+export async function updateTagColor(id: string, color: string): Promise<void> {
+  await db.tags.update(id, { color })
+}
+
+export async function renameTag(id: string, spaceId: string, oldName: string, newName: string): Promise<void> {
+  const cleanNew = newName.trim()
+  if (!cleanNew) return
+  await db.tags.update(id, { name: cleanNew })
+
+  // Update in all workspaces
+  const docs = await db.workspaces.where('spaceId').equals(spaceId).toArray()
+  for (const doc of docs) {
+    if (doc.tags && doc.tags.includes(oldName)) {
+      const updatedTags = doc.tags.map((t) => (t === oldName ? cleanNew : t))
+      await db.workspaces.update(doc.id, { tags: updatedTags, updatedAt: Date.now() })
+    }
+  }
+}
+
+export async function deleteTag(id: string, spaceId: string, tagName: string): Promise<void> {
+  await db.tags.delete(id)
+  // Also remove tag from workspaces in this space
+  const docs = await db.workspaces.where('spaceId').equals(spaceId).toArray()
+  for (const doc of docs) {
+    if (doc.tags && doc.tags.includes(tagName)) {
+      const newTags = doc.tags.filter((t) => t !== tagName)
+      await db.workspaces.update(doc.id, { tags: newTags, updatedAt: Date.now() })
+    }
+  }
 }

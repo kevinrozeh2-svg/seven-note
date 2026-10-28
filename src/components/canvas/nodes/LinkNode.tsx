@@ -1,13 +1,16 @@
 import { memo, useState } from 'react'
 import { Handle, Position } from '@xyflow/react'
-import { Trash2, ExternalLink, Globe } from 'lucide-react'
+import { ExternalLink, Trash2, Play, Globe } from 'lucide-react'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
+import { areNodePropsEqual } from './nodeUtils'
 
 export const LinkNode = memo(({ id, data, selected }: any) => {
-  const [title, setTitle] = useState(data.title ?? 'Enlace web')
-  const [url, setUrl] = useState(data.url ?? '')
-  const [description, setDescription] = useState(data.description ?? '')
+  const [title, setTitle] = useState(data.title ?? 'Designmuseum Denmark')
+  const [url] = useState(data.url ?? 'https://designmuseum.dk/en/')
+  const [description] = useState(data.description ?? '')
+  const [imageUrl] = useState(data.imageUrl ?? '')
+  const [isVideo] = useState(data.isVideo ?? (url.includes('youtube') || url.includes('youtu.be')))
 
   const save = async (updates: any) => {
     try {
@@ -34,78 +37,91 @@ export const LinkNode = memo(({ id, data, selected }: any) => {
     }
   }
 
+  const isYouTube = url.includes('youtube') || url.includes('youtu.be')
+
   return (
     <div
-      className={`relative w-[280px] rounded-xl shadow-md transition-all duration-150 border-2 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 ${
-        selected ? 'ring-2 ring-indigo-500 ring-offset-2 dark:ring-offset-slate-950 shadow-xl' : 'hover:shadow-lg'
+      className={`group relative rounded-xl bg-white dark:bg-[#252525] border border-neutral-200/90 dark:border-neutral-700/80 transition-[box-shadow,border-color] duration-150 overflow-hidden ${
+        selected ? 'ring-2 ring-[var(--app-accent)] shadow-xl' : 'shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]'
       }`}
+      style={{ width: data.width || 280 }}
     >
-      <Handle type="target" position={Position.Top} className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white dark:!border-slate-900" />
-      <Handle type="source" position={Position.Bottom} className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white dark:!border-slate-900" />
-      <Handle type="target" position={Position.Left} className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white dark:!border-slate-900" />
-      <Handle type="source" position={Position.Right} className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white dark:!border-slate-900" />
+      {/* Handles */}
+      <Handle id="top" type="source" position={Position.Top} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
+      <Handle id="bottom" type="source" position={Position.Bottom} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
+      <Handle id="left" type="source" position={Position.Left} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
+      <Handle id="right" type="source" position={Position.Right} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
 
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100 dark:border-slate-800">
-        <div className="flex items-center gap-1.5 flex-1 min-w-0">
-          <Globe size={14} className="text-indigo-500 shrink-0" />
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => {
-              setTitle(e.target.value)
-              save({ title: e.target.value })
-            }}
-            placeholder="Título del enlace..."
-            className="font-semibold text-xs bg-transparent border-none outline-none w-full text-slate-800 dark:text-slate-100"
+      {/* Floating delete button */}
+      <button
+        onClick={handleDelete}
+        className="absolute top-2 right-2 p-1.5 rounded-full bg-white/80 dark:bg-neutral-800/80 hover:bg-white text-neutral-400 hover:text-rose-500 shadow-sm opacity-0 group-hover:opacity-100 transition z-20 backdrop-blur-xs"
+        title="Eliminar enlace"
+      >
+        <Trash2 className="w-3.5 h-3.5" />
+      </button>
+
+      {/* Media / Image Thumbnail Banner */}
+      {imageUrl && (
+        <div className="relative w-full h-36 bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
+          <img
+            src={imageUrl}
+            alt={title}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           />
-        </div>
-        <div className="flex items-center gap-1">
-          {url && (
-            <a
-              href={url.startsWith('http') ? url : `https://${url}`}
-              target="_blank"
-              rel="noreferrer"
-              className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400"
-              title="Abrir enlace"
-            >
-              <ExternalLink size={13} />
-            </a>
+          {isVideo && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+              <div className="w-10 h-10 rounded-full bg-neutral-900/80 hover:bg-neutral-900 text-white flex items-center justify-center shadow-lg transition transform group-hover:scale-110">
+                <Play className="w-4 h-4 fill-current ml-0.5" />
+              </div>
+            </div>
           )}
-          <button
-            onClick={handleDelete}
-            className="p-1 rounded hover:bg-rose-500/20 text-slate-500 hover:text-rose-600 transition"
-            title="Eliminar tarjeta"
-          >
-            <Trash2 size={13} />
-          </button>
         </div>
-      </div>
+      )}
 
-      {/* Inputs */}
-      <div className="p-3 space-y-2">
+      {/* Content Details */}
+      <div className="p-3">
+        {/* Domain / Favicon */}
+        <div className="flex items-center gap-1.5 mb-1.5">
+          {isYouTube ? (
+            <div className="w-4 h-3 rounded bg-red-600 flex items-center justify-center shrink-0">
+              <Play className="w-2 h-2 text-white fill-current ml-0.5" />
+            </div>
+          ) : (
+            <Globe className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+          )}
+          <span className="text-[10px] text-neutral-400 dark:text-neutral-500 truncate flex-1 font-mono">
+            {url}
+          </span>
+          <a
+            href={url.startsWith('http') ? url : `https://${url}`}
+            target="_blank"
+            rel="noreferrer"
+            className="text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
+            title="Abrir en pestaña nueva"
+          >
+            <ExternalLink className="w-3 h-3" />
+          </a>
+        </div>
+
+        {/* Title in bold red / orange Milanote style */}
         <input
           type="text"
-          value={url}
+          value={title}
           onChange={(e) => {
-            setUrl(e.target.value)
-            save({ url: e.target.value })
+            setTitle(e.target.value)
+            save({ title: e.target.value })
           }}
-          placeholder="https://ejemplo.com"
-          className="w-full text-xs px-2 py-1.5 rounded bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 outline-none text-indigo-600 dark:text-indigo-400"
+          className="font-bold text-xs leading-snug text-[#d4380d] dark:text-[#ff7a45] bg-transparent border-none outline-none w-full mb-1 hover:underline cursor-text"
         />
 
-        <textarea
-          value={description}
-          onChange={(e) => {
-            setDescription(e.target.value)
-            save({ description: e.target.value })
-          }}
-          placeholder="Descripción o notas sobre este enlace..."
-          rows={2}
-          className="w-full text-xs bg-transparent border-none outline-none resize-none text-slate-600 dark:text-slate-300 placeholder-slate-400"
-        />
+        {/* Description Snippet */}
+        {description && (
+          <p className="text-[11px] text-neutral-600 dark:text-neutral-400 line-clamp-2 leading-relaxed">
+            {description}
+          </p>
+        )}
       </div>
     </div>
   )
-})
+}, areNodePropsEqual)

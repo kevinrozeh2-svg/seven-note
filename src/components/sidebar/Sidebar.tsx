@@ -1,26 +1,46 @@
 import { useState } from 'react'
+import { useLiveQuery } from 'dexie-react-hooks'
 import {
-  Star,
-  Plus,
-  Trash2,
-  Settings,
-  Search,
-  ChevronRight,
-  ChevronDown,
-  FileText,
-  Calendar,
-  Folder,
-  FolderOpen,
-  Tag,
-  Layers,
-  Upload,
-  PanelLeftClose,
-  User
-} from 'lucide-react'
-import { db, type WorkspaceItem } from '../../db'
-import { syncEngine, type SyncEngineStatus } from '../../lib/syncEngine'
+  SidebarIcon,
+  AllDocsIcon,
+  JournalIcon,
+  SettingsIcon,
+  SearchIcon,
+  PlusIcon,
+  FavoriteIcon,
+  FavoritedIcon,
+  FolderIcon,
+  TemplateIcon,
+  ImportIcon,
+  DeleteIcon,
+  KeyboardIcon,
+  UserIcon,
+  ToggleDownIcon,
+  ToggleRightIcon,
+  PageIcon,
+  EdgelessIcon,
+  SunPanelIcon,
+  MoonPanelIcon,
+  DoneIcon,
+  EditIcon,
+  TodayIcon
+} from '@blocksuite/icons/rc'
+import {
+  db,
+  type WorkspaceItem,
+  type SpaceItem,
+  DEFAULT_SPACE_ID
+} from '../../db'
+import { type SyncEngineStatus } from '../../lib/syncEngine'
+import { JournalCalendarPopover } from '../journal/JournalCalendarPopover'
 
 interface SidebarProps {
+  spaces?: SpaceItem[]
+  currentSpaceId?: string
+  onSelectSpace?: (id: string) => void
+  onOpenCreateSpace?: () => void
+  onRenameSpace?: (id: string, newName: string) => void
+  onDeleteSpace?: (id: string) => void
   workspaces: WorkspaceItem[]
   currentWorkspaceId: string
   onSelectWorkspace: (id: string) => void
@@ -29,15 +49,26 @@ interface SidebarProps {
   onOpenSearch: () => void
   onOpenAllDocs: () => void
   onOpenDailyJournal: () => void
+  onSelectJournalDate?: (date: Date) => void
   onOpenTrash: () => void
   onOpenImport: () => void
   onOpenTemplates: () => void
+  onOpenShortcuts: () => void
+  onOpenTags?: (tag?: string) => void
+  onOpenCollections?: () => void
+  onOpenKnowledgeGraph?: () => void
   syncStatus: SyncEngineStatus
   darkMode: boolean
   onToggleDarkMode: () => void
 }
 
 export function Sidebar({
+  spaces = [],
+  currentSpaceId = DEFAULT_SPACE_ID,
+  onSelectSpace,
+  onOpenCreateSpace,
+  onRenameSpace,
+  onDeleteSpace,
   workspaces,
   currentWorkspaceId,
   onSelectWorkspace,
@@ -46,26 +77,55 @@ export function Sidebar({
   onOpenSearch,
   onOpenAllDocs,
   onOpenDailyJournal,
+  onSelectJournalDate,
   onOpenTrash,
   onOpenImport,
-  onOpenTemplates
+  onOpenTemplates,
+  onOpenShortcuts,
+  onOpenTags,
+  onOpenCollections,
+  onOpenKnowledgeGraph,
+  syncStatus,
+  darkMode,
+  onToggleDarkMode
 }: SidebarProps) {
   // Collapsible sections state
   const [favoritesOpen, setFavoritesOpen] = useState(true)
   const [organizeOpen, setOrganizeOpen] = useState(true)
-  const [tagsOpen, setTagsOpen] = useState(false)
-  const [collectionsOpen, setCollectionsOpen] = useState(false)
+  const [tagsOpen, setTagsOpen] = useState(true)
+  const [collectionsOpen, setCollectionsOpen] = useState(true)
   const [othersOpen, setOthersOpen] = useState(true)
+
+  // Calendar popover state
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false)
 
   // Folder collapse states
   const [firstFolderOpen, setFirstFolderOpen] = useState(true)
 
-  // Workspace name popup / switcher
+  // Workspace switcher & dropdown state
   const [showWorkspaceMenu, setShowWorkspaceMenu] = useState(false)
-  const [workspaceName, setWorkspaceName] = useState('Demo Workspace')
-  const [isEditingWsName, setIsEditingWsName] = useState(false)
+  const [editingSpaceId, setEditingSpaceId] = useState<string | null>(null)
+  const [editingSpaceName, setEditingSpaceName] = useState('')
 
-  // Create new page
+  const currentSpace = spaces.find((s) => s.id === currentSpaceId) || spaces[0] || {
+    id: DEFAULT_SPACE_ID,
+    name: 'Demo Workspace',
+    icon: '⚡',
+    color: '#1e96eb'
+  }
+
+  // Live queries for collections and tags in current space
+  const dbCollections = useLiveQuery(
+    () => db.collections.where('spaceId').equals(currentSpace.id).toArray(),
+    [currentSpace.id]
+  ) ?? []
+
+  const dbTags = useLiveQuery(
+    () => db.tags.where('spaceId').equals(currentSpace.id).toArray(),
+    [currentSpace.id]
+  ) ?? []
+
+  // Create new page inside current workspace
   const handleCreateWorkspace = async (parentId: string | null = null, folderName: string | null = null) => {
     const newId = crypto.randomUUID()
     const now = Date.now()
@@ -73,10 +133,11 @@ export function Sidebar({
       await db.workspaces.add({
         id: newId,
         parentId,
+        spaceId: currentSpace.id,
         folder: folderName,
         title: 'Untitled',
         icon: '',
-        color: '#3b82f6',
+        color: '#1e96eb',
         viewMode: 'doc',
         docContent: '<p></p>',
         createdAt: now,
@@ -107,10 +168,9 @@ export function Sidebar({
           pageWidth: 'always_hide'
         }
       })
-      syncEngine.scheduleSync(1000)
       onSelectWorkspace(newId)
     } catch (err) {
-      console.error('Error creating workspace', err)
+      console.error('Error creating workspace page', err)
     }
   }
 
@@ -123,7 +183,6 @@ export function Sidebar({
         updatedAt: Date.now(),
         syncStatus: 'pending'
       })
-      syncEngine.scheduleSync(1000)
     } catch (err) {
       console.error('Error toggling favorite', err)
     }
@@ -139,7 +198,6 @@ export function Sidebar({
         updatedAt: Date.now(),
         syncStatus: 'pending'
       })
-      syncEngine.scheduleSync(1000)
 
       if (id === currentWorkspaceId) {
         const remaining = workspaces.filter((w) => w.id !== id && !w.isDeleted)
@@ -150,15 +208,17 @@ export function Sidebar({
     }
   }
 
-  const activeWorkspaces = workspaces.filter((w) => !w.isDeleted)
+  const activeWorkspaces = workspaces.filter(
+    (w) => !w.isDeleted && (w.spaceId || DEFAULT_SPACE_ID) === currentSpace.id
+  )
   const favorites = activeWorkspaces.filter((w) => w.isFavorite)
 
-  // Distinct tags across all notes
+  // Distinct tags across all notes in this space
   const allTags = Array.from(
     new Set(activeWorkspaces.flatMap((w) => w.tags || []).filter(Boolean))
   )
 
-  // Documents inside "First Folder" or default folder
+  // Documents inside "First Folder" or default folder in this space
   const firstFolderDocs = activeWorkspaces.filter(
     (w) => w.folder === 'First Folder' || w.parentId === 'folder-first'
   )
@@ -167,338 +227,660 @@ export function Sidebar({
   )
 
   return (
-    <aside className="w-60 h-full flex flex-col bg-[#141416] border-r border-[#242428] text-zinc-300 select-none shrink-0 text-xs">
-      {/* Top Sidebar Bar with Collapse Button */}
-      <div className="h-10 px-3 flex items-center justify-between shrink-0">
-        <button
-          onClick={onToggleSidebar}
-          className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-[#202024] transition"
-          title="Ocultar barra lateral"
-        >
-          <PanelLeftClose size={16} />
-        </button>
-      </div>
-
-      {/* Workspace Selector Item (Matches Screenshot) */}
-      <div className="px-3 pb-2 relative">
-        <div
-          onClick={() => setShowWorkspaceMenu(!showWorkspaceMenu)}
-          className="flex items-center justify-between p-1.5 rounded-lg hover:bg-[#202024] cursor-pointer transition group"
-        >
-          <div className="flex items-center gap-2.5 min-w-0">
-            {/* Teal rounded square icon */}
-            <div className="w-6 h-6 rounded-md bg-[#0d9488] flex items-center justify-center text-white shrink-0 shadow-xs">
-              <span className="text-[11px] font-bold">▢</span>
+    <aside className="w-64 h-full flex flex-col bg-[var(--app-bg-secondary)] border-r border-[var(--app-border)] text-[var(--app-text-primary)] select-none shrink-0 text-sm transition-colors duration-150 font-sans">
+      {/* 1. Top Workspace & User Header (Notion Workspace Switcher) */}
+      <div className="h-11 px-3 flex items-center justify-between shrink-0 border-b border-[var(--app-border)] relative">
+        <div className="flex items-center gap-2 min-w-0 flex-1 relative">
+          <div
+            onClick={() => setShowWorkspaceMenu(!showWorkspaceMenu)}
+            className="flex items-center gap-2 p-1 rounded-md hover:bg-[var(--app-hover)] cursor-pointer transition min-w-0 flex-1 group"
+            title="Cambiar espacio de trabajo"
+          >
+            {/* Notion style workspace icon */}
+            <div
+              className="w-5 h-5 rounded flex items-center justify-center text-white shrink-0 shadow-2xs font-semibold text-[11px]"
+              style={{ backgroundColor: currentSpace.color || '#2383e2' }}
+            >
+              {currentSpace.icon || currentSpace.name.charAt(0) || '7'}
             </div>
-            <span className="font-semibold text-zinc-100 truncate text-xs">
-              {workspaceName}
+            <span className="font-semibold text-[var(--app-text-primary)] truncate text-xs flex-1 text-left">
+              {currentSpace.name}
             </span>
+            <div className="flex items-center gap-1 text-[var(--app-text-muted)] shrink-0">
+              <ToggleDownIcon className="w-3.5 h-3.5 group-hover:text-[var(--app-text-primary)] transition" />
+            </div>
           </div>
 
-          {/* User profile icon */}
-          <div className="w-5 h-5 rounded-full bg-[#27272a] flex items-center justify-center text-zinc-400 shrink-0">
-            <User size={12} />
-          </div>
+          {/* Workspace Dropdown */}
+          {showWorkspaceMenu && (
+            <>
+              {/* Invisible backdrop to close on outside click */}
+              <div
+                className="fixed inset-0 z-30"
+                onClick={() => {
+                  setShowWorkspaceMenu(false)
+                  setEditingSpaceId(null)
+                }}
+              />
+              <div
+                className="absolute left-0 top-10 z-40 w-64 bg-[var(--affine-background-overlay-panel-color)] border border-[var(--affine-border-color)] rounded-xl shadow-[var(--affine-menu-shadow)] p-1.5 animate-in fade-in zoom-in-95 duration-100 flex flex-col gap-1 max-h-[360px] overflow-y-auto"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between px-2 py-1">
+                  <span className="text-[10px] uppercase font-bold text-[var(--affine-text-secondary-color)]">
+                    Espacios de trabajo
+                  </span>
+                  <span className="text-[10px] bg-[var(--affine-hover-color)] text-[var(--affine-text-secondary-color)] px-1.5 py-0.5 rounded-full font-mono">
+                    {spaces.length}
+                  </span>
+                </div>
+
+                {/* Spaces List */}
+                <div className="space-y-0.5 max-h-56 overflow-y-auto custom-scrollbar">
+                  {spaces.map((sp) => {
+                    const isSelected = sp.id === currentSpace.id
+                    const docsInSpace = workspaces.filter(
+                      (w) => !w.isDeleted && (w.spaceId || DEFAULT_SPACE_ID) === sp.id
+                    ).length
+                    const isEditingThis = editingSpaceId === sp.id
+
+                    if (isEditingThis) {
+                      return (
+                        <div key={sp.id} className="p-1">
+                          <input
+                            type="text"
+                            value={editingSpaceName}
+                            onChange={(e) => setEditingSpaceName(e.target.value)}
+                            onBlur={() => {
+                              if (editingSpaceName.trim() && onRenameSpace) {
+                                onRenameSpace(sp.id, editingSpaceName.trim())
+                              }
+                              setEditingSpaceId(null)
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                if (editingSpaceName.trim() && onRenameSpace) {
+                                onRenameSpace(sp.id, editingSpaceName.trim())
+                              }
+                                setEditingSpaceId(null)
+                              } else if (e.key === 'Escape') {
+                                setEditingSpaceId(null)
+                              }
+                            }}
+                            autoFocus
+                            className="w-full bg-[var(--affine-background-primary-color)] border border-[var(--affine-border-color)] rounded px-2 py-1 text-xs text-[var(--affine-text-primary-color)] outline-none ring-1 ring-[#1e96eb]"
+                          />
+                        </div>
+                      )
+                    }
+
+                    return (
+                      <div
+                        key={sp.id}
+                        onClick={() => {
+                          if (onSelectSpace) onSelectSpace(sp.id)
+                          setShowWorkspaceMenu(false)
+                        }}
+                        className={`group w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs cursor-pointer transition ${
+                          isSelected
+                            ? 'bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] font-medium'
+                            : 'text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] hover:bg-[var(--affine-hover-color)]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <div
+                            className="w-5 h-5 rounded flex items-center justify-center text-[10px] text-white shrink-0 shadow-2xs"
+                            style={{ backgroundColor: sp.color || '#1e96eb' }}
+                          >
+                            {sp.icon || sp.name.charAt(0)}
+                          </div>
+                          <span className="truncate flex-1 text-left">{sp.name}</span>
+                          <span className="text-[10px] opacity-60 font-mono shrink-0">
+                            {docsInSpace} {docsInSpace === 1 ? 'doc' : 'docs'}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1 shrink-0 ml-1.5">
+                          {isSelected && (
+                            <DoneIcon className="w-3.5 h-3.5 text-[#1e96eb] shrink-0" />
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setEditingSpaceId(sp.id)
+                              setEditingSpaceName(sp.name)
+                            }}
+                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-[var(--affine-background-primary-color)] text-[var(--affine-icon-color)] hover:text-[var(--affine-text-primary-color)] transition"
+                            title="Renombrar espacio"
+                          >
+                            <EditIcon className="w-3 h-3" />
+                          </button>
+                          {spaces.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                if (onDeleteSpace) onDeleteSpace(sp.id)
+                              }}
+                              className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-rose-500/10 text-[var(--affine-icon-color)] hover:text-rose-500 transition"
+                              title="Eliminar espacio"
+                            >
+                              <DeleteIcon className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {/* Divider */}
+                <div className="h-[1px] bg-[var(--affine-divider-color)]/60 my-1" />
+
+                {/* Add Workspace Action */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowWorkspaceMenu(false)
+                    if (onOpenCreateSpace) onOpenCreateSpace()
+                  }}
+                  className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-[var(--affine-hover-color)] text-[#1e96eb] font-semibold transition text-xs flex items-center gap-2"
+                >
+                  <PlusIcon className="w-3.5 h-3.5 shrink-0" />
+                  <span>Añadir espacio de trabajo</span>
+                </button>
+
+                {/* Settings Action */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowWorkspaceMenu(false)
+                    onOpenSettings()
+                  }}
+                  className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] transition text-xs flex items-center gap-2"
+                >
+                  <SettingsIcon className="w-3.5 h-3.5 shrink-0" />
+                  <span>Ajustes del espacio</span>
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
-        {/* Workspace Dropdown */}
-        {showWorkspaceMenu && (
-          <div
-            className="absolute left-3 right-3 top-11 z-30 bg-[#1b1b1e] border border-[#2c2c32] rounded-xl shadow-2xl p-2"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="text-[10px] uppercase font-bold text-zinc-500 px-2 py-1">
-              Espacio de trabajo
-            </div>
-            {isEditingWsName ? (
-              <div className="flex gap-1 p-1">
-                <input
-                  type="text"
-                  value={workspaceName}
-                  onChange={(e) => setWorkspaceName(e.target.value)}
-                  onBlur={() => setIsEditingWsName(false)}
-                  onKeyDown={(e) => e.key === 'Enter' && setIsEditingWsName(false)}
-                  autoFocus
-                  className="flex-1 bg-[#121214] border border-[#3b3b44] rounded px-2 py-1 text-xs text-zinc-100"
-                />
-              </div>
-            ) : (
-              <button
-                onClick={() => setIsEditingWsName(true)}
-                className="w-full text-left px-2 py-1.5 rounded hover:bg-[#27272e] text-zinc-200 transition text-xs flex items-center justify-between"
-              >
-                <span>Renombrar espacio</span>
-                <span className="text-[10px] text-zinc-500">Editar</span>
-              </button>
-            )}
-            <button
-              onClick={() => {
-                setShowWorkspaceMenu(false)
-                onOpenSettings()
-              }}
-              className="w-full text-left px-2 py-1.5 rounded hover:bg-[#27272e] text-zinc-200 transition text-xs"
-            >
-              Ajustes del espacio
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Quick Search Row (Matches Screenshot) */}
-      <div className="px-3 py-1">
-        <div className="flex items-center justify-between rounded-lg hover:bg-[#202024] p-1.5 transition cursor-pointer text-zinc-400 hover:text-zinc-200 group">
-          <div
-            onClick={onOpenSearch}
-            className="flex items-center gap-2.5 flex-1 min-w-0"
-          >
-            <Search size={14} className="shrink-0 text-zinc-400" />
-            <span className="text-xs truncate">Búsqueda rápida</span>
-          </div>
+        {/* Right side buttons: User Profile & Collapse sidebar */}
+        <div className="flex items-center gap-0.5 shrink-0 ml-1">
           <button
-            onClick={(e) => {
-              e.stopPropagation()
-              handleCreateWorkspace()
-            }}
-            className="p-0.5 rounded hover:bg-[#2c2c34] text-zinc-400 hover:text-white transition"
-            title="Crear nueva página"
+            onClick={onOpenSettings}
+            className="p-1.5 rounded-md text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition"
+            title="Ajustes de usuario"
           >
-            <Plus size={14} />
+            <UserIcon className="w-4 h-4" />
+          </button>
+          <button
+            onClick={onToggleSidebar}
+            className="p-1.5 rounded-md text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition"
+            title="Ocultar barra lateral (Ctrl+\)"
+          >
+            <SidebarIcon className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* Main Navigation Links */}
-      <div className="px-3 py-1 space-y-0.5">
-        {/* Todos los documentos */}
+      {/* 2. Quick Search & New Page Button (Notion Search & New Page) */}
+      <div className="px-2.5 pt-2 pb-1.5 flex items-center gap-1.5">
+        <div
+          onClick={onOpenSearch}
+          className="flex-1 flex items-center justify-between h-[30px] px-2.5 rounded-md bg-[var(--app-bg-primary)] border border-[var(--app-border)] hover:border-[var(--app-border-strong)] cursor-pointer transition text-xs group shadow-2xs"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <SearchIcon className="w-3.5 h-3.5 text-[var(--app-text-muted)] group-hover:text-[var(--app-text-primary)] shrink-0 transition" />
+            <span className="text-[var(--app-text-muted)] truncate text-xs">Buscar...</span>
+          </div>
+          <kbd className="text-[9px] bg-[var(--app-hover)] text-[var(--app-text-muted)] px-1 py-0.2 rounded border border-[var(--app-border)] font-mono shrink-0">
+            Ctrl K
+          </kbd>
+        </div>
+
+        {/* Direct Add Page Button */}
+        <button
+          onClick={() => handleCreateWorkspace()}
+          className="w-[30px] h-[30px] rounded-md bg-[var(--app-bg-primary)] border border-[var(--app-border)] hover:border-[var(--app-border-strong)] hover:bg-[var(--app-hover)] text-[var(--app-text-secondary)] hover:text-[var(--app-accent)] flex items-center justify-center shrink-0 transition shadow-2xs"
+          title="Nueva página"
+        >
+          <PlusIcon className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {/* 3. Primary Navigation Items */}
+      <div className="px-2 py-0.5 space-y-0.5">
         <button
           onClick={onOpenAllDocs}
-          className="w-full flex items-center gap-2.5 p-1.5 rounded-lg hover:bg-[#202024] text-zinc-300 hover:text-zinc-100 transition text-left"
+          className="w-full flex items-center justify-between px-2.5 h-[28px] rounded-md hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition text-left text-xs"
         >
-          <FileText size={14} className="text-zinc-400 shrink-0" />
-          <span className="truncate">Todos los documentos</span>
+          <div className="flex items-center gap-2 min-w-0">
+            <AllDocsIcon className="w-4 h-4 text-[var(--app-text-secondary)] shrink-0" />
+            <span className="truncate text-xs font-medium">Todos los documentos</span>
+          </div>
+          <span className="text-[10px] text-[var(--app-text-muted)] bg-[var(--app-hover)] px-1.5 py-0.2 rounded font-mono font-medium">
+            {activeWorkspaces.length}
+          </span>
         </button>
 
-        {/* Diarios */}
-        <button
-          onClick={onOpenDailyJournal}
-          className="w-full flex items-center gap-2.5 p-1.5 rounded-lg hover:bg-[#202024] text-zinc-300 hover:text-zinc-100 transition text-left"
-        >
-          <Calendar size={14} className="text-zinc-400 shrink-0" />
-          <span className="truncate">Diarios</span>
-        </button>
+        {onOpenKnowledgeGraph && (
+          <button
+            onClick={onOpenKnowledgeGraph}
+            className="w-full flex items-center gap-2.5 px-3 h-[34px] rounded-lg hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] transition text-left"
+          >
+            <span className="text-base shrink-0">🌐</span>
+            <span className="truncate text-sm font-medium">Grafo de Conocimiento</span>
+          </button>
+        )}
 
-        {/* Configuración */}
+        <div className="flex items-center gap-1 w-full">
+          <button
+            onClick={onOpenDailyJournal}
+            className="flex-1 flex items-center gap-2.5 px-3 h-[34px] rounded-lg hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] transition text-left"
+          >
+            <JournalIcon className="w-4.5 h-4.5 text-[var(--affine-icon-color)] shrink-0" />
+            <span className="truncate text-sm font-medium">Diario</span>
+          </button>
+          <div className="relative">
+            <button
+              onClick={() => setIsCalendarOpen(!isCalendarOpen)}
+              className="p-2 rounded-lg text-[var(--affine-icon-color)] hover:text-[var(--affine-text-primary-color)] hover:bg-[var(--affine-hover-color)] transition"
+              title="Abrir calendario del diario"
+            >
+              <TodayIcon className="w-4 h-4" />
+            </button>
+            <JournalCalendarPopover
+              isOpen={isCalendarOpen}
+              onClose={() => setIsCalendarOpen(false)}
+              workspaces={workspaces}
+              onSelectDate={(date) => {
+                if (onSelectJournalDate) onSelectJournalDate(date)
+                setIsCalendarOpen(false)
+              }}
+            />
+          </div>
+        </div>
+
         <button
           onClick={onOpenSettings}
-          className="w-full flex items-center gap-2.5 p-1.5 rounded-lg hover:bg-[#202024] text-zinc-300 hover:text-zinc-100 transition text-left"
+          className="w-full flex items-center gap-2.5 px-3 h-[34px] rounded-lg hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] transition text-left"
         >
-          <Settings size={14} className="text-zinc-400 shrink-0" />
-          <span className="truncate">Configuración</span>
+          <SettingsIcon className="w-4.5 h-4.5 text-[var(--affine-icon-color)] shrink-0" />
+          <span className="truncate text-sm font-medium">Configuración</span>
         </button>
+      </div>
+
+      {/* Divider */}
+      <div className="px-3.5 py-1.5">
+        <div className="h-[1px] bg-[var(--affine-divider-color)]/60" />
       </div>
 
       {/* Scrollable Navigation Tree */}
-      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-3">
-        {/* Section: Favoritos */}
+      <div className="flex-1 overflow-y-auto px-2.5 py-1 space-y-3 custom-scrollbar">
+        {/* NavigationPanelFavorites */}
         <div>
-          <button
+          <div
             onClick={() => setFavoritesOpen(!favoritesOpen)}
-            className="w-full flex items-center justify-between py-1 text-zinc-400 hover:text-zinc-200 transition text-[11px] font-medium"
+            className="flex items-center justify-between px-2.5 h-7 rounded-lg cursor-pointer hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] transition group"
           >
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider">
+              <ToggleRightIcon
+                className={`w-3.5 h-3.5 text-[var(--affine-icon-color)] transition-transform duration-200 ${
+                  favoritesOpen ? 'rotate-90' : 'rotate-0'
+                }`}
+              />
               <span>Favoritos</span>
-              {favoritesOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
             </div>
-          </button>
+            {favorites.length > 0 && (
+              <span className="text-[11px] text-[var(--affine-text-secondary-color)] font-mono font-medium">
+                {favorites.length}
+              </span>
+            )}
+          </div>
 
           {favoritesOpen && (
-            <div className="mt-1">
+            <div className="mt-1 space-y-0.5">
               {favorites.length === 0 ? (
-                /* Empty state matching screenshot */
-                <div className="flex flex-col items-center justify-center py-4 text-center">
-                  <div className="w-8 h-8 rounded-full border border-dashed border-[#2f2f36] flex items-center justify-center text-zinc-500 mb-1.5">
-                    <Star size={14} />
-                  </div>
-                  <span className="text-[11px] text-zinc-500">No hay favoritos</span>
+                <div className="py-2 px-3 text-xs text-[var(--affine-text-secondary-color)] italic">
+                  Sin favoritos fijados
                 </div>
               ) : (
-                <div className="space-y-0.5">
-                  {favorites.map((fav) => (
+                favorites.map((fav) => {
+                  const isActive = fav.id === currentWorkspaceId
+                  return (
                     <div
                       key={`fav-${fav.id}`}
                       onClick={() => onSelectWorkspace(fav.id)}
-                      className={`group flex items-center justify-between p-1.5 rounded-lg cursor-pointer transition ${
-                        fav.id === currentWorkspaceId
-                          ? 'bg-[#222226] text-zinc-100 font-semibold'
-                          : 'text-zinc-400 hover:bg-[#1a1a1e] hover:text-zinc-200'
+                      className={`group flex items-center justify-between px-2.5 h-[32px] rounded-lg cursor-pointer transition ${
+                        isActive
+                          ? 'bg-[var(--affine-background-primary-color)] text-[var(--affine-text-primary-color)] shadow-2xs font-semibold'
+                          : 'text-[var(--affine-text-secondary-color)] hover:bg-[var(--affine-hover-color)] hover:text-[var(--affine-text-primary-color)] font-medium'
                       }`}
                     >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="text-xs">{fav.icon || '📄'}</span>
-                        <span className="truncate">{fav.title || 'Untitled'}</span>
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        {fav.icon ? (
+                          <span className="text-sm shrink-0">{fav.icon}</span>
+                        ) : fav.viewMode === 'canvas' ? (
+                          <EdgelessIcon className="w-4 h-4 text-[#1e96eb] shrink-0" />
+                        ) : (
+                          <PageIcon className="w-4 h-4 text-[var(--affine-icon-color)] shrink-0" />
+                        )}
+                        <span className="truncate text-sm">{fav.title || 'Untitled'}</span>
                       </div>
                       <button
                         onClick={(e) => handleToggleFavorite(e, fav)}
-                        className="opacity-0 group-hover:opacity-100 p-0.5 text-amber-400 transition"
+                        className="opacity-0 group-hover:opacity-100 p-1 text-amber-400 hover:scale-110 transition shrink-0"
+                        title="Quitar de favoritos"
                       >
-                        <Star size={12} fill="currentColor" />
+                        <FavoritedIcon className="w-4 h-4" />
                       </button>
                     </div>
-                  ))}
-                </div>
+                  )
+                })
               )}
             </div>
           )}
         </div>
 
-        {/* Section: Organizar */}
+        {/* NavigationPanelOrganize */}
         <div>
-          <div className="flex items-center justify-between py-1 text-zinc-400 text-[11px] font-medium">
-            <button
-              onClick={() => setOrganizeOpen(!organizeOpen)}
-              className="flex items-center gap-1 hover:text-zinc-200 transition"
-            >
+          <div
+            onClick={() => setOrganizeOpen(!organizeOpen)}
+            className="flex items-center justify-between px-2.5 h-7 rounded-lg cursor-pointer hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] transition group"
+          >
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider">
+              <ToggleRightIcon
+                className={`w-3.5 h-3.5 text-[var(--affine-icon-color)] transition-transform duration-200 ${
+                  organizeOpen ? 'rotate-90' : 'rotate-0'
+                }`}
+              />
               <span>Organizar</span>
-              {organizeOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-            </button>
+            </div>
             <button
-              onClick={() => handleCreateWorkspace(null, 'First Folder')}
-              className="p-0.5 rounded hover:bg-[#242428] text-zinc-500 hover:text-zinc-200"
-              title="Añadir página en First Folder"
+              onClick={(e) => {
+                e.stopPropagation()
+                handleCreateWorkspace(null, 'First Folder')
+              }}
+              className="opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-[var(--affine-hover-color)] text-[var(--affine-icon-color)] hover:text-[var(--affine-text-primary-color)] transition"
+              title="Añadir página en carpeta"
             >
-              <Plus size={12} />
+              <PlusIcon className="w-4 h-4" />
             </button>
           </div>
 
           {organizeOpen && (
-            <div className="mt-1 space-y-1">
-              {/* Folder: First Folder (Matches Screenshot) */}
-              <div className="space-y-0.5">
+            <div className="mt-1 space-y-0.5">
+              {/* Folder: First Folder */}
+              <div>
                 <div
                   onClick={() => setFirstFolderOpen(!firstFolderOpen)}
-                  className="flex items-center justify-between p-1.5 rounded-lg hover:bg-[#202024] cursor-pointer text-zinc-300 hover:text-zinc-100 transition group"
+                  className="flex items-center justify-between px-2.5 h-[32px] rounded-lg hover:bg-[var(--affine-hover-color)] cursor-pointer text-[var(--affine-text-primary-color)] transition group"
                 >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-zinc-400 group-hover:text-zinc-200">
-                      {firstFolderOpen ? <FolderOpen size={14} /> : <Folder size={14} />}
-                    </span>
-                    <span className="truncate text-xs font-medium">First Folder</span>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <ToggleRightIcon
+                      className={`w-3.5 h-3.5 text-[var(--affine-icon-color)] transition-transform duration-150 ${
+                        firstFolderOpen ? 'rotate-90' : 'rotate-0'
+                      }`}
+                    />
+                    <FolderIcon className="w-4 h-4 text-[var(--affine-icon-color)] shrink-0" />
+                    <span className="truncate text-sm font-semibold">First Folder</span>
                   </div>
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
                       handleCreateWorkspace(null, 'First Folder')
                     }}
-                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[#28282e] text-zinc-400 hover:text-white transition"
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded-md hover:bg-[var(--affine-hover-color)] text-[var(--affine-icon-color)] hover:text-[var(--affine-text-primary-color)] transition"
                     title="Nueva página dentro de carpeta"
                   >
-                    <Plus size={12} />
+                    <PlusIcon className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
                 {/* Sub-pages inside First Folder */}
                 {firstFolderOpen && (
-                  <div className="pl-4 space-y-0.5">
+                  <div className="pl-4 space-y-0.5 border-l border-[var(--affine-border-color)]/50 ml-3.5 my-0.5">
                     {firstFolderDocs.length === 0 ? (
-                      <div className="text-[10px] text-zinc-600 py-1 pl-2">
+                      <div className="text-xs text-[var(--affine-text-secondary-color)] py-1 pl-2 italic">
                         Carpeta vacía
                       </div>
                     ) : (
-                      firstFolderDocs.map((doc) => (
-                        <div
-                          key={doc.id}
-                          onClick={() => onSelectWorkspace(doc.id)}
-                          className={`group flex items-center justify-between p-1 rounded-md cursor-pointer transition ${
-                            doc.id === currentWorkspaceId
-                              ? 'bg-[#222226] text-zinc-100 font-medium'
-                              : 'text-zinc-400 hover:bg-[#1a1a1e] hover:text-zinc-200'
-                          }`}
-                        >
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span className="text-xs">{doc.icon || '📄'}</span>
-                            <span className="truncate text-xs">{doc.title || 'Untitled'}</span>
+                      firstFolderDocs.map((doc) => {
+                        const isActive = doc.id === currentWorkspaceId
+                        return (
+                          <div
+                            key={doc.id}
+                            onClick={() => onSelectWorkspace(doc.id)}
+                            className={`group flex items-center justify-between px-2.5 h-[30px] rounded-lg cursor-pointer transition ${
+                              isActive
+                                ? 'bg-[var(--affine-background-primary-color)] text-[var(--affine-text-primary-color)] shadow-2xs font-semibold'
+                                : 'text-[var(--affine-text-secondary-color)] hover:bg-[var(--affine-hover-color)] hover:text-[var(--affine-text-primary-color)] font-medium'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              {doc.icon ? (
+                                <span className="text-sm shrink-0">{doc.icon}</span>
+                              ) : doc.viewMode === 'canvas' ? (
+                                <EdgelessIcon className="w-3.5 h-3.5 text-[#1e96eb] shrink-0" />
+                              ) : (
+                                <PageIcon className="w-3.5 h-3.5 text-[var(--affine-icon-color)] shrink-0" />
+                              )}
+                              <span className="truncate text-sm">{doc.title || 'Untitled'}</span>
+                            </div>
+                            <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1">
+                              <button
+                                onClick={(e) => handleToggleFavorite(e, doc)}
+                                className="p-1 hover:text-amber-400 text-[var(--affine-icon-color)]"
+                                title={doc.isFavorite ? 'Quitar favorito' : 'Favorito'}
+                              >
+                                {doc.isFavorite ? (
+                                  <FavoritedIcon className="w-3.5 h-3.5 text-amber-400" />
+                                ) : (
+                                  <FavoriteIcon className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                              <button
+                                onClick={(e) => handleDeleteWorkspace(e, doc.id)}
+                                className="p-1 hover:text-rose-500 text-[var(--affine-icon-color)]"
+                                title="Eliminar"
+                              >
+                                <DeleteIcon className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
-                          <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1">
-                            <button
-                              onClick={(e) => handleToggleFavorite(e, doc)}
-                              className="p-0.5 hover:text-amber-400 text-zinc-500"
-                            >
-                              <Star size={11} fill={doc.isFavorite ? 'currentColor' : 'none'} />
-                            </button>
-                            <button
-                              onClick={(e) => handleDeleteWorkspace(e, doc.id)}
-                              className="p-0.5 hover:text-rose-400 text-zinc-500"
-                            >
-                              <Trash2 size={11} />
-                            </button>
-                          </div>
-                        </div>
-                      ))
+                        )
+                      })
                     )}
                   </div>
                 )}
               </div>
 
               {/* Other Root Pages */}
-              {rootPages.map((doc) => (
-                <div
-                  key={doc.id}
-                  onClick={() => onSelectWorkspace(doc.id)}
-                  className={`group flex items-center justify-between p-1.5 rounded-lg cursor-pointer transition ${
-                    doc.id === currentWorkspaceId
-                      ? 'bg-[#222226] text-zinc-100 font-medium'
-                      : 'text-zinc-400 hover:bg-[#1a1a1e] hover:text-zinc-200'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-xs">{doc.icon || '📄'}</span>
-                    <span className="truncate text-xs">{doc.title || 'Untitled'}</span>
+              {rootPages.map((doc) => {
+                const isActive = doc.id === currentWorkspaceId
+                return (
+                  <div
+                    key={doc.id}
+                    onClick={() => onSelectWorkspace(doc.id)}
+                    className={`group flex items-center justify-between px-2.5 h-[32px] rounded-lg cursor-pointer transition ${
+                      isActive
+                        ? 'bg-[var(--affine-background-primary-color)] text-[var(--affine-text-primary-color)] shadow-2xs font-semibold'
+                        : 'text-[var(--affine-text-secondary-color)] hover:bg-[var(--affine-hover-color)] hover:text-[var(--affine-text-primary-color)] font-medium'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {doc.icon ? (
+                        <span className="text-sm shrink-0">{doc.icon}</span>
+                      ) : doc.viewMode === 'canvas' ? (
+                        <EdgelessIcon className="w-4 h-4 text-[#1e96eb] shrink-0" />
+                      ) : (
+                        <PageIcon className="w-4 h-4 text-[var(--affine-icon-color)] shrink-0" />
+                      )}
+                      <span className="truncate text-sm">{doc.title || 'Untitled'}</span>
+                    </div>
+                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1">
+                      <button
+                        onClick={(e) => handleToggleFavorite(e, doc)}
+                        className="p-1 hover:text-amber-400 text-[var(--affine-icon-color)]"
+                        title={doc.isFavorite ? 'Quitar favorito' : 'Favorito'}
+                      >
+                        {doc.isFavorite ? (
+                          <FavoritedIcon className="w-3.5 h-3.5 text-amber-400" />
+                        ) : (
+                          <FavoriteIcon className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                      <button
+                        onClick={(e) => handleDeleteWorkspace(e, doc.id)}
+                        className="p-1 hover:text-rose-500 text-[var(--affine-icon-color)]"
+                        title="Eliminar"
+                      >
+                        <DeleteIcon className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1">
-                    <button
-                      onClick={(e) => handleToggleFavorite(e, doc)}
-                      className="p-0.5 hover:text-amber-400 text-zinc-500"
-                    >
-                      <Star size={11} fill={doc.isFavorite ? 'currentColor' : 'none'} />
-                    </button>
-                    <button
-                      onClick={(e) => handleDeleteWorkspace(e, doc.id)}
-                      className="p-0.5 hover:text-rose-400 text-zinc-500"
-                    >
-                      <Trash2 size={11} />
-                    </button>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
 
-        {/* Section: Etiquetas ▸ */}
+        {/* NavigationPanelTags */}
         <div>
-          <button
+          <div
             onClick={() => setTagsOpen(!tagsOpen)}
-            className="w-full flex items-center justify-between py-1 text-zinc-400 hover:text-zinc-200 transition text-[11px] font-medium"
+            className="flex items-center justify-between px-2.5 h-7 rounded-lg cursor-pointer hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] transition group"
           >
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider">
+              <ToggleRightIcon
+                className={`w-3.5 h-3.5 text-[var(--affine-icon-color)] transition-transform duration-200 ${
+                  tagsOpen ? 'rotate-90' : 'rotate-0'
+                }`}
+              />
               <span>Etiquetas</span>
-              {tagsOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
             </div>
-          </button>
+            <div className="flex items-center gap-1">
+              {allTags.length > 0 && (
+                <span className="text-[11px] text-[var(--affine-text-secondary-color)] font-mono font-medium">
+                  {allTags.length}
+                </span>
+              )}
+              {onOpenTags && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onOpenTags()
+                  }}
+                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[var(--affine-hover-color-filled)] text-[var(--affine-icon-color)]"
+                  title="Gestionar etiquetas"
+                >
+                  <PlusIcon className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
 
           {tagsOpen && (
-            <div className="mt-1 pl-2 space-y-1">
+            <div className="mt-1 space-y-0.5">
               {allTags.length === 0 ? (
-                <span className="text-[11px] text-zinc-500">No hay etiquetas creadas</span>
+                <div
+                  onClick={() => onOpenTags && onOpenTags()}
+                  className="py-2 px-3 text-xs text-[var(--affine-text-secondary-color)] italic cursor-pointer hover:underline"
+                >
+                  + Añadir primera etiqueta
+                </div>
               ) : (
-                allTags.map((tag) => (
+                allTags.map((name) => {
+                  const tagItem = dbTags.find((t) => t.name.toLowerCase() === name.toLowerCase())
+                  const color = tagItem?.color || '#1e96eb'
+                  const count = activeWorkspaces.filter((w) => w.tags && w.tags.includes(name)).length
+
+                  return (
+                    <div
+                      key={name}
+                      onClick={() => onOpenTags && onOpenTags(name)}
+                      className="flex items-center justify-between h-[30px] px-2.5 rounded-lg hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] cursor-pointer text-sm transition"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0 shadow-2xs"
+                          style={{ backgroundColor: color }}
+                        />
+                        <span className="truncate">#{name}</span>
+                      </div>
+                      <span className="text-[10px] font-mono text-[var(--affine-text-secondary-color)]">
+                        {count}
+                      </span>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* NavigationPanelCollections */}
+        <div>
+          <div
+            onClick={() => setCollectionsOpen(!collectionsOpen)}
+            className="flex items-center justify-between px-2.5 h-7 rounded-lg cursor-pointer hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] transition group"
+          >
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider">
+              <ToggleRightIcon
+                className={`w-3.5 h-3.5 text-[var(--affine-icon-color)] transition-transform duration-200 ${
+                  collectionsOpen ? 'rotate-90' : 'rotate-0'
+                }`}
+              />
+              <span>Colecciones</span>
+            </div>
+            <div className="flex items-center gap-1">
+              {dbCollections.length > 0 && (
+                <span className="text-[11px] text-[var(--affine-text-secondary-color)] font-mono font-medium">
+                  {dbCollections.length}
+                </span>
+              )}
+              {onOpenCollections && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onOpenCollections()
+                  }}
+                  className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[var(--affine-hover-color-filled)] text-[var(--affine-icon-color)]"
+                  title="Gestionar colecciones"
+                >
+                  <PlusIcon className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {collectionsOpen && (
+            <div className="mt-1 space-y-0.5">
+              {dbCollections.length === 0 ? (
+                <div
+                  onClick={() => onOpenCollections && onOpenCollections()}
+                  className="py-2 px-3 text-xs text-[var(--affine-text-secondary-color)] italic cursor-pointer hover:underline"
+                >
+                  + Crear primera colección
+                </div>
+              ) : (
+                dbCollections.map((col) => (
                   <div
-                    key={tag}
-                    onClick={onOpenAllDocs}
-                    className="flex items-center gap-1.5 py-1 px-1.5 rounded hover:bg-[#1f1f24] text-zinc-400 hover:text-zinc-200 cursor-pointer text-xs"
+                    key={col.id}
+                    onClick={() => onOpenCollections && onOpenCollections()}
+                    className="flex items-center justify-between h-[30px] px-2.5 rounded-lg hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] cursor-pointer text-sm transition"
                   >
-                    <Tag size={12} className="text-zinc-500" />
-                    <span>#{tag}</span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-sm shrink-0">{col.icon || '📁'}</span>
+                      <span className="truncate">{col.name}</span>
+                    </div>
+                    <span className="text-[10px] font-mono text-[var(--affine-text-secondary-color)]">
+                      {col.docIds.length}
+                    </span>
                   </div>
                 ))
               )}
@@ -506,80 +888,93 @@ export function Sidebar({
           )}
         </div>
 
-        {/* Section: Colecciones ▸ */}
+        {/* CollapsibleSection Others */}
         <div>
-          <button
-            onClick={() => setCollectionsOpen(!collectionsOpen)}
-            className="w-full flex items-center justify-between py-1 text-zinc-400 hover:text-zinc-200 transition text-[11px] font-medium"
-          >
-            <div className="flex items-center gap-1">
-              <span>Colecciones</span>
-              {collectionsOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-            </div>
-          </button>
-
-          {collectionsOpen && (
-            <div className="mt-1 pl-2 space-y-1">
-              <div
-                onClick={onOpenAllDocs}
-                className="flex items-center gap-1.5 py-1 px-1.5 rounded hover:bg-[#1f1f24] text-zinc-400 hover:text-zinc-200 cursor-pointer text-xs"
-              >
-                <Layers size={12} className="text-zinc-500" />
-                <span>Proyectos Activos</span>
-              </div>
-              <div
-                onClick={onOpenAllDocs}
-                className="flex items-center gap-1.5 py-1 px-1.5 rounded hover:bg-[#1f1f24] text-zinc-400 hover:text-zinc-200 cursor-pointer text-xs"
-              >
-                <Layers size={12} className="text-zinc-500" />
-                <span>Recursos & Guías</span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Section: Otros ▾ */}
-        <div>
-          <button
+          <div
             onClick={() => setOthersOpen(!othersOpen)}
-            className="w-full flex items-center justify-between py-1 text-zinc-400 hover:text-zinc-200 transition text-[11px] font-medium"
+            className="flex items-center justify-between px-2.5 h-7 rounded-lg cursor-pointer hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] transition group"
           >
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider">
+              <ToggleRightIcon
+                className={`w-3.5 h-3.5 text-[var(--affine-icon-color)] transition-transform duration-200 ${
+                  othersOpen ? 'rotate-90' : 'rotate-0'
+                }`}
+              />
               <span>Otros</span>
-              {othersOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
             </div>
-          </button>
+          </div>
 
           {othersOpen && (
             <div className="mt-1 space-y-0.5">
-              {/* Papelera de reciclaje */}
               <button
                 onClick={onOpenTrash}
-                className="w-full flex items-center gap-2 p-1.5 rounded-lg hover:bg-[#202024] text-zinc-400 hover:text-zinc-200 transition text-left"
+                className="w-full flex items-center gap-2.5 px-3 h-[32px] rounded-lg hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] transition text-left text-sm"
               >
-                <Trash2 size={14} className="shrink-0" />
-                <span>Papelera de reciclaje</span>
+                <DeleteIcon className="w-4.5 h-4.5 text-[var(--affine-icon-color)] shrink-0" />
+                <span className="truncate">Papelera de reciclaje</span>
               </button>
 
-              {/* Importar */}
               <button
                 onClick={onOpenImport}
-                className="w-full flex items-center gap-2 p-1.5 rounded-lg hover:bg-[#202024] text-zinc-400 hover:text-zinc-200 transition text-left"
+                className="w-full flex items-center gap-2.5 px-3 h-[32px] rounded-lg hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] transition text-left text-sm"
               >
-                <Upload size={14} className="shrink-0" />
-                <span>Importar</span>
+                <ImportIcon className="w-4.5 h-4.5 text-[var(--affine-icon-color)] shrink-0" />
+                <span className="truncate">Importar</span>
               </button>
 
-              {/* Plantilla */}
               <button
                 onClick={onOpenTemplates}
-                className="w-full flex items-center gap-2 p-1.5 rounded-lg hover:bg-[#202024] text-zinc-400 hover:text-zinc-200 transition text-left"
+                className="w-full flex items-center gap-2.5 px-3 h-[32px] rounded-lg hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] transition text-left text-sm"
               >
-                <Layers size={14} className="shrink-0" />
-                <span>Plantilla</span>
+                <TemplateIcon className="w-4.5 h-4.5 text-[var(--affine-icon-color)] shrink-0" />
+                <span className="truncate">Plantillas</span>
+              </button>
+
+              <button
+                onClick={onOpenShortcuts}
+                className="w-full flex items-center gap-2.5 px-3 h-[32px] rounded-lg hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] transition text-left text-sm"
+              >
+                <KeyboardIcon className="w-4.5 h-4.5 text-[var(--affine-icon-color)] shrink-0" />
+                <span className="truncate">Atajos de teclado</span>
               </button>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* 5. Bottom Footer Bar (AFFiNE BottomContainer: Sync Status, Dark Mode Toggle, Shortcuts) */}
+      <div className="h-12 px-3.5 border-t border-[var(--affine-border-color)]/50 flex items-center justify-between text-xs text-[var(--affine-text-secondary-color)] shrink-0 bg-[var(--affine-background-secondary-color)]">
+        <div className="flex items-center gap-2">
+          <div
+            className={`w-2.5 h-2.5 rounded-full ${
+              syncStatus.state === 'syncing'
+                ? 'bg-amber-500 animate-pulse'
+                : syncStatus.isOnline
+                ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]'
+                : 'bg-zinc-400'
+            }`}
+            title={syncStatus.isOnline ? 'Conectado / En línea' : 'Modo local sin conexión'}
+          />
+          <span className="truncate text-xs font-semibold">
+            {syncStatus.state === 'syncing' ? 'Sincronizando...' : syncStatus.isOnline ? 'En línea' : 'Local'}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={onToggleDarkMode}
+            className="p-1.5 rounded-lg hover:bg-[var(--affine-hover-color)] text-[var(--affine-icon-color)] hover:text-[var(--affine-text-primary-color)] transition"
+            title={darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+          >
+            {darkMode ? <SunPanelIcon className="w-4 h-4 text-amber-400" /> : <MoonPanelIcon className="w-4 h-4 text-indigo-500" />}
+          </button>
+          <button
+            onClick={onOpenShortcuts}
+            className="p-1.5 rounded-lg hover:bg-[var(--affine-hover-color)] text-[var(--affine-icon-color)] hover:text-[var(--affine-text-primary-color)] transition"
+            title="Atajos de teclado (?)"
+          >
+            <KeyboardIcon className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </aside>
