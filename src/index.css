@@ -607,14 +607,21 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
   pointer-events: auto !important;
 }
 
-/* Allow text selection inside editable elements and inputs without dragging the ReactFlow node */
+/* Allow text selection inside editable elements, inputs and canvas text elements without dragging the ReactFlow node */
 .react-flow__node input,
 .react-flow__node textarea,
 .react-flow__node [contenteditable="true"],
 .react-flow__node .nodrag,
+.react-flow__node .select-text,
 .react-flow__node [data-selectable="true"] {
   user-select: text !important;
   -webkit-user-select: text !important;
   cursor: text;
+}
+
+/* Ensure canvas container does not block text selection on canvas elements */
+.react-flow__node {
+  user-select: auto;
+  -webkit-user-select: auto;
 }
 

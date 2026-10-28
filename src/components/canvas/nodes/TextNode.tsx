@@ -348,6 +348,7 @@ export const TextNode = memo(({ id, data, selected }: any) => {
               save({ content })
             }
           }}
+          onPointerDown={(e) => e.stopPropagation()}
           placeholder="Escribe texto..."
           className={`nodrag nowheel w-full bg-transparent border-none outline-none resize-none leading-relaxed select-text ${textColorClass} ${fontSizeClass} text-${align}`}
           style={{ fontFamily }}
@@ -356,6 +357,10 @@ export const TextNode = memo(({ id, data, selected }: any) => {
       ) : (
         <div
           onDoubleClick={() => setIsEditing(true)}
+          onPointerDown={(e) => {
+            // Prevent ReactFlow node drag when selecting text
+            e.stopPropagation()
+          }}
           className={`nodrag cursor-text whitespace-pre-wrap select-text leading-relaxed ${textColorClass} ${fontSizeClass} text-${align}`}
           style={{ fontFamily }}
         >

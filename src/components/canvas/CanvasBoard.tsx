@@ -1608,6 +1608,7 @@ function CanvasBoardInner({
           style: { stroke: '#3b82f6', strokeWidth: 2 }
         }}
         proOptions={{ hideAttribution: true }}
+        nodeDragThreshold={8}
         panOnDrag={activeTool === 'pan' ? true : !isDrawingTool}
         nodesDraggable={activeTool !== 'pan' && !isDrawingTool}
         selectionOnDrag={activeTool === 'select'}

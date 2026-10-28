@@ -145,6 +145,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
             setTitle(e.target.value)
             save({ title: e.target.value, content: e.target.value })
           }}
+          onPointerDown={(e) => e.stopPropagation()}
           className="nodrag nowheel font-serif font-bold text-base text-center bg-transparent border-none outline-none w-full text-white placeholder-white/80"
           placeholder="Texto del banner..."
         />
@@ -187,6 +188,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
               setTitle(e.target.value)
               save({ title: e.target.value })
             }}
+            onPointerDown={(e) => e.stopPropagation()}
             placeholder="Título..."
             className={`nodrag nowheel font-serif font-bold text-sm bg-transparent border-none outline-none w-full ${colorScheme.text}`}
           />
@@ -203,11 +205,15 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
               setContent(e.target.value)
               save({ content: e.target.value })
             }}
+            onPointerDown={(e) => e.stopPropagation()}
             rows={4}
             className={`nodrag nowheel w-full bg-transparent border-none outline-none resize-none text-xs leading-relaxed italic ${colorScheme.text}`}
           />
           {quoteAuthor && (
-            <div className="not-italic mt-1.5 text-[11px] font-medium text-neutral-500 dark:text-neutral-400 select-text nodrag">
+            <div
+              onPointerDown={(e) => e.stopPropagation()}
+              className="not-italic mt-1.5 text-[11px] font-medium text-neutral-500 dark:text-neutral-400 select-text nodrag"
+            >
               {quoteAuthor}
             </div>
           )}
@@ -217,6 +223,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
         <div className="text-xs leading-relaxed">
           {data.hasHtmlHighlight ? (
             <div
+              onPointerDown={(e) => e.stopPropagation()}
               dangerouslySetInnerHTML={{ __html: content }}
               className={`nodrag select-text leading-relaxed ${colorScheme.text}`}
             />
@@ -227,6 +234,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
                 setContent(e.target.value)
                 save({ content: e.target.value })
               }}
+              onPointerDown={(e) => e.stopPropagation()}
               rows={content.length > 120 ? 5 : 3}
               placeholder="Escribe tu nota aquí..."
               className={`nodrag nowheel w-full bg-transparent border-none outline-none resize-none text-xs leading-relaxed ${colorScheme.text}`}

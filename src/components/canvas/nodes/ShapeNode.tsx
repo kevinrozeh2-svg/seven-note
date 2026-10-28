@@ -279,6 +279,7 @@ export const ShapeNode = memo(({ id, data, selected }: any) => {
               save({ content })
             }
           }}
+          onPointerDown={(e) => e.stopPropagation()}
           placeholder="Escribir..."
           className="nodrag nowheel w-full text-center bg-transparent border-none outline-none resize-none text-xs font-medium text-zinc-100 placeholder:text-zinc-500 leading-snug select-text"
           rows={3}
@@ -289,6 +290,7 @@ export const ShapeNode = memo(({ id, data, selected }: any) => {
     return (
       <div
         onDoubleClick={() => setIsEditing(true)}
+        onPointerDown={(e) => e.stopPropagation()}
         className="nodrag cursor-text text-center text-xs font-medium select-text w-full break-words leading-snug"
       >
         {content ? (
