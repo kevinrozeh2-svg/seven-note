@@ -10,6 +10,47 @@ import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
 import { areNodePropsEqual } from './nodeUtils'
 
+export interface FontOption {
+  id: string
+  name: string
+  category: string
+  family: string
+}
+
+export const FONT_FAMILIES: FontOption[] = [
+  // Sans-Serif
+  { id: 'sans', name: 'Inter (Default)', category: 'Sans-Serif', family: 'Inter, system-ui, sans-serif' },
+  { id: 'roboto', name: 'Roboto', category: 'Sans-Serif', family: 'Roboto, sans-serif' },
+  { id: 'poppins', name: 'Poppins', category: 'Sans-Serif', family: 'Poppins, sans-serif' },
+  { id: 'montserrat', name: 'Montserrat', category: 'Sans-Serif', family: 'Montserrat, sans-serif' },
+  { id: 'opensans', name: 'Open Sans', category: 'Sans-Serif', family: '"Open Sans", sans-serif' },
+  { id: 'raleway', name: 'Raleway', category: 'Sans-Serif', family: 'Raleway, sans-serif' },
+  { id: 'spacegrotesk', name: 'Space Grotesk', category: 'Sans-Serif', family: '"Space Grotesk", sans-serif' },
+
+  // Serif
+  { id: 'playfair', name: 'Playfair Display', category: 'Serif', family: '"Playfair Display", serif' },
+  { id: 'merriweather', name: 'Merriweather', category: 'Serif', family: 'Merriweather, serif' },
+  { id: 'lora', name: 'Lora', category: 'Serif', family: 'Lora, serif' },
+  { id: 'cinzel', name: 'Cinzel (Elegante)', category: 'Serif', family: 'Cinzel, serif' },
+
+  // Handwriting & Script
+  { id: 'kalam', name: 'Kalam (Manuscrita)', category: 'Handwriting', family: 'Kalam, cursive' },
+  { id: 'caveat', name: 'Caveat (Firma)', category: 'Handwriting', family: 'Caveat, cursive' },
+  { id: 'dancing', name: 'Dancing Script', category: 'Handwriting', family: '"Dancing Script", cursive' },
+  { id: 'pacifico', name: 'Pacifico (Pincel)', category: 'Handwriting', family: 'Pacifico, cursive' },
+
+  // Monospace & Tech
+  { id: 'sourcecode', name: 'Source Code Pro', category: 'Monospace', family: '"Source Code Pro", monospace' },
+  { id: 'fira', name: 'Fira Code', category: 'Monospace', family: '"Fira Code", monospace' },
+  { id: 'robotomono', name: 'Roboto Mono', category: 'Monospace', family: '"Roboto Mono", monospace' },
+
+  // Display & Impact
+  { id: 'oswald', name: 'Oswald (Condensada)', category: 'Display', family: 'Oswald, sans-serif' },
+  { id: 'georgia', name: 'Georgia', category: 'Classic', family: 'Georgia, serif' },
+  { id: 'times', name: 'Times New Roman', category: 'Classic', family: '"Times New Roman", serif' },
+  { id: 'courier', name: 'Courier New', category: 'Classic', family: '"Courier New", monospace' }
+]
+
 const TEXT_COLORS: Record<string, string> = {
   white: 'text-[var(--app-text-primary)]',
   slate: 'text-[var(--app-text-secondary)]',
@@ -30,17 +71,33 @@ const FONT_SIZES: Record<string, { class: string; label: string }> = {
 export const TextNode = memo(({ id, data, selected }: any) => {
   const [content, setContent] = useState(data.content || '')
   const [color, setColor] = useState(data.color || 'white')
+  const [fontFamily, setFontFamily] = useState(data.fontFamily || 'Inter, system-ui, sans-serif')
   const [size, setSize] = useState<'sm' | 'base' | 'lg' | 'xl'>(data.fontSize || 'base')
   const [align, setAlign] = useState<'left' | 'center' | 'right'>(data.textAlign || 'left')
   const [isEditing, setIsEditing] = useState(false)
+  const [showFontMenu, setShowFontMenu] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const fontMenuRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (data.content !== undefined) setContent(data.content)
     if (data.color !== undefined) setColor(data.color)
     if (data.fontSize) setSize(data.fontSize)
     if (data.textAlign) setAlign(data.textAlign)
-  }, [data.content, data.color, data.fontSize, data.textAlign])
+    if (data.fontFamily) setFontFamily(data.fontFamily)
+  }, [data.content, data.color, data.fontSize, data.textAlign, data.fontFamily])
+
+  // Close font menu on outside click
+  useEffect(() => {
+    if (!showFontMenu) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (fontMenuRef.current && !fontMenuRef.current.contains(e.target as Node)) {
+        setShowFontMenu(false)
+      }
+    }
+    window.addEventListener('mousedown', handleClickOutside)
+    return () => window.removeEventListener('mousedown', handleClickOutside)
+  }, [showFontMenu])
 
   useEffect(() => {
     if (isEditing && textareaRef.current) {
@@ -78,12 +135,13 @@ export const TextNode = memo(({ id, data, selected }: any) => {
     }
   }
 
+  const currentFont = FONT_FAMILIES.find((f) => f.family === fontFamily) || FONT_FAMILIES[0]
   const textColorClass = TEXT_COLORS[color] || TEXT_COLORS.white
   const fontSizeClass = FONT_SIZES[size]?.class || FONT_SIZES.base.class
 
   return (
     <div
-      className={`relative min-w-[120px] max-w-[400px] p-2 rounded-lg transition group ${
+      className={`relative min-w-[120px] max-w-[440px] p-2 rounded-lg transition group ${
         selected
           ? 'ring-1 ring-[var(--app-accent)] bg-[var(--app-hover)]'
           : 'hover:bg-[var(--app-hover)]'
@@ -118,8 +176,74 @@ export const TextNode = memo(({ id, data, selected }: any) => {
       {/* Floating Toolbar when selected */}
       {selected && (
         <div
-          className="absolute -top-10 left-0 z-30 flex items-center gap-1 p-1 rounded-lg border shadow-md bg-[var(--app-bg-overlay)] border-[var(--app-border)] text-[var(--app-text-primary)]"
+          className="absolute -top-11 left-0 z-40 flex items-center gap-1.5 p-1 rounded-xl border shadow-lg bg-[var(--app-bg-overlay)] border-[var(--app-border)] text-[var(--app-text-primary)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
         >
+          {/* Typography Picker Button */}
+          <div className="relative" ref={fontMenuRef}>
+            <button
+              onClick={() => setShowFontMenu(!showFontMenu)}
+              className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-xs font-medium hover:bg-[var(--affine-hover-color)] transition border border-[var(--affine-border-color)] max-w-[130px]"
+              title="Elegir tipografía"
+            >
+              <span className="truncate" style={{ fontFamily: currentFont.family }}>
+                {currentFont.name.split(' ')[0]}
+              </span>
+              <span className="text-[9px] text-[var(--affine-text-secondary-color)]">▼</span>
+            </button>
+
+            {/* Typography Popover Menu */}
+            {showFontMenu && (
+              <div
+                className="absolute top-8 left-0 z-50 w-56 max-h-64 overflow-y-auto p-1.5 rounded-xl border shadow-2xl bg-[var(--app-bg-overlay)] border-[var(--app-border)] space-y-1 backdrop-blur-md"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="px-2 py-1 text-[10px] uppercase font-bold text-[var(--affine-text-secondary-color)] tracking-wider">
+                  Tipografías ({FONT_FAMILIES.length})
+                </div>
+
+                {/* Grouped fonts */}
+                {['Sans-Serif', 'Serif', 'Handwriting', 'Monospace', 'Display', 'Classic'].map((cat) => {
+                  const fonts = FONT_FAMILIES.filter((f) => f.category === cat)
+                  if (fonts.length === 0) return null
+                  return (
+                    <div key={cat} className="space-y-0.5">
+                      <div className="px-2 pt-1.5 pb-0.5 text-[9px] font-semibold text-[var(--affine-text-secondary-color)] opacity-70">
+                        {cat}
+                      </div>
+                      {fonts.map((f) => {
+                        const isSelected = fontFamily === f.family
+                        return (
+                          <button
+                            key={f.id}
+                            onClick={() => {
+                              setFontFamily(f.family)
+                              save({ fontFamily: f.family })
+                              setShowFontMenu(false)
+                            }}
+                            className={`w-full text-left px-2 py-1.5 rounded-lg text-xs flex items-center justify-between transition ${
+                              isSelected
+                                ? 'bg-[#1e96eb] text-white font-semibold'
+                                : 'hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)]'
+                            }`}
+                          >
+                            <span style={{ fontFamily: f.family }}>{f.name}</span>
+                            <span className="text-[10px] opacity-60 ml-2" style={{ fontFamily: f.family }}>
+                              Aa
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          <div
+            className="w-[1px] h-3.5 bg-[var(--affine-border-color)]"
+          />
+
           {/* Size buttons */}
           {(['sm', 'base', 'lg', 'xl'] as const).map((s) => (
             <button
@@ -139,8 +263,7 @@ export const TextNode = memo(({ id, data, selected }: any) => {
           ))}
 
           <div
-            className="w-[1px] h-3.5 mx-0.5"
-            style={{ backgroundColor: 'var(--affine-border-color)' }}
+            className="w-[1px] h-3.5 bg-[var(--affine-border-color)]"
           />
 
           {/* Alignment */}
@@ -150,7 +273,7 @@ export const TextNode = memo(({ id, data, selected }: any) => {
               setAlign(nextAlign)
               save({ textAlign: nextAlign })
             }}
-            className="p-1 rounded transition"
+            className="p-1 rounded transition hover:bg-[var(--affine-hover-color)]"
             style={{ color: 'var(--affine-text-secondary-color)' }}
             title="Alineación de texto"
           >
@@ -164,8 +287,7 @@ export const TextNode = memo(({ id, data, selected }: any) => {
           </button>
 
           <div
-            className="w-[1px] h-3.5 mx-0.5"
-            style={{ backgroundColor: 'var(--affine-border-color)' }}
+            className="w-[1px] h-3.5 bg-[var(--affine-border-color)]"
           />
 
           {/* Colors */}
@@ -195,8 +317,7 @@ export const TextNode = memo(({ id, data, selected }: any) => {
           ))}
 
           <div
-            className="w-[1px] h-3.5 mx-0.5"
-            style={{ backgroundColor: 'var(--affine-border-color)' }}
+            className="w-[1px] h-3.5 bg-[var(--affine-border-color)]"
           />
 
           {/* Delete */}
@@ -228,16 +349,18 @@ export const TextNode = memo(({ id, data, selected }: any) => {
             }
           }}
           placeholder="Escribe texto..."
-          className={`w-full bg-transparent border-none outline-none resize-none leading-relaxed font-sans ${textColorClass} ${fontSizeClass} text-${align}`}
+          className={`nodrag nowheel w-full bg-transparent border-none outline-none resize-none leading-relaxed select-text ${textColorClass} ${fontSizeClass} text-${align}`}
+          style={{ fontFamily }}
           rows={1}
         />
       ) : (
         <div
           onDoubleClick={() => setIsEditing(true)}
-          className={`cursor-text whitespace-pre-wrap select-none leading-relaxed font-sans ${textColorClass} ${fontSizeClass} text-${align}`}
+          className={`nodrag cursor-text whitespace-pre-wrap select-text leading-relaxed ${textColorClass} ${fontSizeClass} text-${align}`}
+          style={{ fontFamily }}
         >
           {content || (
-            <span className="italic text-xs opacity-60">Doble clic para escribir texto</span>
+            <span className="italic text-xs opacity-60 select-none">Doble clic para escribir texto</span>
           )}
         </div>
       )}

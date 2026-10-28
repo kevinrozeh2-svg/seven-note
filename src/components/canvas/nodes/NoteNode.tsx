@@ -145,7 +145,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
             setTitle(e.target.value)
             save({ title: e.target.value, content: e.target.value })
           }}
-          className="font-serif font-bold text-base text-center bg-transparent border-none outline-none w-full text-white placeholder-white/80"
+          className="nodrag nowheel font-serif font-bold text-base text-center bg-transparent border-none outline-none w-full text-white placeholder-white/80"
           placeholder="Texto del banner..."
         />
       </div>
@@ -188,7 +188,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
               save({ title: e.target.value })
             }}
             placeholder="Título..."
-            className={`font-serif font-bold text-sm bg-transparent border-none outline-none w-full ${colorScheme.text}`}
+            className={`nodrag nowheel font-serif font-bold text-sm bg-transparent border-none outline-none w-full ${colorScheme.text}`}
           />
         </div>
       )}
@@ -204,10 +204,10 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
               save({ content: e.target.value })
             }}
             rows={4}
-            className={`w-full bg-transparent border-none outline-none resize-none text-xs leading-relaxed italic ${colorScheme.text}`}
+            className={`nodrag nowheel w-full bg-transparent border-none outline-none resize-none text-xs leading-relaxed italic ${colorScheme.text}`}
           />
           {quoteAuthor && (
-            <div className="not-italic mt-1.5 text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
+            <div className="not-italic mt-1.5 text-[11px] font-medium text-neutral-500 dark:text-neutral-400 select-text nodrag">
               {quoteAuthor}
             </div>
           )}
@@ -218,7 +218,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
           {data.hasHtmlHighlight ? (
             <div
               dangerouslySetInnerHTML={{ __html: content }}
-              className={`leading-relaxed ${colorScheme.text}`}
+              className={`nodrag select-text leading-relaxed ${colorScheme.text}`}
             />
           ) : (
             <textarea
@@ -229,7 +229,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
               }}
               rows={content.length > 120 ? 5 : 3}
               placeholder="Escribe tu nota aquí..."
-              className={`w-full bg-transparent border-none outline-none resize-none text-xs leading-relaxed ${colorScheme.text}`}
+              className={`nodrag nowheel w-full bg-transparent border-none outline-none resize-none text-xs leading-relaxed ${colorScheme.text}`}
             />
           )}
         </div>

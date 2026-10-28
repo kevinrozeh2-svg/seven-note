@@ -280,7 +280,7 @@ export const ShapeNode = memo(({ id, data, selected }: any) => {
             }
           }}
           placeholder="Escribir..."
-          className="w-full text-center bg-transparent border-none outline-none resize-none text-xs font-medium text-zinc-100 placeholder:text-zinc-500 leading-snug"
+          className="nodrag nowheel w-full text-center bg-transparent border-none outline-none resize-none text-xs font-medium text-zinc-100 placeholder:text-zinc-500 leading-snug select-text"
           rows={3}
         />
       )
@@ -289,12 +289,12 @@ export const ShapeNode = memo(({ id, data, selected }: any) => {
     return (
       <div
         onDoubleClick={() => setIsEditing(true)}
-        className="cursor-text text-center text-xs font-medium select-none w-full break-words leading-snug"
+        className="nodrag cursor-text text-center text-xs font-medium select-text w-full break-words leading-snug"
       >
         {content ? (
           <span className={colorStyle.text}>{content}</span>
         ) : (
-          <span className="text-zinc-500 italic text-[11px]">Doble clic para editar texto</span>
+          <span className="text-zinc-500 italic text-[11px] select-none">Doble clic para editar texto</span>
         )}
       </div>
     )

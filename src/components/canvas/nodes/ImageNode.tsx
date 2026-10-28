@@ -148,8 +148,8 @@ export const ImageNode = memo(({ id, data, selected }: any) => {
           className="hidden"
         />
 
-        {/* Pure Image with clean subtle shadow */}
-        <div className={`overflow-hidden rounded-xl transition-all ${selected ? 'ring-2 ring-[#1e96eb] ring-offset-2 ring-offset-transparent' : 'shadow-md hover:shadow-lg'}`}>
+        {/* Pure Image completely flat without shadow */}
+        <div className={`overflow-hidden rounded-xl transition-all ${selected ? 'ring-2 ring-[#1e96eb] ring-offset-2 ring-offset-transparent' : ''}`}>
           <img
             src={imageUrl}
             alt={caption || 'Foto'}
