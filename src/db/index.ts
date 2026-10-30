@@ -12,6 +12,8 @@ export interface SpaceItem {
   color?: string
   createdAt: number
   updatedAt: number
+  isDeleted?: boolean
+  syncStatus?: SyncStatus
 }
 
 export interface CustomPropertyItem {
@@ -112,6 +114,10 @@ export interface CanvasNodeData {
   // Frame specific properties
   frameIndex?: number
   frameTitle?: string
+  frameAspectRatio?: 'free' | '16:9' | '4:3' | '1:1'
+  frameBgStyle?: 'default' | 'dark' | 'gradient' | 'dots' | 'glass'
+  speakerNotes?: string
+  hideHeaderInPresentation?: boolean
 
   // Text specific properties
   textAlign?: 'left' | 'center' | 'right'
@@ -188,6 +194,8 @@ export interface CollectionItem {
   docIds: string[]
   createdAt: number
   updatedAt: number
+  isDeleted?: boolean
+  syncStatus?: SyncStatus
 }
 
 export interface TagItem {
@@ -196,6 +204,8 @@ export interface TagItem {
   name: string
   color: string
   createdAt: number
+  isDeleted?: boolean
+  syncStatus?: SyncStatus
 }
 
 export class SevenNoteDatabase extends Dexie {
@@ -235,6 +245,39 @@ export class SevenNoteDatabase extends Dexie {
       collections: 'id, spaceId, name, createdAt, updatedAt',
       tags: 'id, spaceId, name, color, createdAt'
     })
+    this.version(4).stores({
+      workspaces: 'id, parentId, spaceId, updatedAt, isDeleted, isFavorite, syncStatus',
+      canvasNodes: 'id, workspaceId, type, updatedAt, isDeleted, syncStatus',
+      canvasEdges: 'id, workspaceId, source, target, updatedAt, isDeleted, syncStatus',
+      offlineAssets: 'id, workspaceId, createdAt, syncStatus',
+      syncLogs: 'id, timestamp, status',
+      spaces: 'id, name, createdAt, updatedAt, syncStatus',
+      collections: 'id, spaceId, name, createdAt, updatedAt, syncStatus',
+      tags: 'id, spaceId, name, color, createdAt, syncStatus'
+    })
+
+    // Auto-hook: Mark any newly created or modified items as 'pending'
+    const setupAutoSyncHooks = (table: Table<any, string>) => {
+      table.hook('creating', (_primKey, obj) => {
+        if (!obj.syncStatus) {
+          obj.syncStatus = 'pending'
+        }
+      })
+      table.hook('updating', (modifications: Record<string, any>, _primKey, _obj) => {
+        // If not explicitly setting to synced, mark as pending
+        if ((modifications as any)?.syncStatus !== 'synced') {
+          return { ...modifications, syncStatus: 'pending' }
+        }
+        return undefined
+      })
+    }
+
+    setupAutoSyncHooks(this.workspaces)
+    setupAutoSyncHooks(this.canvasNodes)
+    setupAutoSyncHooks(this.canvasEdges)
+    setupAutoSyncHooks(this.spaces)
+    setupAutoSyncHooks(this.collections)
+    setupAutoSyncHooks(this.tags)
   }
 }
 
@@ -250,7 +293,8 @@ export async function seedInitialData() {
       icon: '⚡',
       color: '#1e96eb',
       createdAt: Date.now(),
-      updatedAt: Date.now()
+      updatedAt: Date.now(),
+      syncStatus: 'pending'
     })
   }
 
@@ -492,7 +536,8 @@ export async function createSpace(
     icon: icon || '💼',
     color: color || '#1e96eb',
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
+    syncStatus: 'pending'
   }
 
   await db.spaces.add(space)
@@ -531,20 +576,18 @@ export async function createSpace(
 export async function updateSpace(id: string, updates: Partial<SpaceItem>): Promise<void> {
   await db.spaces.update(id, {
     ...updates,
-    updatedAt: Date.now()
+    updatedAt: Date.now(),
+    syncStatus: 'pending'
   })
 }
 
 export async function deleteSpace(id: string): Promise<void> {
-  // Delete all canvas nodes and edges belonging to pages in this space
   const pages = await db.workspaces.where('spaceId').equals(id).toArray()
   for (const page of pages) {
     await db.canvasNodes.where('workspaceId').equals(page.id).delete()
     await db.canvasEdges.where('workspaceId').equals(page.id).delete()
   }
-  // Delete all pages in this space
   await db.workspaces.where('spaceId').equals(id).delete()
-  // Delete the space itself
   await db.spaces.delete(id)
 }
 
@@ -564,7 +607,8 @@ export async function createCollection(
     color,
     docIds: [],
     createdAt: now,
-    updatedAt: now
+    updatedAt: now,
+    syncStatus: 'pending'
   }
   await db.collections.add(collection)
   return collection
@@ -573,7 +617,8 @@ export async function createCollection(
 export async function updateCollection(id: string, updates: Partial<CollectionItem>): Promise<void> {
   await db.collections.update(id, {
     ...updates,
-    updatedAt: Date.now()
+    updatedAt: Date.now(),
+    syncStatus: 'pending'
   })
 }
 
@@ -588,7 +633,8 @@ export async function toggleDocInCollection(collectionId: string, docId: string)
   const newDocIds = exists ? col.docIds.filter((id) => id !== docId) : [...col.docIds, docId]
   await db.collections.update(collectionId, {
     docIds: newDocIds,
-    updatedAt: Date.now()
+    updatedAt: Date.now(),
+    syncStatus: 'pending'
   })
 }
 
@@ -616,39 +662,39 @@ export async function getOrCreateTag(spaceId: string, tagName: string, colorHex?
     spaceId,
     name: cleanName,
     color,
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    syncStatus: 'pending'
   }
   await db.tags.add(tag)
   return tag
 }
 
 export async function updateTagColor(id: string, color: string): Promise<void> {
-  await db.tags.update(id, { color })
+  await db.tags.update(id, { color, syncStatus: 'pending' })
 }
 
 export async function renameTag(id: string, spaceId: string, oldName: string, newName: string): Promise<void> {
   const cleanNew = newName.trim()
   if (!cleanNew) return
-  await db.tags.update(id, { name: cleanNew })
+  await db.tags.update(id, { name: cleanNew, syncStatus: 'pending' })
 
   // Update in all workspaces
   const docs = await db.workspaces.where('spaceId').equals(spaceId).toArray()
   for (const doc of docs) {
     if (doc.tags && doc.tags.includes(oldName)) {
       const updatedTags = doc.tags.map((t) => (t === oldName ? cleanNew : t))
-      await db.workspaces.update(doc.id, { tags: updatedTags, updatedAt: Date.now() })
+      await db.workspaces.update(doc.id, { tags: updatedTags, updatedAt: Date.now(), syncStatus: 'pending' })
     }
   }
 }
 
 export async function deleteTag(id: string, spaceId: string, tagName: string): Promise<void> {
   await db.tags.delete(id)
-  // Also remove tag from workspaces in this space
   const docs = await db.workspaces.where('spaceId').equals(spaceId).toArray()
   for (const doc of docs) {
     if (doc.tags && doc.tags.includes(tagName)) {
       const newTags = doc.tags.filter((t) => t !== tagName)
-      await db.workspaces.update(doc.id, { tags: newTags, updatedAt: Date.now() })
+      await db.workspaces.update(doc.id, { tags: newTags, updatedAt: Date.now(), syncStatus: 'pending' })
     }
   }
 }

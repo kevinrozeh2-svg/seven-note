@@ -14,6 +14,8 @@ export interface WorkbenchTab {
   id: string
   workspaceId: string
   pinned?: boolean
+  viewType?: 'doc' | 'all-docs' | 'knowledge-graph' | 'trash' | 'templates' | 'collections' | 'tags'
+  title?: string
 }
 
 interface WorkbenchTabsProps {
@@ -64,9 +66,29 @@ export function WorkbenchTabs({
         {tabs.map((tab) => {
           const ws = workspaces.find((w) => w.id === tab.workspaceId)
           const isActive = tab.id === activeTabId
-          const title = ws?.title || 'Untitled'
-          const icon = ws?.icon
+          let title = tab.title || ws?.title || 'Untitled'
+          let icon = ws?.icon
           const viewMode = ws?.viewMode || 'doc'
+
+          if (tab.viewType === 'all-docs') {
+            title = 'Todos los documentos'
+            icon = '📑'
+          } else if (tab.viewType === 'knowledge-graph') {
+            title = 'Grafo de Conocimiento'
+            icon = '🌐'
+          } else if (tab.viewType === 'trash') {
+            title = 'Papelera'
+            icon = '🗑️'
+          } else if (tab.viewType === 'templates') {
+            title = 'Plantillas'
+            icon = '📋'
+          } else if (tab.viewType === 'collections') {
+            title = 'Colecciones'
+            icon = '📁'
+          } else if (tab.viewType === 'tags') {
+            title = 'Etiquetas'
+            icon = '🏷️'
+          }
 
           if (tab.pinned) {
             return (

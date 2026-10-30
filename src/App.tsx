@@ -4,7 +4,6 @@ import {
   PageIcon,
   EdgelessIcon,
   SidebarIcon,
-  RightSidebarIcon,
   SplitViewIcon,
   FavoriteIcon,
   FavoritedIcon,
@@ -12,15 +11,9 @@ import {
   MoreHorizontalIcon,
   PresentationIcon,
   ShareIcon,
-  AiOutlineIcon,
-  TocIcon,
-  JournalIcon,
-  PropertyIcon,
   CopyIcon,
   KeyboardIcon,
   DeleteIcon,
-  SunPanelIcon,
-  MoonPanelIcon,
   SearchIcon,
   DownloadIcon
 } from '@blocksuite/icons/rc'
@@ -55,7 +48,13 @@ import { KnowledgeGraphModal } from './components/modals/KnowledgeGraphModal'
 import { FindInPage } from './components/search/FindInPage'
 import { WorkbenchTabs, type WorkbenchTab } from './components/tabs/WorkbenchTabs'
 import { PresentationViewer } from './components/presentation/PresentationViewer'
-import { type AppTemplate, APP_TEMPLATES } from './lib/templates'
+import { AllDocsPage } from './components/views/AllDocsPage'
+import { KnowledgeGraphPage } from './components/views/KnowledgeGraphPage'
+import { TrashPage } from './components/views/TrashPage'
+import { TemplatesPage } from './components/views/TemplatesPage'
+import { CollectionsPage } from './components/views/CollectionsPage'
+import { TagsPage } from './components/views/TagsPage'
+import { type AppTemplate } from './lib/templates'
 import {
   exportDocumentAsMarkdown,
   exportDocumentAsHtml,
@@ -118,9 +117,7 @@ export default function App() {
   const [selectedTagForModal, setSelectedTagForModal] = useState<string | null>(null)
   const [isKnowledgeGraphOpen, setIsKnowledgeGraphOpen] = useState(false)
   const [isFindInPageOpen, setIsFindInPageOpen] = useState(false)
-  const [isExportDropdownOpen, setIsExportDropdownOpen] = useState(false)
-  const [isViewDropdownOpen, setIsViewDropdownOpen] = useState(false)
-  const [isMilanotePresetsOpen, setIsMilanotePresetsOpen] = useState(false)
+  const [activeDropdown, setActiveDropdown] = useState<'info' | 'more' | 'export' | null>(null)
 
   // Workbench tabs state
   const [tabs, setTabs] = useState<WorkbenchTab[]>(() => {
@@ -144,7 +141,7 @@ export default function App() {
   const selectWorkspaceWithTab = (wsId: string) => {
     setCurrentWorkspaceId(wsId)
     setTabs((prev) => {
-      const existing = prev.find((t) => t.workspaceId === wsId)
+      const existing = prev.find((t) => t.workspaceId === wsId && (!t.viewType || t.viewType === 'doc'))
       if (existing) {
         setActiveTabId(existing.id)
         return prev
@@ -152,6 +149,29 @@ export default function App() {
       const newTab: WorkbenchTab = {
         id: `tab-${crypto.randomUUID()}`,
         workspaceId: wsId,
+        viewType: 'doc',
+        pinned: false
+      }
+      setActiveTabId(newTab.id)
+      return [...prev, newTab]
+    })
+  }
+
+  const openSpecialViewTab = (
+    viewType: 'all-docs' | 'knowledge-graph' | 'trash' | 'templates' | 'collections' | 'tags',
+    title: string
+  ) => {
+    setTabs((prev) => {
+      const existing = prev.find((t) => t.viewType === viewType)
+      if (existing) {
+        setActiveTabId(existing.id)
+        return prev
+      }
+      const newTab: WorkbenchTab = {
+        id: `tab-${viewType}`,
+        workspaceId: currentWorkspaceId || '',
+        viewType,
+        title,
         pinned: false
       }
       setActiveTabId(newTab.id)
@@ -278,11 +298,15 @@ export default function App() {
     toast.success('Pestaña duplicada')
   }
 
-  // Top header popovers
-  const [isInfoOpen, setIsInfoOpen] = useState(false)
-  const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false)
   const [copiedLink, setCopiedLink] = useState(false)
   const [isEditingHeaderTitle, setIsEditingHeaderTitle] = useState(false)
+
+  // Close menus on outside click
+  useEffect(() => {
+    const handleCloseMenus = () => setActiveDropdown(null)
+    window.addEventListener('click', handleCloseMenus)
+    return () => window.removeEventListener('click', handleCloseMenus)
+  }, [])
 
   // Sync engine status
   const [syncStatus, setSyncStatus] = useState<SyncEngineStatus>(syncEngine.getStatus())
@@ -589,89 +613,6 @@ export default function App() {
     syncEngine.scheduleSync(1000)
   }
 
-  // One-click loader for Milanote authentic screenshot boards
-  const handleLoadMilanotePreset = async (presetId: 'milanote-inspiration' | 'milanote-research' | 'milanote-project-plan') => {
-    const template = APP_TEMPLATES.find((t) => t.id === presetId)
-    if (!template) return
-
-    const existing = workspaces.find((w) => w.templateName === template.title || w.title === template.title)
-    if (existing) {
-      setCurrentWorkspaceId(existing.id)
-      setViewMode('canvas')
-      toast.success(`Cargado: ${template.title}`)
-      return
-    }
-
-    const newWsId = crypto.randomUUID()
-    const now = Date.now()
-    const cleanTitle = template.title.replace(' (Milanote)', '').replace(' (Milanote Dark)', '')
-    await db.workspaces.add({
-      id: newWsId,
-      parentId: null,
-      spaceId: currentSpaceId,
-      title: cleanTitle,
-      icon: template.icon,
-      color: presetId === 'milanote-project-plan' ? '#8b5cf6' : '#1e96eb',
-      viewMode: 'canvas',
-      docContent: `<h1>${cleanTitle}</h1>`,
-      createdAt: now,
-      updatedAt: now,
-      isFavorite: false,
-      isDeleted: false,
-      syncStatus: 'pending',
-      templateName: template.title
-    })
-
-    if (template.nodes) {
-      const createdNodeIds: string[] = []
-      for (const nodeDef of template.nodes) {
-        const newNodeId = crypto.randomUUID()
-        createdNodeIds.push(newNodeId)
-        await db.canvasNodes.add({
-          id: newNodeId,
-          workspaceId: newWsId,
-          type: nodeDef.type,
-          positionX: nodeDef.positionX,
-          positionY: nodeDef.positionY,
-          data: {
-            ...nodeDef.data,
-            workspaceId: newWsId
-          },
-          createdAt: now,
-          updatedAt: now,
-          isDeleted: false,
-          syncStatus: 'pending'
-        })
-      }
-
-      if (template.edges) {
-        for (const edgeDef of template.edges) {
-          const sourceId = createdNodeIds[edgeDef.sourceIndex]
-          const targetId = createdNodeIds[edgeDef.targetIndex]
-          if (sourceId && targetId) {
-            await db.canvasEdges.add({
-              id: crypto.randomUUID(),
-              workspaceId: newWsId,
-              source: sourceId,
-              target: targetId,
-              label: edgeDef.label || '',
-              animated: true,
-              color: edgeDef.color || '#ec4899',
-              createdAt: now,
-              updatedAt: now,
-              isDeleted: false,
-              syncStatus: 'pending'
-            })
-          }
-        }
-      }
-    }
-
-    setCurrentWorkspaceId(newWsId)
-    setViewMode('canvas')
-    toast.success(`Tablero de Milanote "${cleanTitle}" creado con éxito`)
-  }
-
   // Apply template (Supports both Edgeless Canvas and Document templates)
   const handleApplyTemplate = async (template: AppTemplate) => {
     if (!currentWorkspace) return
@@ -837,6 +778,7 @@ export default function App() {
   }
 
   const stats = getStats()
+  const activeTab = tabs.find((t) => t.id === activeTabId)
   const activeViewMode: ViewMode = currentWorkspace?.viewMode || 'canvas'
 
   return (
@@ -856,19 +798,19 @@ export default function App() {
           onToggleSidebar={() => setSidebarOpen(false)}
           onOpenSettings={() => setIsSettingsOpen(true)}
           onOpenSearch={() => setIsSearchOpen(true)}
-          onOpenAllDocs={() => setIsAllDocsOpen(true)}
+          onOpenAllDocs={() => openSpecialViewTab('all-docs', 'Todos los documentos')}
           onOpenDailyJournal={handleOpenDailyJournal}
           onSelectJournalDate={handleSelectJournalDate}
-          onOpenTrash={() => setIsTrashOpen(true)}
+          onOpenTrash={() => openSpecialViewTab('trash', 'Papelera')}
           onOpenImport={() => setIsImportOpen(true)}
-          onOpenTemplates={() => setIsTemplatesOpen(true)}
+          onOpenTemplates={() => openSpecialViewTab('templates', 'Plantillas')}
           onOpenShortcuts={() => setIsShortcutsOpen(true)}
           onOpenTags={(tag) => {
             setSelectedTagForModal(tag || null)
-            setIsTagsOpen(true)
+            openSpecialViewTab('tags', 'Etiquetas')
           }}
-          onOpenCollections={() => setIsCollectionsOpen(true)}
-          onOpenKnowledgeGraph={() => setIsKnowledgeGraphOpen(true)}
+          onOpenCollections={() => openSpecialViewTab('collections', 'Colecciones')}
+          onOpenKnowledgeGraph={() => openSpecialViewTab('knowledge-graph', 'Grafo de Conocimiento')}
           syncStatus={syncStatus}
           darkMode={darkMode}
           onToggleDarkMode={() => setDarkMode(!darkMode)}
@@ -892,7 +834,7 @@ export default function App() {
           />
         )}
         {/* Top Header Bar (Notion & Milanote Clean Human-Crafted Aesthetic) */}
-        {!isPresentationMode && (
+        {!isPresentationMode && (!activeTab || !activeTab.viewType || activeTab.viewType === 'doc') && (
           <header className="h-11 border-b border-[var(--app-border)] bg-[var(--app-bg-primary)] px-3 flex items-center justify-between shrink-0 z-20 select-none text-sm transition-colors duration-150">
             {/* Left section: Sidebar toggle, Mode Switcher [ Page | Edgeless ], Title, Favorite, Info, More */}
             <div className="flex items-center gap-2 min-w-0">
@@ -931,68 +873,6 @@ export default function App() {
                   <EdgelessIcon className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline font-medium">Tablero</span>
                 </button>
-              </div>
-
-              {/* Milanote Boards Preset Switcher */}
-              <div className="relative">
-                <button
-                  onClick={() => setIsMilanotePresetsOpen(!isMilanotePresetsOpen)}
-                  className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-800 dark:text-neutral-200 border border-neutral-200/80 dark:border-neutral-700 transition"
-                  title="Cargar tableros de ejemplo de Milanote"
-                >
-                  <span>Tableros Milanote</span>
-                  <span className="text-[10px] opacity-60">⌵</span>
-                </button>
-
-                {isMilanotePresetsOpen && (
-                  <div
-                    className="absolute left-0 top-8 z-50 w-64 bg-white dark:bg-[#252525] border border-neutral-200 dark:border-neutral-700 rounded-xl shadow-xl p-1.5 text-xs text-neutral-800 dark:text-neutral-200 animate-in fade-in zoom-in-95"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="px-2.5 py-1 text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
-                      Modelos de Referencia
-                    </div>
-                    <button
-                      onClick={() => {
-                        handleLoadMilanotePreset('milanote-inspiration')
-                        setIsMilanotePresetsOpen(false)
-                      }}
-                      className="w-full text-left px-2.5 py-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg flex items-center gap-2.5 transition"
-                    >
-                      <span className="text-base">🎨</span>
-                      <div>
-                        <div className="font-bold text-xs">Tablero de inspiración</div>
-                        <div className="text-[10px] text-neutral-400">Modo claro, paletas y collage</div>
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => {
-                        handleLoadMilanotePreset('milanote-research')
-                        setIsMilanotePresetsOpen(false)
-                      }}
-                      className="w-full text-left px-2.5 py-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg flex items-center gap-2.5 transition"
-                    >
-                      <span className="text-base">🔍</span>
-                      <div>
-                        <div className="font-bold text-xs">Investigación</div>
-                        <div className="text-[10px] text-neutral-400">Diseño Danés, audio, Word doc</div>
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => {
-                        handleLoadMilanotePreset('milanote-project-plan')
-                        setIsMilanotePresetsOpen(false)
-                      }}
-                      className="w-full text-left px-2.5 py-2 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg flex items-center gap-2.5 transition"
-                    >
-                      <span className="text-base">🎬</span>
-                      <div>
-                        <div className="font-bold text-xs">Plano del proyecto</div>
-                        <div className="text-[10px] text-neutral-400">Modo oscuro, presupuesto, skater</div>
-                      </div>
-                    </button>
-                  </div>
-                )}
               </div>
 
               {/* Document Icon & Title synced (Inline editable like Notion) */}
@@ -1046,16 +926,19 @@ export default function App() {
               {/* Info Button ⓘ */}
               <div className="relative">
                 <button
-                  onClick={() => setIsInfoOpen(!isInfoOpen)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setActiveDropdown(activeDropdown === 'info' ? null : 'info')
+                  }}
                   className="p-1.5 rounded-md hover:bg-[var(--app-hover)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] transition"
                   title="Información del documento"
                 >
                   <InfoIcon className="w-4.5 h-4.5" />
                 </button>
 
-                {isInfoOpen && (
+                {activeDropdown === 'info' && (
                   <div
-                    className="absolute left-0 top-9 z-40 w-72 bg-[var(--app-bg-overlay)] border border-[var(--app-border)] rounded-lg shadow-[var(--app-shadow-popover)] p-3 text-xs text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 duration-100"
+                    className="absolute left-0 top-9 z-50 w-72 bg-[var(--app-bg-overlay)] border border-[var(--app-border)] rounded-lg shadow-[var(--app-shadow-popover)] p-3 text-xs text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 duration-100"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div className="font-semibold pb-2 border-b border-[var(--app-divider)] mb-2 flex items-center justify-between">
@@ -1087,22 +970,25 @@ export default function App() {
               {/* More options menu `...` */}
               <div className="relative">
                 <button
-                  onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setActiveDropdown(activeDropdown === 'more' ? null : 'more')
+                  }}
                   className="p-1.5 rounded-md hover:bg-[var(--app-hover)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] transition"
                   title="Más acciones"
                 >
                   <MoreHorizontalIcon className="w-4.5 h-4.5" />
                 </button>
 
-                {isMoreMenuOpen && (
+                {activeDropdown === 'more' && (
                   <div
-                    className="absolute left-0 top-10 z-40 w-60 bg-[var(--affine-background-overlay-panel-color)] border border-[var(--affine-border-color)] rounded-xl shadow-[var(--affine-menu-shadow)] py-1.5 text-xs text-[var(--affine-text-primary-color)] animate-in fade-in zoom-in-95 duration-100"
+                    className="absolute left-0 top-10 z-50 w-60 bg-[var(--affine-background-overlay-panel-color)] border border-[var(--affine-border-color)] rounded-xl shadow-[var(--affine-menu-shadow)] py-1.5 text-xs text-[var(--affine-text-primary-color)] animate-in fade-in zoom-in-95 duration-100"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button
                       onClick={() => {
                         setViewMode('doc')
-                        setIsMoreMenuOpen(false)
+                        setActiveDropdown(null)
                       }}
                       className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center gap-2.5 text-sm"
                     >
@@ -1113,7 +999,7 @@ export default function App() {
                     <button
                       onClick={() => {
                         setViewMode('canvas')
-                        setIsMoreMenuOpen(false)
+                        setActiveDropdown(null)
                       }}
                       className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center gap-2.5 text-sm"
                     >
@@ -1124,7 +1010,7 @@ export default function App() {
                     <button
                       onClick={() => {
                         setViewMode(activeViewMode === 'split' ? 'doc' : 'split')
-                        setIsMoreMenuOpen(false)
+                        setActiveDropdown(null)
                       }}
                       className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center gap-2.5 text-sm"
                     >
@@ -1134,8 +1020,8 @@ export default function App() {
 
                     <button
                       onClick={() => {
-                        setIsKnowledgeGraphOpen(true)
-                        setIsMoreMenuOpen(false)
+                        openSpecialViewTab('knowledge-graph', 'Grafo de Conocimiento')
+                        setActiveDropdown(null)
                       }}
                       className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center justify-between text-sm"
                     >
@@ -1149,7 +1035,7 @@ export default function App() {
                     <button
                       onClick={() => {
                         setIsFindInPageOpen(true)
-                        setIsMoreMenuOpen(false)
+                        setActiveDropdown(null)
                       }}
                       className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center justify-between text-sm"
                     >
@@ -1168,7 +1054,7 @@ export default function App() {
                         setCopiedLink(true)
                         toast.success('Enlace copiado al portapapeles')
                         setTimeout(() => setCopiedLink(false), 2000)
-                        setIsMoreMenuOpen(false)
+                        setActiveDropdown(null)
                       }}
                       className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center gap-2.5 text-sm"
                     >
@@ -1186,7 +1072,7 @@ export default function App() {
                     <button
                       onClick={() => {
                         if (currentWorkspace) exportDocumentAsMarkdown(currentWorkspace)
-                        setIsMoreMenuOpen(false)
+                        setActiveDropdown(null)
                       }}
                       className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center gap-2.5 text-sm"
                     >
@@ -1197,7 +1083,7 @@ export default function App() {
                     <button
                       onClick={() => {
                         if (currentWorkspace) exportDocumentAsHtml(currentWorkspace)
-                        setIsMoreMenuOpen(false)
+                        setActiveDropdown(null)
                       }}
                       className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center gap-2.5 text-sm"
                     >
@@ -1211,7 +1097,7 @@ export default function App() {
                           const nodes = await db.canvasNodes.where('workspaceId').equals(currentWorkspace.id).and((n) => !n.isDeleted).toArray()
                           exportDocumentAsJson(currentWorkspace, nodes)
                         }
-                        setIsMoreMenuOpen(false)
+                        setActiveDropdown(null)
                       }}
                       className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center gap-2.5 text-sm"
                     >
@@ -1222,7 +1108,7 @@ export default function App() {
                     <button
                       onClick={() => {
                         if (currentWorkspace) copyAsPlainText(currentWorkspace.docContent)
-                        setIsMoreMenuOpen(false)
+                        setActiveDropdown(null)
                       }}
                       className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center gap-2.5 text-sm"
                     >
@@ -1265,7 +1151,7 @@ export default function App() {
                     <button
                       onClick={() => {
                         setIsShortcutsOpen(true)
-                        setIsMoreMenuOpen(false)
+                        setActiveDropdown(null)
                       }}
                       className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center justify-between text-sm"
                     >
@@ -1286,7 +1172,7 @@ export default function App() {
                             updatedAt: Date.now()
                           })
                         }
-                        setIsMoreMenuOpen(false)
+                        setActiveDropdown(null)
                       }}
                       className="w-full text-left px-3.5 py-2 hover:bg-rose-500/10 text-rose-500 flex items-center gap-2.5 text-sm"
                     >
@@ -1322,7 +1208,7 @@ export default function App() {
               )}
             </div>
 
-            {/* Right section: Presentation Icon, Exportar, Mirar, Collabs + Compartir, and Sin clasificar */}
+            {/* Right section: Presentation Icon, Exportar, Collabs + Compartir, and Sin clasificar */}
             <div className="flex items-center gap-1">
               {/* Presentation Icon */}
               <button
@@ -1333,86 +1219,13 @@ export default function App() {
                 <PresentationIcon className="w-4.5 h-4.5" />
               </button>
 
-              {/* Right Sidebar Tabs (shown when in doc mode or when right sidebar is toggled) */}
-              {activeViewMode === 'doc' && (
-                <>
-                  <div className="w-[1px] h-4 bg-[var(--app-border)] mx-0.5" />
-                  <div className="flex items-center gap-0.5">
-                    <button
-                      onClick={() => {
-                        setRightSidebarTab('ai')
-                        setRightSidebarOpen(true)
-                      }}
-                      className={`p-1.5 rounded-md transition ${
-                        rightSidebarOpen && rightSidebarTab === 'ai'
-                          ? 'bg-[var(--app-hover)] text-[var(--app-accent)] font-medium'
-                          : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
-                      }`}
-                      title="IA Copilot"
-                    >
-                      <AiOutlineIcon className="w-4 h-4" />
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setRightSidebarTab('outline')
-                        setRightSidebarOpen(true)
-                      }}
-                      className={`p-1.5 rounded-md transition ${
-                        rightSidebarOpen && rightSidebarTab === 'outline'
-                          ? 'bg-[var(--app-hover)] text-[var(--app-accent)] font-medium'
-                          : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
-                      }`}
-                      title="Esquema"
-                    >
-                      <TocIcon className="w-4 h-4" />
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setRightSidebarTab('history')
-                        setRightSidebarOpen(true)
-                      }}
-                      className={`p-1.5 rounded-md transition ${
-                        rightSidebarOpen && rightSidebarTab === 'history'
-                          ? 'bg-[var(--app-hover)] text-[var(--app-accent)] font-medium'
-                          : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
-                      }`}
-                      title="Diarios / Historial"
-                    >
-                      <JournalIcon className="w-4 h-4" />
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setRightSidebarTab('properties')
-                        setRightSidebarOpen(true)
-                      }}
-                      className={`p-1.5 rounded-md transition ${
-                        rightSidebarOpen && rightSidebarTab === 'properties'
-                          ? 'bg-[var(--app-hover)] text-[var(--app-accent)] font-medium'
-                          : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
-                      }`}
-                      title="Propiedades"
-                    >
-                      <PropertyIcon className="w-4 h-4" />
-                    </button>
-
-                    <button
-                      onClick={() => setRightSidebarOpen(!rightSidebarOpen)}
-                      className="p-1.5 rounded-md text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition"
-                      title={rightSidebarOpen ? 'Ocultar panel derecho' : 'Mostrar panel derecho'}
-                    >
-                      <RightSidebarIcon className="w-4 h-4" />
-                    </button>
-                  </div>
-                </>
-              )}
-
               {/* Milanote Exportar ⌵ Dropdown */}
               <div className="relative">
                 <button
-                  onClick={() => setIsExportDropdownOpen(!isExportDropdownOpen)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setActiveDropdown(activeDropdown === 'export' ? null : 'export')
+                  }}
                   className="h-7 px-2.5 rounded-md hover:bg-[var(--app-hover)] text-xs font-medium text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] flex items-center gap-1 transition select-none"
                   title="Exportar tablero"
                 >
@@ -1420,7 +1233,7 @@ export default function App() {
                   <span className="text-[10px] opacity-60">⌵</span>
                 </button>
 
-                {isExportDropdownOpen && (
+                {activeDropdown === 'export' && (
                   <div
                     className="absolute right-0 top-8 z-50 w-52 bg-white dark:bg-[#252525] border border-neutral-200 dark:border-neutral-700 rounded-xl shadow-xl py-1 text-xs text-neutral-800 dark:text-neutral-200 animate-in fade-in zoom-in-95"
                     onClick={(e) => e.stopPropagation()}
@@ -1428,7 +1241,7 @@ export default function App() {
                     <button
                       onClick={() => {
                         if (currentWorkspace) exportDocumentAsMarkdown(currentWorkspace)
-                        setIsExportDropdownOpen(false)
+                        setActiveDropdown(null)
                       }}
                       className="w-full text-left px-3 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center gap-2"
                     >
@@ -1438,7 +1251,7 @@ export default function App() {
                     <button
                       onClick={() => {
                         if (currentWorkspace) exportDocumentAsHtml(currentWorkspace)
-                        setIsExportDropdownOpen(false)
+                        setActiveDropdown(null)
                       }}
                       className="w-full text-left px-3 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center gap-2"
                     >
@@ -1451,52 +1264,12 @@ export default function App() {
                           const nodes = await db.canvasNodes.where('workspaceId').equals(currentWorkspace.id).and((n) => !n.isDeleted).toArray()
                           exportDocumentAsJson(currentWorkspace, nodes)
                         }
-                        setIsExportDropdownOpen(false)
+                        setActiveDropdown(null)
                       }}
                       className="w-full text-left px-3 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center gap-2"
                     >
                       <DownloadIcon className="w-4 h-4 text-purple-500" />
                       <span>Exportar copia JSON (.json)</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Milanote Mirar ⌵ Dropdown */}
-              <div className="relative">
-                <button
-                  onClick={() => setIsViewDropdownOpen(!isViewDropdownOpen)}
-                  className="h-7 px-2.5 rounded-md hover:bg-[var(--app-hover)] text-xs font-medium text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] flex items-center gap-1 transition select-none"
-                  title="Opciones de visualización"
-                >
-                  <span>Mirar</span>
-                  <span className="text-[10px] opacity-60">⌵</span>
-                </button>
-
-                {isViewDropdownOpen && (
-                  <div
-                    className="absolute right-0 top-8 z-50 w-52 bg-white dark:bg-[#252525] border border-neutral-200 dark:border-neutral-700 rounded-xl shadow-xl py-1 text-xs text-neutral-800 dark:text-neutral-200 animate-in fade-in zoom-in-95"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <button
-                      onClick={() => {
-                        setIsPresentationMode(true)
-                        setIsViewDropdownOpen(false)
-                      }}
-                      className="w-full text-left px-3 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center gap-2"
-                    >
-                      <PresentationIcon className="w-4 h-4 text-indigo-500" />
-                      <span>Modo Presentación (F5)</span>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setDarkMode(!darkMode)
-                        setIsViewDropdownOpen(false)
-                      }}
-                      className="w-full text-left px-3 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center gap-2"
-                    >
-                      {darkMode ? <SunPanelIcon className="w-4 h-4 text-amber-500" /> : <MoonPanelIcon className="w-4 h-4 text-indigo-500" />}
-                      <span>{darkMode ? 'Cambiar a Modo Claro' : 'Cambiar a Modo Oscuro'}</span>
                     </button>
                   </div>
                 )}
@@ -1532,7 +1305,7 @@ export default function App() {
           </header>
         )}
 
-        {/* Main Document / Canvas View */}
+        {/* Main Document / Canvas / Full Page Views */}
         <main className="flex-1 relative flex overflow-hidden">
           {/* Find In Page Floating Search (Ctrl+F) */}
           <FindInPage
@@ -1540,7 +1313,72 @@ export default function App() {
             onClose={() => setIsFindInPageOpen(false)}
           />
 
-          {currentWorkspace ? (
+          {activeTab?.viewType === 'all-docs' ? (
+            <AllDocsPage
+              workspaces={currentSpaceWorkspaces}
+              currentWorkspaceId={currentWorkspace?.id}
+              currentSpaceId={currentSpaceId}
+              onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
+              onCreateWorkspace={() => {
+                const newId = crypto.randomUUID()
+                const now = Date.now()
+                db.workspaces.add({
+                  id: newId,
+                  parentId: null,
+                  spaceId: currentSpaceId,
+                  title: 'Untitled',
+                  icon: '',
+                  color: '#3b82f6',
+                  viewMode: 'canvas',
+                  docContent: '<p></p>',
+                  createdAt: now,
+                  updatedAt: now,
+                  isFavorite: false,
+                  isDeleted: false,
+                  syncStatus: 'pending'
+                })
+                selectWorkspaceWithTab(newId)
+              }}
+              onToggleFavorite={async (e, ws) => {
+                e.stopPropagation()
+                await db.workspaces.update(ws.id, { isFavorite: !ws.isFavorite })
+              }}
+              onDeleteWorkspace={async (e, id) => {
+                e.stopPropagation()
+                await db.workspaces.update(id, { isDeleted: true })
+              }}
+            />
+          ) : activeTab?.viewType === 'knowledge-graph' ? (
+            <KnowledgeGraphPage
+              workspaces={currentSpaceWorkspaces}
+              currentWorkspaceId={currentWorkspace?.id}
+              onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
+            />
+          ) : activeTab?.viewType === 'trash' ? (
+            <TrashPage
+              onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
+            />
+          ) : activeTab?.viewType === 'templates' ? (
+            <TemplatesPage
+              onSelectTemplate={(template) => {
+                handleApplyTemplate(template)
+                selectWorkspaceWithTab(currentWorkspace?.id || '')
+              }}
+            />
+          ) : activeTab?.viewType === 'collections' ? (
+            <CollectionsPage
+              spaceId={currentSpaceId}
+              workspaces={currentSpaceWorkspaces}
+              onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
+            />
+          ) : activeTab?.viewType === 'tags' ? (
+            <TagsPage
+              spaceId={currentSpaceId}
+              workspaces={currentSpaceWorkspaces}
+              onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
+              initialSelectedTag={selectedTagForModal}
+            />
+          ) : currentWorkspace ? (
             activeViewMode === 'doc' ? (
               <div className="flex-1 h-full overflow-hidden">
                 <DocEditor

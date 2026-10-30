@@ -31,6 +31,7 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
   const [url, setUrl] = useState('')
   const [anonKey, setAnonKey] = useState('')
   const [enabled, setEnabled] = useState(false)
+  const [syncInterval, setSyncInterval] = useState(syncEngine.getSyncInterval())
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [copiedSql, setCopiedSql] = useState(false)
@@ -42,6 +43,7 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
       setUrl(config.url)
       setAnonKey(config.anonKey)
       setEnabled(config.enabled)
+      setSyncInterval(syncEngine.getSyncInterval())
       setTestResult(null)
     }
   }, [isOpen])
@@ -50,6 +52,7 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
 
   const handleSave = () => {
     saveSupabaseConfig({ url, anonKey, enabled })
+    syncEngine.setSyncInterval(syncInterval)
     syncEngine.scheduleSync(500)
     setTestResult({ success: true, message: 'Configuración guardada correctamente' })
   }
@@ -70,28 +73,42 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
 
   const copySqlSchema = async () => {
     const sqlText = `-- ========================================================
--- SEVEN NOTE: ESQUEMA COMPLETO PARA SUPABASE
+-- SEVEN NOTE: ESQUEMA COMPLETO Y ACTUALIZADO PARA SUPABASE
 -- ========================================================
 create extension if not exists "uuid-ossp";
 
-create table if not exists public.workspaces (
+create table if not exists public.seven_spaces (
+  id text primary key,
+  user_id uuid references auth.users(id) on delete cascade default auth.uid(),
+  name text not null default 'Workspace',
+  icon text default '💼',
+  color text default '#1e96eb',
+  created_at bigint not null,
+  updated_at bigint not null,
+  is_deleted boolean not null default false
+);
+
+create table if not exists public.seven_workspaces (
   id text primary key,
   user_id uuid references auth.users(id) on delete cascade default auth.uid(),
   parent_id text,
+  space_id text default 'default-workspace',
+  folder text,
   title text not null default 'Sin título',
   icon text default '📄',
   color text default '#6366f1',
-  view_mode text not null default 'both',
+  view_mode text not null default 'doc',
   doc_content text not null default '',
   created_at bigint not null,
   updated_at bigint not null,
   is_favorite boolean not null default false,
-  is_deleted boolean not null default false
+  is_deleted boolean not null default false,
+  metadata jsonb not null default '{}'::jsonb
 );
 
-create table if not exists public.canvas_nodes (
+create table if not exists public.seven_canvas_nodes (
   id text primary key,
-  workspace_id text not null references public.workspaces(id) on delete cascade,
+  workspace_id text not null,
   user_id uuid references auth.users(id) on delete cascade default auth.uid(),
   type text not null default 'note',
   position_x double precision not null default 0,
@@ -104,9 +121,9 @@ create table if not exists public.canvas_nodes (
   is_deleted boolean not null default false
 );
 
-create table if not exists public.canvas_edges (
+create table if not exists public.seven_canvas_edges (
   id text primary key,
-  workspace_id text not null references public.workspaces(id) on delete cascade,
+  workspace_id text not null,
   user_id uuid references auth.users(id) on delete cascade default auth.uid(),
   source text not null,
   target text not null,
@@ -115,18 +132,49 @@ create table if not exists public.canvas_edges (
   label text,
   animated boolean default false,
   color text default '#6366f1',
+  edge_type text default 'default',
+  marker_end_type text default 'arrow',
   created_at bigint not null,
   updated_at bigint not null,
   is_deleted boolean not null default false
 );
 
-alter table public.workspaces enable row level security;
-alter table public.canvas_nodes enable row level security;
-alter table public.canvas_edges enable row level security;
+create table if not exists public.seven_collections (
+  id text primary key,
+  space_id text not null,
+  user_id uuid references auth.users(id) on delete cascade default auth.uid(),
+  name text not null,
+  icon text default '📁',
+  color text default '#1e96eb',
+  doc_ids jsonb not null default '[]'::jsonb,
+  created_at bigint not null,
+  updated_at bigint not null,
+  is_deleted boolean not null default false
+);
 
-create policy "Acceso total a workspaces" on public.workspaces for all using (true) with check (true);
-create policy "Acceso total a canvas_nodes" on public.canvas_nodes for all using (true) with check (true);
-create policy "Acceso total a canvas_edges" on public.canvas_edges for all using (true) with check (true);
+create table if not exists public.seven_tags (
+  id text primary key,
+  space_id text not null,
+  user_id uuid references auth.users(id) on delete cascade default auth.uid(),
+  name text not null,
+  color text not null default '#1e96eb',
+  created_at bigint not null,
+  is_deleted boolean not null default false
+);
+
+alter table public.seven_spaces enable row level security;
+alter table public.seven_workspaces enable row level security;
+alter table public.seven_canvas_nodes enable row level security;
+alter table public.seven_canvas_edges enable row level security;
+alter table public.seven_collections enable row level security;
+alter table public.seven_tags enable row level security;
+
+create policy "Acceso total a seven_spaces" on public.seven_spaces for all using (true) with check (true);
+create policy "Acceso total a seven_workspaces" on public.seven_workspaces for all using (true) with check (true);
+create policy "Acceso total a seven_canvas_nodes" on public.seven_canvas_nodes for all using (true) with check (true);
+create policy "Acceso total a seven_canvas_edges" on public.seven_canvas_edges for all using (true) with check (true);
+create policy "Acceso total a seven_collections" on public.seven_collections for all using (true) with check (true);
+create policy "Acceso total a seven_tags" on public.seven_tags for all using (true) with check (true);
 `
     await navigator.clipboard.writeText(sqlText)
     setCopiedSql(true)
@@ -138,15 +186,19 @@ create policy "Acceso total a canvas_edges" on public.canvas_edges for all using
     const workspaces = await db.workspaces.toArray()
     const nodes = await db.canvasNodes.toArray()
     const edges = await db.canvasEdges.toArray()
+    const collections = await db.collections.toArray()
+    const tags = await db.tags.toArray()
 
     const backup = {
-      version: 2,
+      version: 3,
       appName: 'Seven Note',
       exportedAt: new Date().toISOString(),
       spaces,
       workspaces,
       nodes,
-      edges
+      edges,
+      collections,
+      tags
     }
 
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })
@@ -178,6 +230,9 @@ create policy "Acceso total a canvas_edges" on public.canvas_edges for all using
           await db.workspaces.bulkPut(parsed.workspaces)
           await db.canvasNodes.bulkPut(parsed.nodes)
           if (parsed.edges) await db.canvasEdges.bulkPut(parsed.edges)
+          if (parsed.collections) await db.collections.bulkPut(parsed.collections)
+          if (parsed.tags) await db.tags.bulkPut(parsed.tags)
+
           syncEngine.scheduleSync(500)
           alert('¡Copia de seguridad restaurada con éxito!')
           window.location.reload()
@@ -276,7 +331,7 @@ create policy "Acceso total a canvas_edges" on public.canvas_edges for all using
                   Sincronización en la Nube (Supabase)
                 </h3>
                 <p className="text-[11px] text-[var(--app-text-secondary)]">
-                  Opcional. Seven Note funciona 100% offline; conecta Supabase para respaldar tus notas en la nube.
+                  Opcional. Seven Note funciona 100% offline; conecta Supabase para respaldar tus notas en la nube automáticamente.
                 </p>
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
@@ -315,6 +370,28 @@ create policy "Acceso total a canvas_edges" on public.canvas_edges for all using
                   placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6..."
                   className="w-full text-xs px-3 py-1.5 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] outline-none font-mono focus:border-[var(--app-accent)] transition"
                 />
+              </div>
+
+              {/* Intervalo de sincronización periódica */}
+              <div className="flex items-center justify-between pt-1">
+                <div>
+                  <label className="block text-xs font-medium text-[var(--app-text-primary)]">
+                    Frecuencia de sincronización automática
+                  </label>
+                  <p className="text-[11px] text-[var(--app-text-secondary)]">
+                    Sincroniza en segundo plano cuando estés conectado
+                  </p>
+                </div>
+                <select
+                  value={syncInterval}
+                  onChange={(e) => setSyncInterval(Number(e.target.value))}
+                  className="text-xs px-2.5 py-1 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] outline-none"
+                >
+                  <option value={10}>Cada 10 segundos</option>
+                  <option value={30}>Cada 30 segundos (Recomendado)</option>
+                  <option value={60}>Cada 1 minuto</option>
+                  <option value={300}>Cada 5 minutos</option>
+                </select>
               </div>
 
               {testResult && (
@@ -376,7 +453,9 @@ create policy "Acceso total a canvas_edges" on public.canvas_edges for all using
                   Estado de sincronización
                 </div>
                 <div className="text-[11px] text-[var(--app-text-secondary)]">
-                  {syncStatus.pendingCount} cambios pendientes en IndexedDB
+                  {syncStatus.pendingCount === 0
+                    ? 'Todo sincronizado con la nube'
+                    : `${syncStatus.pendingCount} cambios pendientes en IndexedDB`}
                 </div>
               </div>
             </div>

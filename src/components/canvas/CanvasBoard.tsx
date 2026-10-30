@@ -853,6 +853,34 @@ function CanvasBoardInner({
     syncEngine.scheduleSync(1000)
   }, [nodes, workspaceId])
 
+  // Delete selected nodes and edges (Delete / Backspace / Supr)
+  const deleteSelectedElements = useCallback(async () => {
+    const selectedNodes = nodes.filter((n) => n.selected)
+    const selectedEdges = edges.filter((e) => e.selected)
+    if (selectedNodes.length === 0 && selectedEdges.length === 0) return
+
+    try {
+      const now = Date.now()
+      for (const n of selectedNodes) {
+        await db.canvasNodes.update(n.id, {
+          isDeleted: true,
+          updatedAt: now,
+          syncStatus: 'pending'
+        })
+      }
+      for (const e of selectedEdges) {
+        await db.canvasEdges.update(e.id, {
+          isDeleted: true,
+          updatedAt: now,
+          syncStatus: 'pending'
+        })
+      }
+      syncEngine.scheduleSync(1000)
+    } catch (err) {
+      console.error('Failed to delete selected elements', err)
+    }
+  }, [nodes, edges])
+
   // Alignment helpers for selected nodes with accurate geometry
   const alignSelectedNodes = async (direction: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom' | 'distribute-h' | 'distribute-v') => {
     const selectedNodes = nodes.filter((n) => n.selected)
@@ -1093,16 +1121,27 @@ function CanvasBoardInner({
     return () => window.removeEventListener('paste', handlePaste)
   }, [addNewNode])
 
-  // Keyboard shortcut listener (Ctrl+D duplicate, V, T, N, S, F, C, D, H, E tools)
+  // Keyboard shortcut listener (Delete/Backspace to delete elements, Ctrl+D duplicate, V, T, N, S, F, C, D, H, E tools)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore if user is writing inside an input or textarea
       const target = e.target as HTMLElement
-      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable ||
+          target.closest('input') ||
+          target.closest('textarea') ||
+          target.closest('[contenteditable="true"]'))
+      ) {
         return
       }
 
-      if (e.key === 'Escape') {
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault()
+        deleteSelectedElements()
+      } else if (e.key === 'Escape') {
         setActiveTool('select')
         setConnectSourceNodeId(null)
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
@@ -1130,7 +1169,7 @@ function CanvasBoardInner({
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [duplicateSelectedNodes, addNewNode])
+  }, [deleteSelectedElements, duplicateSelectedNodes, addNewNode])
 
   // Clear all nodes in this canvas
   const handleClearBoard = async () => {
@@ -1612,6 +1651,7 @@ function CanvasBoardInner({
         panOnDrag={activeTool === 'pan' ? true : !isDrawingTool}
         nodesDraggable={activeTool !== 'pan' && !isDrawingTool}
         selectionOnDrag={activeTool === 'select'}
+        deleteKeyCode={['Backspace', 'Delete']}
       >
         {/* Background Grid (Dots, Lines or None) */}
         {gridVariant !== 'none' && (
