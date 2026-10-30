@@ -94,6 +94,7 @@ interface CanvasBoardProps {
   currentWorkspace?: WorkspaceItem
   onSwitchToDoc?: () => void
   darkMode?: boolean
+  hideChrome?: boolean
 }
 
 type ActiveTool =
@@ -202,7 +203,8 @@ function CanvasBoardInner({
   workspaceId,
   currentWorkspace,
   onSwitchToDoc,
-  darkMode
+  darkMode,
+  hideChrome
 }: CanvasBoardProps) {
   const reactFlowInstance = useReactFlow()
 
@@ -1616,7 +1618,7 @@ function CanvasBoardInner({
 
   return (
     <div
-      className="relative w-full h-full bg-[var(--app-bg-canvas)] overflow-hidden select-none"
+      className={`relative w-full h-full bg-[var(--app-bg-canvas)] overflow-hidden select-none ${hideChrome ? 'canvas-hide-chrome' : ''}`}
       onDragOver={(e) => e.preventDefault()}
       onDrop={handleCanvasDrop}
     >

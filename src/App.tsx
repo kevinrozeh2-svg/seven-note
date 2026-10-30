@@ -118,6 +118,7 @@ export default function App() {
   const [isKnowledgeGraphOpen, setIsKnowledgeGraphOpen] = useState(false)
   const [isFindInPageOpen, setIsFindInPageOpen] = useState(false)
   const [activeDropdown, setActiveDropdown] = useState<'info' | 'more' | 'export' | null>(null)
+  const [focusMode, setFocusMode] = useState(false)
 
   // Workbench tabs state
   const [tabs, setTabs] = useState<WorkbenchTab[]>(() => {
@@ -355,6 +356,11 @@ export default function App() {
 
     // Global keyboard shortcuts (Escape, ?, Ctrl+/, Ctrl+\, Ctrl+F)
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && focusMode) {
+        setFocusMode(false)
+        return
+      }
+
       if (e.key === 'Escape' && isPresentationMode) {
         setIsPresentationMode(false)
         setPresentationFrameId(undefined)
@@ -369,6 +375,12 @@ export default function App() {
 
       const target = e.target as HTMLElement
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+        return
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setIsSearchOpen((prev) => !prev)
         return
       }
 
@@ -403,7 +415,7 @@ export default function App() {
       window.removeEventListener('seven-note-start-presentation', handleStartPresentation)
       window.removeEventListener('keydown', handleKeyDown)
     }
-  }, [isPresentationMode, currentWorkspaceId])
+  }, [isPresentationMode, currentWorkspaceId, focusMode])
 
   // Handle dark mode class on document
   useEffect(() => {
@@ -784,7 +796,7 @@ export default function App() {
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] font-sans">
       {/* 1. Left Sidebar Navigation */}
-      {sidebarOpen && !isPresentationMode && (
+      {sidebarOpen && !isPresentationMode && !focusMode && (
         <Sidebar
           spaces={spaces}
           currentSpaceId={currentSpaceId}
@@ -820,7 +832,7 @@ export default function App() {
       {/* 2. Main Content Center Column */}
       <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-[var(--affine-background-primary-color)]">
         {/* Top Workbench Tabs Header */}
-        {!isPresentationMode && (
+        {!isPresentationMode && !focusMode && (
           <WorkbenchTabs
             tabs={tabs}
             activeTabId={activeTabId}
@@ -834,8 +846,8 @@ export default function App() {
           />
         )}
         {/* Top Header Bar (Notion & Milanote Clean Human-Crafted Aesthetic) */}
-        {!isPresentationMode && (!activeTab || !activeTab.viewType || activeTab.viewType === 'doc') && (
-          <header className="h-11 border-b border-[var(--app-border)] bg-[var(--app-bg-primary)] px-3 flex items-center justify-between shrink-0 z-20 select-none text-sm transition-colors duration-150">
+        {!isPresentationMode && !focusMode && (!activeTab || !activeTab.viewType || activeTab.viewType === 'doc') && (
+          <header className="relative h-11 border-b border-[var(--app-border)] bg-[var(--app-bg-primary)] px-3 flex items-center justify-between shrink-0 z-[60] select-none text-sm transition-colors duration-150">
             {/* Left section: Sidebar toggle, Mode Switcher [ Page | Edgeless ], Title, Favorite, Info, More */}
             <div className="flex items-center gap-2 min-w-0">
               {/* Sidebar Toggle */}
@@ -1210,6 +1222,17 @@ export default function App() {
 
             {/* Right section: Presentation Icon, Exportar, Collabs + Compartir, and Sin clasificar */}
             <div className="flex items-center gap-1">
+              {/* Focus mode (board only) */}
+              {activeViewMode === 'canvas' && (
+                <button
+                  onClick={() => setFocusMode(true)}
+                  className="h-7 px-2.5 rounded-md hover:bg-[var(--app-hover)] text-xs font-medium text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] transition select-none"
+                  title="Ocultar herramientas y menús (solo tablero)"
+                >
+                  Solo tablero
+                </button>
+              )}
+
               {/* Presentation Icon */}
               <button
                 onClick={() => setIsPresentationMode(true)}
@@ -1291,15 +1314,6 @@ export default function App() {
                 </div>
                 <span>Compartir</span>
                 <ShareIcon className="w-3 h-3 text-neutral-400" />
-              </button>
-
-              {/* Milanote [0 Sin clasificar] Pill Button */}
-              <button
-                onClick={() => window.dispatchEvent(new CustomEvent('seven-note-toggle-unsorted'))}
-                className="h-7 px-2.5 rounded-md bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-700 dark:text-neutral-300 font-semibold text-xs flex items-center gap-1 border border-neutral-200/80 dark:border-neutral-700 transition select-none ml-1 shadow-2xs"
-                title="Abrir bandeja Sin clasificar de Milanote"
-              >
-                <span>0 Sin clasificar</span>
               </button>
             </div>
           </header>
@@ -1398,7 +1412,17 @@ export default function App() {
                   currentWorkspace={currentWorkspace}
                   onSwitchToDoc={handleSwitchToDoc}
                   darkMode={darkMode}
+                  hideChrome={focusMode}
                 />
+                {focusMode && (
+                  <button
+                    onClick={() => setFocusMode(false)}
+                    className="absolute top-3 right-3 z-50 h-7 px-2.5 rounded-md bg-[var(--app-bg-overlay)] border border-[var(--app-border)] text-xs font-medium text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] opacity-40 hover:opacity-100 transition shadow-[var(--app-shadow-popover)]"
+                    title="Mostrar herramientas y menús (Esc)"
+                  >
+                    Mostrar herramientas
+                  </button>
+                )}
               </div>
             ) : (
               /* Split View */

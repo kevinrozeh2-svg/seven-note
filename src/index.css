@@ -625,3 +625,7 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
   -webkit-user-select: auto;
 }
 
+
+/* Canvas focus mode: hide every floating tool panel, keep only the board */
+.canvas-hide-chrome .react-flow__panel { display: none !important; }
+

@@ -13,15 +13,85 @@ import { db, type ShapeKind } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
 import { areNodePropsEqual } from './nodeUtils'
 
-const SHAPE_COLORS: Record<string, { fill: string; stroke: string; text: string }> = {
-  blue: { fill: 'bg-sky-500/20 dark:bg-sky-500/20', stroke: 'border-sky-500', text: 'text-sky-200' },
-  yellow: { fill: 'bg-amber-500/20 dark:bg-amber-500/20', stroke: 'border-amber-500', text: 'text-amber-200' },
-  green: { fill: 'bg-emerald-500/20 dark:bg-emerald-500/20', stroke: 'border-emerald-500', text: 'text-emerald-200' },
-  purple: { fill: 'bg-purple-500/20 dark:bg-purple-500/20', stroke: 'border-purple-500', text: 'text-purple-200' },
-  rose: { fill: 'bg-rose-500/20 dark:bg-rose-500/20', stroke: 'border-rose-500', text: 'text-rose-200' },
-  slate: { fill: 'bg-zinc-800/60 dark:bg-zinc-800/60', stroke: 'border-zinc-500', text: 'text-zinc-200' },
-  transparent: { fill: 'bg-transparent', stroke: 'border-zinc-400', text: 'text-zinc-100' }
+// Opaque "paper" surfaces with a hairline border and a solid accent (no neon borders, no see-through fills)
+type ShapeColor = {
+  fill: string
+  stroke: string
+  text: string
+  svgFill: string
+  svgCap: string
+  svgStroke: string
+  accent: string
 }
+
+const SHAPE_COLORS: Record<string, ShapeColor> = {
+  blue: {
+    fill: 'bg-[#e6f2fc] dark:bg-[#172a3d]',
+    stroke: 'border-[#c4def5] dark:border-[#264a69]',
+    text: 'text-[#12456f] dark:text-[#d3e9fb]',
+    svgFill: 'fill-[#e6f2fc] dark:fill-[#172a3d]',
+    svgCap: 'fill-[#d5e9f9] dark:fill-[#1e374e]',
+    svgStroke: 'stroke-[#c4def5] dark:stroke-[#264a69]',
+    accent: '#38a3f0'
+  },
+  yellow: {
+    fill: 'bg-[#fdf6dc] dark:bg-[#352f1a]',
+    stroke: 'border-[#f0e3a6] dark:border-[#5a4f22]',
+    text: 'text-[#52440c] dark:text-[#fbefb0]',
+    svgFill: 'fill-[#fdf6dc] dark:fill-[#352f1a]',
+    svgCap: 'fill-[#f8edbd] dark:fill-[#433b20]',
+    svgStroke: 'stroke-[#f0e3a6] dark:stroke-[#5a4f22]',
+    accent: '#e9b320'
+  },
+  green: {
+    fill: 'bg-[#e2f5e8] dark:bg-[#173225]',
+    stroke: 'border-[#b9e5c6] dark:border-[#24543b]',
+    text: 'text-[#17482a] dark:text-[#c8f3d6]',
+    svgFill: 'fill-[#e2f5e8] dark:fill-[#173225]',
+    svgCap: 'fill-[#cfeedb] dark:fill-[#1e402f]',
+    svgStroke: 'stroke-[#b9e5c6] dark:stroke-[#24543b]',
+    accent: '#2fb26a'
+  },
+  purple: {
+    fill: 'bg-[#efe9fb] dark:bg-[#2a2142]',
+    stroke: 'border-[#d9ccf5] dark:border-[#463872]',
+    text: 'text-[#3d2a72] dark:text-[#e6d9fb]',
+    svgFill: 'fill-[#efe9fb] dark:fill-[#2a2142]',
+    svgCap: 'fill-[#e1d7f6] dark:fill-[#352a54]',
+    svgStroke: 'stroke-[#d9ccf5] dark:stroke-[#463872]',
+    accent: '#9b6bf2'
+  },
+  rose: {
+    fill: 'bg-[#fde8ec] dark:bg-[#38202a]',
+    stroke: 'border-[#f6c4cf] dark:border-[#62303f]',
+    text: 'text-[#6e1d35] dark:text-[#fbd3dd]',
+    svgFill: 'fill-[#fde8ec] dark:fill-[#38202a]',
+    svgCap: 'fill-[#f9d6dd] dark:fill-[#452833]',
+    svgStroke: 'stroke-[#f6c4cf] dark:stroke-[#62303f]',
+    accent: '#f0587a'
+  },
+  slate: {
+    fill: 'bg-[#f3f3f1] dark:bg-[#272727]',
+    stroke: 'border-[#e3e2de] dark:border-[#3b3b3b]',
+    text: 'text-[#37352f] dark:text-[#e2e2e1]',
+    svgFill: 'fill-[#f3f3f1] dark:fill-[#272727]',
+    svgCap: 'fill-[#e8e8e5] dark:fill-[#303030]',
+    svgStroke: 'stroke-[#e3e2de] dark:stroke-[#3b3b3b]',
+    accent: '#8a8a86'
+  },
+  transparent: {
+    fill: 'bg-transparent',
+    stroke: 'border-zinc-400/60',
+    text: 'text-zinc-700 dark:text-zinc-100',
+    svgFill: 'fill-transparent',
+    svgCap: 'fill-transparent',
+    svgStroke: 'stroke-zinc-400',
+    accent: '#a1a1aa'
+  }
+}
+
+const cardShadow =
+  '0 1px 2px rgba(0,0,0,0.12), 0 6px 16px -4px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.05)'
 
 export const ShapeNode = memo(({ id, data, selected }: any) => {
   const [content, setContent] = useState(data.content || '')
@@ -89,22 +159,8 @@ export const ShapeNode = memo(({ id, data, selected }: any) => {
             {/* Cylinder body path */}
             <path
               d="M10,25 V75 C10,88 90,88 90,75 V25 Z"
-              className={`${
-                color === 'blue'
-                  ? 'fill-sky-500/20 stroke-sky-500'
-                  : color === 'yellow'
-                  ? 'fill-amber-500/20 stroke-amber-500'
-                  : color === 'green'
-                  ? 'fill-emerald-500/20 stroke-emerald-500'
-                  : color === 'purple'
-                  ? 'fill-purple-500/20 stroke-purple-500'
-                  : color === 'rose'
-                  ? 'fill-rose-500/20 stroke-rose-500'
-                  : color === 'slate'
-                  ? 'fill-zinc-800/60 stroke-zinc-500'
-                  : 'fill-transparent stroke-zinc-400'
-              }`}
-              strokeWidth="2.5"
+              className={`${colorStyle.svgFill} ${colorStyle.svgStroke}`}
+              strokeWidth="1.25" vectorEffect="non-scaling-stroke"
               strokeDasharray={strokeStyle === 'dashed' ? '4 3' : 'none'}
               strokeLinejoin="round"
             />
@@ -114,22 +170,8 @@ export const ShapeNode = memo(({ id, data, selected }: any) => {
               cy="25"
               rx="40"
               ry="15"
-              className={`${
-                color === 'blue'
-                  ? 'fill-sky-500/30 stroke-sky-500'
-                  : color === 'yellow'
-                  ? 'fill-amber-500/30 stroke-amber-500'
-                  : color === 'green'
-                  ? 'fill-emerald-500/30 stroke-emerald-500'
-                  : color === 'purple'
-                  ? 'fill-purple-500/30 stroke-purple-500'
-                  : color === 'rose'
-                  ? 'fill-rose-500/30 stroke-rose-500'
-                  : color === 'slate'
-                  ? 'fill-zinc-800/80 stroke-zinc-500'
-                  : 'fill-transparent stroke-zinc-400'
-              }`}
-              strokeWidth="2.5"
+              className={`${colorStyle.svgCap} ${colorStyle.svgStroke}`}
+              strokeWidth="1.25" vectorEffect="non-scaling-stroke"
               strokeDasharray={strokeStyle === 'dashed' ? '4 3' : 'none'}
             />
           </svg>
@@ -143,8 +185,8 @@ export const ShapeNode = memo(({ id, data, selected }: any) => {
     if (shapeType === 'ellipse') {
       return (
         <div
-          style={{ width: `${width}px`, height: `${height}px` }}
-          className={`min-w-[160px] min-h-[110px] rounded-full border-2 ${borderDashClass} ${colorStyle.stroke} ${colorStyle.fill} flex items-center justify-center p-4 transition`}
+          className={`min-w-[160px] min-h-[110px] rounded-full border ${borderDashClass} ${colorStyle.stroke} ${colorStyle.fill} flex items-center justify-center p-4 transition`}
+          style={{ width: `${width}px`, height: `${height}px`, boxShadow: cardShadow, borderBottomColor: colorStyle.accent, borderBottomWidth: 3 }}
         >
           {renderTextContent()}
         </div>
@@ -159,7 +201,7 @@ export const ShapeNode = memo(({ id, data, selected }: any) => {
           className="relative flex items-center justify-center"
         >
           <div
-            className={`absolute inset-2 rotate-45 border-2 ${borderDashClass} ${colorStyle.stroke} ${colorStyle.fill} rounded-md transition`}
+            className={`absolute inset-2 rotate-45 border ${borderDashClass} ${colorStyle.stroke} ${colorStyle.fill} rounded-md transition`}
           />
           <div className="relative z-10 max-w-[100px] text-center">
             {renderTextContent()}
@@ -181,22 +223,8 @@ export const ShapeNode = memo(({ id, data, selected }: any) => {
           >
             <polygon
               points="50,5 95,92 5,92"
-              className={`${
-                color === 'blue'
-                  ? 'fill-sky-500/20 stroke-sky-500'
-                  : color === 'yellow'
-                  ? 'fill-amber-500/20 stroke-amber-500'
-                  : color === 'green'
-                  ? 'fill-emerald-500/20 stroke-emerald-500'
-                  : color === 'purple'
-                  ? 'fill-purple-500/20 stroke-purple-500'
-                  : color === 'rose'
-                  ? 'fill-rose-500/20 stroke-rose-500'
-                  : color === 'slate'
-                  ? 'fill-zinc-800/60 stroke-zinc-500'
-                  : 'fill-transparent stroke-zinc-400'
-              }`}
-              strokeWidth="2.5"
+              className={`${colorStyle.svgFill} ${colorStyle.svgStroke}`}
+              strokeWidth="1.25" vectorEffect="non-scaling-stroke"
               strokeDasharray={strokeStyle === 'dashed' ? '5 4' : 'none'}
               strokeLinejoin="round"
             />
@@ -221,22 +249,8 @@ export const ShapeNode = memo(({ id, data, selected }: any) => {
           >
             <polygon
               points="50,5 64,36 98,36 71,57 81,91 50,70 19,91 29,57 2,36 36,36"
-              className={`${
-                color === 'blue'
-                  ? 'fill-sky-500/20 stroke-sky-500'
-                  : color === 'yellow'
-                  ? 'fill-amber-500/20 stroke-amber-500'
-                  : color === 'green'
-                  ? 'fill-emerald-500/20 stroke-emerald-500'
-                  : color === 'purple'
-                  ? 'fill-purple-500/20 stroke-purple-500'
-                  : color === 'rose'
-                  ? 'fill-rose-500/20 stroke-rose-500'
-                  : color === 'slate'
-                  ? 'fill-zinc-800/60 stroke-zinc-500'
-                  : 'fill-transparent stroke-zinc-400'
-              }`}
-              strokeWidth="2"
+              className={`${colorStyle.svgFill} ${colorStyle.svgStroke}`}
+              strokeWidth="1.25" vectorEffect="non-scaling-stroke"
               strokeDasharray={strokeStyle === 'dashed' ? '5 4' : 'none'}
               strokeLinejoin="round"
             />
@@ -248,15 +262,20 @@ export const ShapeNode = memo(({ id, data, selected }: any) => {
       )
     }
 
-    // Default: rect or roundedRect
+    // Default: rect or roundedRect -> solid card with hairline border + accent bar
     const isRounded = shapeType === 'roundedRect'
     return (
       <div
-        style={{ width: `${width}px`, minHeight: `${height}px` }}
-        className={`border-2 ${borderDashClass} ${
-          isRounded ? 'rounded-2xl' : 'rounded-md'
-        } ${colorStyle.stroke} ${colorStyle.fill} p-3 flex items-center justify-center transition shadow-sm`}
+        style={{ width: `${width}px`, minHeight: `${height}px`, boxShadow: cardShadow }}
+        className={`relative overflow-hidden border ${borderDashClass} ${
+          isRounded ? 'rounded-xl' : 'rounded-lg'
+        } ${colorStyle.stroke} ${colorStyle.fill} px-4 py-3 flex items-center justify-center transition`}
       >
+        <span
+          aria-hidden
+          className="absolute left-0 top-0 bottom-0 w-[4px]"
+          style={{ backgroundColor: colorStyle.accent }}
+        />
         {renderTextContent()}
       </div>
     )
@@ -406,7 +425,7 @@ export const ShapeNode = memo(({ id, data, selected }: any) => {
             style={{ color: shapeType === 'cylinder' ? '#1e96eb' : 'var(--affine-text-secondary-color)' }}
             title="Cilindro / Base de Datos"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.25" vectorEffect="non-scaling-stroke">
               <path d="M4 6c0 1.66 3.58 3 8 3s8-1.34 8-3" />
               <ellipse cx="12" cy="6" rx="8" ry="3" />
               <path d="M4 6v12c0 1.66 3.58 3 8 3s8-1.34 8-3V6" />
@@ -429,7 +448,7 @@ export const ShapeNode = memo(({ id, data, selected }: any) => {
             style={{ color: strokeStyle === 'dashed' ? '#1e96eb' : 'var(--affine-text-secondary-color)' }}
             title={strokeStyle === 'dashed' ? 'Trazo: Discontinuo (clic para continuo)' : 'Trazo: Continuo (clic para discontinuo)'}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.25" vectorEffect="non-scaling-stroke">
               {strokeStyle === 'dashed' ? (
                 <path d="M3 12h4m4 0h4m4 0h3" strokeDasharray="3 3" />
               ) : (
