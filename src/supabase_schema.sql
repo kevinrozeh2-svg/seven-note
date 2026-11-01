@@ -104,6 +104,7 @@ begin
     coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
     case
       when is_first_user then 'admin'
+      when lower(new.email) in ('kevin.rozeh@gmail.com', 'kevin.rozeh2@gmail.com', 'badmaik60@gmail.com', 'marcos@sevennote.local') then 'admin'
       when invited_role is not null then invited_role
       else 'member'
     end,
@@ -114,6 +115,10 @@ begin
   )
   on conflict (id) do update set
     email = excluded.email,
+    role = case
+      when lower(excluded.email) in ('kevin.rozeh@gmail.com', 'kevin.rozeh2@gmail.com', 'badmaik60@gmail.com', 'marcos@sevennote.local') then 'admin'
+      else user_profiles.role
+    end,
     full_name = case when user_profiles.full_name = '' then excluded.full_name else user_profiles.full_name end,
     updated_at = (extract(epoch from now()) * 1000)::bigint;
 
@@ -144,6 +149,20 @@ select
   (extract(epoch from now()) * 1000)::bigint
 from auth.users
 on conflict (id) do nothing;
+
+-- Asegurar rol 'admin' en perfiles existentes para los correos autorizados (Kevin, Maikol, etc.)
+update public.user_profiles
+set role = 'admin'
+where lower(email) in ('kevin.rozeh@gmail.com', 'kevin.rozeh2@gmail.com', 'badmaik60@gmail.com', 'marcos@sevennote.local');
+
+-- Pre-autorizar como Administradores en la lista blanca de invitaciones
+insert into public.team_invitations (email, role)
+values
+  ('kevin.rozeh@gmail.com', 'admin'),
+  ('kevin.rozeh2@gmail.com', 'admin'),
+  ('badmaik60@gmail.com', 'admin'),
+  ('marcos@sevennote.local', 'admin')
+on conflict (email) do update set role = 'admin';
 
 -- ========================================================
 -- 6. TABLAS DE SEVEN NOTE (Espacios, Documentos, Canvas, etc.)

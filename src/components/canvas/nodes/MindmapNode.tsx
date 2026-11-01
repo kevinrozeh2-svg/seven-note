@@ -1,9 +1,9 @@
 import { memo, useState, useEffect } from 'react'
-import { Handle, Position, useReactFlow } from '@xyflow/react'
-import { DeleteIcon, PlusIcon, HighLightLinearIcon } from '@blocksuite/icons/rc'
+import { useReactFlow } from '@xyflow/react'
+import { PlusIcon } from '@blocksuite/icons/rc'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
-import { areNodePropsEqual } from './nodeUtils'
+import { areNodePropsEqual, NodeHandles, SourceNodeBadge } from './nodeUtils'
 import { renderWithAppleEmoji } from '../../ui/AppleEmoji'
 
 const COLOR_MAP: Record<string, { cardBorder: string; accentBar: string; dot: string; topGlow: string; edge: string }> = {
@@ -51,14 +51,11 @@ const COLOR_MAP: Record<string, { cardBorder: string; accentBar: string; dot: st
   }
 }
 
-const COLORS = ['blue', 'purple', 'green', 'yellow', 'rose', 'slate']
-
 export const MindmapNode = memo(({ id, data, selected }: any) => {
   const reactFlow = useReactFlow()
   const [title, setTitle] = useState(data.title ?? (data.isRoot ? 'Tema Principal' : 'Rama'))
   const [color, setColor] = useState(data.color ?? 'blue')
   const [isEditing, setIsEditing] = useState(false)
-  const [showPalette, setShowPalette] = useState(false)
 
   useEffect(() => {
     setTitle(data.title ?? (data.isRoot ? 'Tema Principal' : 'Rama'))
@@ -80,26 +77,6 @@ export const MindmapNode = memo(({ id, data, selected }: any) => {
       }
     } catch (e) {
       console.error('Error saving mindmap node', e)
-    }
-  }
-
-  const handleDelete = async () => {
-    try {
-      await db.canvasNodes.update(id, {
-        isDeleted: true,
-        updatedAt: Date.now(),
-        syncStatus: 'pending'
-      })
-      // Also mark outgoing connected edges as deleted
-      const relatedEdges = await db.canvasEdges.where('workspaceId').equals(data.workspaceId).toArray()
-      for (const edge of relatedEdges) {
-        if (edge.source === id || edge.target === id) {
-          await db.canvasEdges.update(edge.id, { isDeleted: true, updatedAt: Date.now(), syncStatus: 'pending' })
-        }
-      }
-      syncEngine.scheduleSync(1000)
-    } catch (e) {
-      console.error('Error deleting mindmap node', e)
     }
   }
 
@@ -165,31 +142,28 @@ export const MindmapNode = memo(({ id, data, selected }: any) => {
     }
   }
 
+  const isConnectorActive = Boolean(data?.isConnectorActive)
+  const isConnectSource = Boolean(data?.isConnectSource)
+
   return (
     <div
-      className={`group relative min-w-[150px] max-w-[280px] rounded-xl px-3.5 py-2.5 bg-white dark:bg-[#18181b] transition-all duration-200 overflow-hidden ${
+      className={`group relative min-w-[150px] max-w-[280px] rounded-xl px-3.5 py-2.5 bg-white dark:bg-[#18181b] transition-all duration-200 overflow-visible ${
         selected
           ? 'ring-2 ring-[var(--app-accent)] shadow-xl'
           : 'shadow-[0_4px_16px_-4px_rgba(0,0,0,0.06),0_1px_2px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_24px_-6px_rgba(0,0,0,0.5),0_1px_2px_rgba(0,0,0,0.3)]'
+      } ${
+        isConnectSource
+          ? 'ring-4 ring-amber-500 shadow-2xl scale-[1.02]'
+          : isConnectorActive
+          ? 'ring-2 ring-blue-500/50 hover:ring-2 hover:ring-blue-500 cursor-pointer'
+          : ''
       } hover:shadow-lg`}
     >
-
-      {/* Handles */}
-      <Handle
-        id="left"
-        type="target"
-        position={Position.Left}
-        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
-          selected ? '!opacity-100' : ''
-        }`}
-      />
-      <Handle
-        id="right"
-        type="source"
-        position={Position.Right}
-        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
-          selected ? '!opacity-100' : ''
-        }`}
+      <SourceNodeBadge isConnectSource={isConnectSource} isConnectorActive={isConnectorActive} />
+      <NodeHandles
+        selected={selected}
+        isConnectorActive={isConnectorActive}
+        isConnectSource={isConnectSource}
       />
 
       {/* Content */}
@@ -233,70 +207,6 @@ export const MindmapNode = memo(({ id, data, selected }: any) => {
           <PlusIcon className="w-3.5 h-3.5" />
         </button>
       </div>
-
-      {/* Floating control pill on hover or select */}
-      {(selected || showPalette) && (
-        <div
-          className="absolute -top-9 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 p-1 rounded-xl border shadow-xl backdrop-blur-md animate-in fade-in duration-100"
-          style={{
-            backgroundColor: 'var(--affine-background-overlay-panel-color)',
-            borderColor: 'var(--affine-border-color)'
-          }}
-        >
-          {/* Color palette toggle */}
-          <button
-            onClick={() => setShowPalette(!showPalette)}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-100 hover:bg-white/10 transition"
-            title="Cambiar color del nodo"
-          >
-            <HighLightLinearIcon style={{ width: 12, height: 12 }} />
-          </button>
-
-          {/* Delete node */}
-          <button
-            onClick={handleDelete}
-            className="p-1 rounded text-rose-500 hover:bg-rose-500/10 transition"
-            title="Eliminar nodo de mapa mental"
-          >
-            <DeleteIcon style={{ width: 12, height: 12 }} />
-          </button>
-        </div>
-      )}
-
-      {/* Color Palette Popover */}
-      {showPalette && (
-        <div
-          className="absolute -top-20 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1.5 p-1.5 rounded-xl border shadow-2xl backdrop-blur-md"
-          style={{
-            backgroundColor: 'var(--affine-background-overlay-panel-color)',
-            borderColor: 'var(--affine-border-color)'
-          }}
-        >
-          {COLORS.map((c) => (
-            <button
-              key={c}
-              onClick={() => {
-                setColor(c)
-                save({ color: c })
-                setShowPalette(false)
-              }}
-              className={`w-4 h-4 rounded-full transition-transform hover:scale-125 ${
-                c === 'blue'
-                  ? 'bg-sky-400'
-                  : c === 'purple'
-                  ? 'bg-purple-400'
-                  : c === 'green'
-                  ? 'bg-emerald-400'
-                  : c === 'yellow'
-                  ? 'bg-amber-400'
-                  : c === 'rose'
-                  ? 'bg-rose-400'
-                  : 'bg-zinc-400'
-              } ${color === c ? 'ring-2 ring-[#1e96eb]' : ''}`}
-            />
-          ))}
-        </div>
-      )}
     </div>
   )
 }, areNodePropsEqual)

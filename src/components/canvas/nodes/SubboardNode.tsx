@@ -1,10 +1,9 @@
 import { memo, useState } from 'react'
-import { Handle, Position } from '@xyflow/react'
 import { Folder, Trash2, Sparkles, FileText, Film, Skull, ChevronRight } from 'lucide-react'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
 import { toast } from 'sonner'
-import { areNodePropsEqual } from './nodeUtils'
+import { areNodePropsEqual, NodeHandles, SourceNodeBadge, getCardCustomStyle, isColorDark, CardSelectionOverlay } from './nodeUtils'
 import { renderWithAppleEmoji } from '../../ui/AppleEmoji'
 
 export interface SubboardItem {
@@ -78,6 +77,9 @@ export const SubboardNode = memo(({ id, data, selected }: any) => {
     )
   }
 
+  const isConnectorActive = Boolean(data?.isConnectorActive)
+  const isConnectSource = Boolean(data?.isConnectSource)
+
   // Standalone Squircle Icon (like purple skull "Skaters 15 tarjetas" in Screenshot 3)
   if (isStandalone) {
     return (
@@ -85,13 +87,21 @@ export const SubboardNode = memo(({ id, data, selected }: any) => {
         onDoubleClick={() => handleOpenBoard(title)}
         className={`group relative flex flex-col items-center justify-center p-2 rounded-2xl cursor-pointer transition select-none ${
           selected ? 'ring-2 ring-[var(--app-accent)]' : ''
+        } ${
+          isConnectSource
+            ? 'ring-4 ring-amber-500 shadow-2xl scale-[1.05]'
+            : isConnectorActive
+            ? 'ring-2 ring-blue-500/50 hover:ring-2 hover:ring-blue-500'
+            : ''
         }`}
         style={{ width: 100 }}
       >
-        <Handle id="top" type="source" position={Position.Top} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
-        <Handle id="bottom" type="source" position={Position.Bottom} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
-        <Handle id="left" type="source" position={Position.Left} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
-        <Handle id="right" type="source" position={Position.Right} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
+        <SourceNodeBadge isConnectSource={isConnectSource} isConnectorActive={isConnectorActive} />
+        <NodeHandles
+          selected={selected}
+          isConnectorActive={isConnectorActive}
+          isConnectSource={isConnectSource}
+        />
 
         <button
           onClick={handleDelete}
@@ -123,18 +133,30 @@ export const SubboardNode = memo(({ id, data, selected }: any) => {
     )
   }
 
+  const customCardStyle = getCardCustomStyle(data, 12)
+  const isDarkFill = isColorDark(data?.fillColor)
+
   // Full Container Board Card (matches Screenshot 3: Ideas & Filmación)
   return (
     <div
-      className={`group relative w-[280px] rounded-xl bg-white dark:bg-[#252525] transition-[box-shadow] duration-150 overflow-hidden ${
-        selected ? 'ring-2 ring-[var(--app-accent)] shadow-xl' : 'shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]'
-      }`}
+      className={`group relative w-[280px] rounded-xl bg-white dark:bg-[#252525] transition-[box-shadow] duration-150 overflow-visible ${
+        selected ? 'shadow-xl' : 'shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]'
+      } ${
+        isConnectSource
+          ? 'ring-4 ring-amber-500 shadow-2xl scale-[1.02]'
+          : isConnectorActive
+          ? 'ring-2 ring-blue-500/50 hover:ring-2 hover:ring-blue-500 cursor-pointer'
+          : ''
+      } ${isDarkFill ? 'text-zinc-100' : ''}`}
+      style={{ ...customCardStyle }}
     >
-      {/* Handles */}
-      <Handle id="top" type="source" position={Position.Top} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
-      <Handle id="bottom" type="source" position={Position.Bottom} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
-      <Handle id="left" type="source" position={Position.Left} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
-      <Handle id="right" type="source" position={Position.Right} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
+      <CardSelectionOverlay selected={selected} />
+      <SourceNodeBadge isConnectSource={isConnectSource} isConnectorActive={isConnectorActive} />
+      <NodeHandles
+        selected={selected}
+        isConnectorActive={isConnectorActive}
+        isConnectSource={isConnectSource}
+      />
 
       {/* Floating delete button */}
       <button
@@ -154,7 +176,9 @@ export const SubboardNode = memo(({ id, data, selected }: any) => {
             setTitle(e.target.value)
             save({ title: e.target.value })
           }}
-          className="font-serif font-bold text-sm text-center bg-transparent border-none outline-none w-full text-neutral-900 dark:text-neutral-100"
+          className={`font-serif font-bold text-sm text-center bg-transparent border-none outline-none w-full ${
+            isDarkFill ? 'text-white' : 'text-neutral-900 dark:text-neutral-100'
+          }`}
         />
         <input
           type="text"

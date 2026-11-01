@@ -1,5 +1,4 @@
 import { memo, useState, useEffect } from 'react'
-import { Handle, Position } from '@xyflow/react'
 import {
   ToggleDownIcon,
   ExpandFullIcon,
@@ -10,7 +9,7 @@ import {
 } from '@blocksuite/icons/rc'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
-import { areNodePropsEqual } from './nodeUtils'
+import { areNodePropsEqual, NodeHandles, SourceNodeBadge } from './nodeUtils'
 import { AppleEmoji, renderWithAppleEmoji } from '../../ui/AppleEmoji'
 
 export const DocFrameNode = memo(({ id, data, selected }: any) => {
@@ -70,45 +69,26 @@ export const DocFrameNode = memo(({ id, data, selected }: any) => {
   const cleanContent = data.content
     ? data.content.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
     : ''
+  const isConnectorActive = Boolean(data?.isConnectorActive)
+  const isConnectSource = Boolean(data?.isConnectSource)
 
   return (
     <div
       className={`group relative w-[340px] rounded-xl bg-white dark:bg-[#18181b] transition-all duration-200 select-none shadow-md hover:shadow-xl ${
         selected ? 'ring-2 ring-[var(--app-accent)] shadow-2xl' : ''
+      } ${
+        isConnectSource
+          ? 'ring-4 ring-amber-500 shadow-2xl scale-[1.02]'
+          : isConnectorActive
+          ? 'ring-2 ring-blue-500/50 hover:ring-2 hover:ring-blue-500 cursor-pointer'
+          : ''
       }`}
     >
-      {/* Connector Handles */}
-      <Handle
-        id="top"
-        type="source"
-        position={Position.Top}
-        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
-          selected ? '!opacity-100' : ''
-        }`}
-      />
-      <Handle
-        id="bottom"
-        type="source"
-        position={Position.Bottom}
-        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
-          selected ? '!opacity-100' : ''
-        }`}
-      />
-      <Handle
-        id="left"
-        type="source"
-        position={Position.Left}
-        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
-          selected ? '!opacity-100' : ''
-        }`}
-      />
-      <Handle
-        id="right"
-        type="source"
-        position={Position.Right}
-        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
-          selected ? '!opacity-100' : ''
-        }`}
+      <SourceNodeBadge isConnectSource={isConnectSource} isConnectorActive={isConnectorActive} />
+      <NodeHandles
+        selected={selected}
+        isConnectorActive={isConnectorActive}
+        isConnectSource={isConnectSource}
       />
 
       {/* Top Header of the Card (Authentic AFFiNE edgeless-note-header) */}

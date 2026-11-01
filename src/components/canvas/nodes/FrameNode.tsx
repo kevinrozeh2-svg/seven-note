@@ -1,5 +1,4 @@
 import { memo, useState, useEffect } from 'react'
-import { Handle, Position } from '@xyflow/react'
 import {
   DeleteIcon,
   PresentationIcon
@@ -7,7 +6,7 @@ import {
 import { SlidersHorizontal, FileText } from 'lucide-react'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
-import { areNodePropsEqual } from './nodeUtils'
+import { areNodePropsEqual, NodeHandles, SourceNodeBadge } from './nodeUtils'
 
 const FRAME_COLORS: Record<string, { border: string; bg: string; badge: string }> = {
   indigo: {
@@ -149,6 +148,9 @@ export const FrameNode = memo(({ id, data, selected }: any) => {
     window.addEventListener('mouseup', onMouseUp)
   }
 
+  const isConnectorActive = Boolean(data?.isConnectorActive)
+  const isConnectSource = Boolean(data?.isConnectSource)
+
   return (
     <div
       style={{ width: `${width}px`, height: `${height}px` }}
@@ -156,32 +158,20 @@ export const FrameNode = memo(({ id, data, selected }: any) => {
         isResizing ? 'cursor-se-resize select-none' : ''
       } ${
         selected ? 'ring-2 ring-indigo-500 ring-offset-2 ring-offset-[var(--app-bg-canvas)] shadow-2xl' : ''
+      } ${
+        isConnectSource
+          ? 'ring-4 ring-amber-500 shadow-2xl scale-[1.01]'
+          : isConnectorActive
+          ? 'ring-2 ring-blue-500/50 hover:ring-2 hover:ring-blue-500 cursor-pointer'
+          : ''
       }`}
     >
-      {/* 4 Handles for connection arrows */}
-      <Handle
-        id="top"
-        type="source"
-        position={Position.Top}
-        className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white dark:!border-zinc-900"
-      />
-      <Handle
-        id="bottom"
-        type="source"
-        position={Position.Bottom}
-        className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white dark:!border-zinc-900"
-      />
-      <Handle
-        id="left"
-        type="source"
-        position={Position.Left}
-        className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white dark:!border-zinc-900"
-      />
-      <Handle
-        id="right"
-        type="source"
-        position={Position.Right}
-        className="!w-3 !h-3 !bg-indigo-500 !border-2 !border-white dark:!border-zinc-900"
+      <SourceNodeBadge isConnectSource={isConnectSource} isConnectorActive={isConnectorActive} />
+      <NodeHandles
+        selected={selected}
+        isConnectorActive={isConnectorActive}
+        isConnectSource={isConnectSource}
+        accentColor="#6366f1"
       />
 
       {/* Frame Top Header Pill (Notion / Milanote Frame Header) */}

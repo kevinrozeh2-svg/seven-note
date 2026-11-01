@@ -356,21 +356,26 @@ export async function cleanupLegacyTemplatePresets() {
 }
 
 // Seed default initial data if database is empty
-export async function seedInitialData() {
-  await cleanupLegacyTemplatePresets()
+let isSeeding = false
 
-  const spaceCount = await db.spaces.count()
-  if (spaceCount === 0) {
-    await db.spaces.add({
-      id: DEFAULT_SPACE_ID,
-      name: 'Demo Workspace',
-      icon: '⚡',
-      color: '#1e96eb',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      syncStatus: 'pending'
-    })
-  }
+export async function seedInitialData() {
+  if (isSeeding) return
+  isSeeding = true
+  try {
+    await cleanupLegacyTemplatePresets()
+
+    const spaceCount = await db.spaces.count()
+    if (spaceCount === 0) {
+      await db.spaces.put({
+        id: DEFAULT_SPACE_ID,
+        name: 'Demo Workspace',
+        icon: '⚡',
+        color: '#1e96eb',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        syncStatus: 'pending'
+      }).catch(() => {})
+    }
 
   // Ensure any existing workspaces without spaceId are attributed to DEFAULT_SPACE_ID
   const withoutSpace = await db.workspaces.filter((w) => !w.spaceId).toArray()
@@ -410,7 +415,7 @@ export async function seedInitialData() {
 
   const untitledId = 'untitled-workspace'
 
-  await db.workspaces.bulkAdd([
+  await db.workspaces.bulkPut([
     {
       id: untitledId,
       parentId: null,
@@ -562,7 +567,7 @@ export async function seedInitialData() {
   ])
 
   // Canvas nodes for the welcome workspace
-  await db.canvasNodes.bulkAdd([
+  await db.canvasNodes.bulkPut([
     {
       id: 'node-intro',
       workspaceId: rootWorkspaceId,
@@ -644,7 +649,7 @@ export async function seedInitialData() {
   ])
 
   // Canvas edges connecting nodes
-  await db.canvasEdges.bulkAdd([
+  await db.canvasEdges.bulkPut([
     {
       id: 'edge-1',
       workspaceId: rootWorkspaceId,
@@ -672,6 +677,11 @@ export async function seedInitialData() {
       syncStatus: 'pending'
     }
   ])
+  } catch (err) {
+    console.warn('seedInitialData warning:', err)
+  } finally {
+    isSeeding = false
+  }
 }
 
 // Workspace Management Helpers

@@ -1,10 +1,9 @@
 import { memo, useState } from 'react'
-import { Handle, Position } from '@xyflow/react'
 import { DeleteIcon, PlusIcon, DoneIcon, HighLightLinearIcon } from '@blocksuite/icons/rc'
 import confetti from 'canvas-confetti'
 import { db, type CanvasTodoItem } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
-import { areNodePropsEqual } from './nodeUtils'
+import { areNodePropsEqual, NodeHandles, SourceNodeBadge, getCardCustomStyle, isColorDark, CardSelectionOverlay } from './nodeUtils'
 import { renderWithAppleEmoji } from '../../ui/AppleEmoji'
 
 const COLOR_MAP: Record<string, { cardBorder: string; accentBar: string; badgeBg: string; badgeBorder: string; badgeText: string; dot: string; topGlow: string }> = {
@@ -138,47 +137,34 @@ export const TodoNode = memo(({ id, data, selected }: any) => {
   const completedCount = todos.filter((t) => t.completed).length
   const progressPercent = todos.length === 0 ? 0 : Math.round((completedCount / todos.length) * 100)
 
+  const isConnectorActive = Boolean(data?.isConnectorActive)
+  const isConnectSource = Boolean(data?.isConnectSource)
+  const customCardStyle = getCardCustomStyle(data, 16)
+  const isDarkFill = isColorDark(data?.fillColor)
+
   return (
     <div
-      className={`group relative w-[290px] rounded-2xl transition-all duration-200 bg-white dark:bg-[#18181b] overflow-hidden ${
+      className={`group relative w-[290px] rounded-2xl transition-all duration-200 bg-white dark:bg-[#18181b] overflow-visible ${
         selected
-          ? 'ring-2 ring-[var(--app-accent)] shadow-2xl'
+          ? 'shadow-2xl'
           : 'shadow-[0_4px_20px_-4px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_30px_-6px_rgba(0,0,0,0.5),0_1px_3px_rgba(0,0,0,0.3)]'
-      } hover:shadow-xl`}
+      } ${
+        isConnectSource
+          ? 'ring-4 ring-amber-500 shadow-2xl scale-[1.02]'
+          : isConnectorActive
+          ? 'ring-2 ring-blue-500/50 hover:ring-2 hover:ring-blue-500 cursor-pointer'
+          : ''
+      } hover:shadow-xl ${isDarkFill ? 'text-zinc-100' : ''}`}
+      style={{
+        ...customCardStyle
+      }}
     >
-
-      {/* Handles */}
-      <Handle
-        id="top"
-        type="source"
-        position={Position.Top}
-        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
-          selected ? '!opacity-100' : ''
-        }`}
-      />
-      <Handle
-        id="bottom"
-        type="source"
-        position={Position.Bottom}
-        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
-          selected ? '!opacity-100' : ''
-        }`}
-      />
-      <Handle
-        id="left"
-        type="source"
-        position={Position.Left}
-        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
-          selected ? '!opacity-100' : ''
-        }`}
-      />
-      <Handle
-        id="right"
-        type="source"
-        position={Position.Right}
-        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
-          selected ? '!opacity-100' : ''
-        }`}
+      <CardSelectionOverlay selected={selected} />
+      <SourceNodeBadge isConnectSource={isConnectSource} isConnectorActive={isConnectorActive} />
+      <NodeHandles
+        selected={selected}
+        isConnectorActive={isConnectorActive}
+        isConnectSource={isConnectSource}
       />
 
       {/* Header */}
@@ -296,7 +282,7 @@ export const TodoNode = memo(({ id, data, selected }: any) => {
                 className={`truncate ${
                   todo.completed
                     ? 'line-through text-zinc-400 dark:text-zinc-500'
-                    : 'text-zinc-800 dark:text-zinc-200'
+                    : isDarkFill ? 'text-white' : 'text-zinc-800 dark:text-zinc-200'
                 }`}
               >
                 {renderWithAppleEmoji(todo.text)}

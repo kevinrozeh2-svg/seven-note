@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { type UserProfile, type UserRole, type UserStatus } from './teamAuth'
+import { type UserProfile, type UserRole, type UserStatus, isAuthorizedAdminEmail } from './teamAuth'
 
 export interface SupabaseConfig {
   url: string
@@ -201,6 +201,14 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
 
     if (error || !data) return null
 
+    const isAuthorized = isAuthorizedAdminEmail(data.email)
+    const role: UserRole = isAuthorized ? 'admin' : (data.role || 'member')
+
+    // Si el correo está autorizado como admin pero en la BD aún figuraba como member, sincronizar en BD
+    if (isAuthorized && data.role !== 'admin') {
+      supabase.from('user_profiles').update({ role: 'admin' }).eq('id', userId).then()
+    }
+
     return {
       id: data.id,
       email: data.email,
@@ -208,7 +216,7 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
       avatarUrl: data.avatar_url,
       color: data.color || '#2563eb',
       initial: (data.full_name || data.email || 'U').charAt(0).toUpperCase(),
-      role: data.role || 'member',
+      role: role,
       status: data.status || 'active',
       createdAt: data.created_at,
       updatedAt: data.updated_at
@@ -266,18 +274,21 @@ export async function fetchAllProfiles(): Promise<UserProfile[]> {
 
     if (error || !data) return []
 
-    return data.map((d: any) => ({
-      id: d.id,
-      email: d.email,
-      fullName: d.full_name || '',
-      avatarUrl: d.avatar_url,
-      color: d.color || '#2563eb',
-      initial: (d.full_name || d.email || 'U').charAt(0).toUpperCase(),
-      role: d.role || 'member',
-      status: d.status || 'active',
-      createdAt: d.created_at,
-      updatedAt: d.updated_at
-    }))
+    return data.map((d: any) => {
+      const isAuthorized = isAuthorizedAdminEmail(d.email)
+      return {
+        id: d.id,
+        email: d.email,
+        fullName: d.full_name || '',
+        avatarUrl: d.avatar_url,
+        color: d.color || '#2563eb',
+        initial: (d.full_name || d.email || 'U').charAt(0).toUpperCase(),
+        role: isAuthorized ? 'admin' : (d.role || 'member'),
+        status: d.status || 'active',
+        createdAt: d.created_at,
+        updatedAt: d.updated_at
+      }
+    })
   } catch (e) {
     console.warn('Error fetching all profiles:', e)
     return []

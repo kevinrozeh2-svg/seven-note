@@ -8,6 +8,7 @@ import Placeholder from '@tiptap/extension-placeholder'
 import Underline from '@tiptap/extension-underline'
 import Link from '@tiptap/extension-link'
 import Image from '@tiptap/extension-image'
+import { processAndUploadImage } from '../../lib/imageOptimizer'
 import { Table } from '@tiptap/extension-table'
 import { TableRow } from '@tiptap/extension-table-row'
 import { TableHeader } from '@tiptap/extension-table-header'
@@ -123,20 +124,24 @@ export function DocEditor({
   const saveTimeoutRef = useRef<any>(null)
   const editorImageInputRef = useRef<HTMLInputElement>(null)
 
-  const handleEditorImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleEditorImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files || files.length === 0 || !editor) return
 
-    Array.from(files).forEach((file) => {
-      if (!file.type.startsWith('image/')) return
-      const reader = new FileReader()
-      reader.onload = () => {
-        const base64 = reader.result as string
-        editor.chain().focus().setImage({ src: base64, alt: file.name }).run()
-      }
-      reader.readAsDataURL(file)
-    })
+    const imageFiles = Array.from(files).filter((file) => file.type.startsWith('image/'))
     e.target.value = ''
+    if (imageFiles.length === 0) return
+
+    const toastId = toast.loading(`Optimizando ${imageFiles.length} foto(s)...`)
+    try {
+      for (const file of imageFiles) {
+        const result = await processAndUploadImage(file)
+        editor.chain().focus().setImage({ src: result.url, alt: file.name }).run()
+      }
+      toast.success('Fotos optimizadas en WebP e insertadas', { id: toastId })
+    } catch (err: any) {
+      toast.error('Error insertando fotos: ' + (err?.message || 'Error'), { id: toastId })
+    }
   }
 
   const editor = useEditor({
@@ -186,14 +191,17 @@ export function DocEditor({
             if (item.type.indexOf('image') === 0) {
               const file = item.getAsFile()
               if (file) {
-                const reader = new FileReader()
-                reader.onload = () => {
-                  const base64 = reader.result as string
-                  const node = view.state.schema.nodes.image.create({ src: base64, alt: file.name })
-                  const tr = view.state.tr.replaceSelectionWith(node)
-                  view.dispatch(tr)
-                }
-                reader.readAsDataURL(file)
+                const toastId = toast.loading('Optimizando imagen pegada...')
+                processAndUploadImage(file)
+                  .then((result) => {
+                    const node = view.state.schema.nodes.image.create({ src: result.url, alt: file.name })
+                    const tr = view.state.tr.replaceSelectionWith(node)
+                    view.dispatch(tr)
+                    toast.success('Imagen optimizada pegada en el documento', { id: toastId })
+                  })
+                  .catch((err: any) => {
+                    toast.error('Error al procesar imagen: ' + (err?.message || 'Error'), { id: toastId })
+                  })
                 return true
               }
             }
@@ -206,16 +214,19 @@ export function DocEditor({
         if (files && files.length > 0) {
           for (const file of files) {
             if (file.type.startsWith('image/')) {
-              const reader = new FileReader()
-              reader.onload = () => {
-                const base64 = reader.result as string
-                const coords = view.posAtCoords({ left: event.clientX, top: event.clientY })
-                const pos = coords ? coords.pos : view.state.selection.from
-                const node = view.state.schema.nodes.image.create({ src: base64, alt: file.name })
-                const tr = view.state.tr.insert(pos, node)
-                view.dispatch(tr)
-              }
-              reader.readAsDataURL(file)
+              const coords = view.posAtCoords({ left: event.clientX, top: event.clientY })
+              const pos = coords ? coords.pos : view.state.selection.from
+              const toastId = toast.loading('Optimizando imagen soltada...')
+              processAndUploadImage(file)
+                .then((result) => {
+                  const node = view.state.schema.nodes.image.create({ src: result.url, alt: file.name })
+                  const tr = view.state.tr.insert(pos, node)
+                  view.dispatch(tr)
+                  toast.success('Imagen optimizada insertada', { id: toastId })
+                })
+                .catch((err: any) => {
+                  toast.error('Error al procesar imagen: ' + (err?.message || 'Error'), { id: toastId })
+                })
               return true
             }
           }

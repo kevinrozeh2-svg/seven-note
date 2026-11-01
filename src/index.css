@@ -629,3 +629,40 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
 /* Canvas focus mode: hide every floating tool panel, keep only the board */
 .canvas-hide-chrome .react-flow__panel { display: none !important; }
 
+/* Card Connector Arrow Enhancements */
+.react-flow__handle {
+  cursor: crosshair !important;
+  pointer-events: all !important;
+}
+
+/* Invisible hit area expansion: makes handles easily clickable and grabbable within 26px area */
+.react-flow__handle::after {
+  content: '';
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  right: -8px;
+  bottom: -8px;
+  border-radius: 9999px;
+  cursor: crosshair;
+}
+
+/* Highlight all connection handles during active connection drag so user knows where to drop */
+.react-flow.connecting .react-flow__handle {
+  opacity: 1 !important;
+  transform: scale(1.25);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.4);
+}
+
+/* Selected edge appearance */
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke-width: 3.5 !important;
+  filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.5));
+}
+
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke-width: 3 !important;
+  cursor: pointer;
+}
+
+

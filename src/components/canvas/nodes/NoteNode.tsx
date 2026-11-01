@@ -1,10 +1,10 @@
-import { memo, useState } from 'react'
-import { Handle, Position } from '@xyflow/react'
-import { Trash2 } from 'lucide-react'
+import { memo, useState, useEffect } from 'react'
+import { Trash2, Type } from 'lucide-react'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
-import { areNodePropsEqual } from './nodeUtils'
+import { areNodePropsEqual, NodeHandles, SourceNodeBadge, getCardCustomStyle, isColorDark, CardSelectionOverlay } from './nodeUtils'
 import { AppleEmoji, renderWithAppleEmoji, isSingleEmoji } from '../../ui/AppleEmoji'
+import { FontPickerPopover } from './FontPickerPopover'
 
 interface ColorScheme {
   cardBorder: string
@@ -113,7 +113,9 @@ const COLOR_MAP: Record<string, ColorScheme> = {
 export const NoteNode = memo(({ id, data, selected }: any) => {
   const [title, setTitle] = useState(data.title ?? '')
   const [content, setContent] = useState(data.content ?? '')
-  const [color, setColor] = useState(data.color ?? 'slate')
+  const color = data.color ?? 'slate'
+  const [fontFamily, setFontFamily] = useState(data.fontFamily || '')
+  const [showFontMenu, setShowFontMenu] = useState(false)
   const [isQuote] = useState(data.isQuote ?? false)
   const [quoteAuthor] = useState(data.quoteAuthor ?? '')
   const [alertBox] = useState(data.alertBox ?? '')
@@ -122,7 +124,15 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [isEditingContent, setIsEditingContent] = useState(false)
 
+  useEffect(() => {
+    if (data.title !== undefined) setTitle(data.title)
+    if (data.content !== undefined) setContent(data.content)
+    if (data.fontFamily !== undefined) setFontFamily(data.fontFamily)
+  }, [data.title, data.content, data.fontFamily])
+
   const colorScheme = COLOR_MAP[color] || COLOR_MAP.slate
+  const isConnectorActive = Boolean(data?.isConnectorActive)
+  const isConnectSource = Boolean(data?.isConnectSource)
 
   const save = async (updates: any) => {
     try {
@@ -149,26 +159,110 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
     }
   }
 
+  // Standalone Emoji Sticker (pure emoji without card background)
+  const isEmojiSticker = !title && isSingleEmoji(content.trim()) && !isQuote && !alertBox && !isBanner && !linkUrl
+
+  if (isEmojiSticker) {
+    return (
+      <div
+        className={`group relative p-2 select-none flex items-center justify-center transition-transform ${
+          selected ? 'ring-2 ring-[var(--app-accent)] rounded-2xl bg-black/5 dark:bg-white/5' : ''
+        } ${
+          isConnectSource
+            ? 'ring-4 ring-amber-500 rounded-2xl scale-110'
+            : isConnectorActive
+            ? 'ring-1 ring-blue-500/40 hover:ring-2 hover:ring-blue-500 rounded-2xl cursor-pointer'
+            : ''
+        }`}
+        style={{
+          width: data.width || 80,
+          minHeight: 80
+        }}
+      >
+        <SourceNodeBadge isConnectSource={isConnectSource} isConnectorActive={isConnectorActive} />
+        <NodeHandles
+          selected={selected}
+          isConnectorActive={isConnectorActive}
+          isConnectSource={isConnectSource}
+        />
+
+        {/* Floating delete button */}
+        <button
+          onClick={handleDelete}
+          className="absolute -top-2 -right-2 p-1 rounded-full bg-white dark:bg-zinc-800 hover:bg-rose-50 dark:hover:bg-rose-950/50 text-zinc-400 hover:text-rose-500 shadow-sm opacity-0 group-hover:opacity-100 transition z-10"
+          title="Eliminar emoji"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+
+        <div className="flex items-center justify-center">
+          <AppleEmoji
+            emoji={content.trim()}
+            size={data.width ? Math.min(Math.max(data.width - 24, 48), 120) : 64}
+            className="drop-shadow-md hover:scale-110 transition-transform duration-150 cursor-pointer"
+          />
+        </div>
+      </div>
+    )
+  }
+
   // Red Banner Style (matches Screenshot 1: "El Grupo de Música del Futuro")
   if (isBanner) {
     return (
       <div
         className={`group relative px-6 py-3 rounded-xl transition-[box-shadow,border-color] duration-150 shadow-md ${
           selected ? 'ring-2 ring-white shadow-xl' : ''
+        } ${
+          isConnectSource
+            ? 'ring-4 ring-amber-400 shadow-2xl scale-[1.02] shadow-amber-500/30'
+            : isConnectorActive
+            ? 'ring-1 ring-white/50 hover:ring-2 hover:ring-white cursor-pointer'
+            : ''
         } bg-rose-600 dark:bg-rose-700 text-white`}
-        style={{ minWidth: 200, maxWidth: 360 }}
+        style={{ minWidth: 200, maxWidth: 360, ...(fontFamily ? { fontFamily } : {}) }}
       >
-        <Handle id="top" type="source" position={Position.Top} className="!w-2.5 !h-2.5 !bg-white !border !border-neutral-800" />
-        <Handle id="bottom" type="source" position={Position.Bottom} className="!w-2.5 !h-2.5 !bg-white !border !border-neutral-800" />
-        <Handle id="left" type="source" position={Position.Left} className="!w-2.5 !h-2.5 !bg-white !border !border-neutral-800" />
-        <Handle id="right" type="source" position={Position.Right} className="!w-2.5 !h-2.5 !bg-white !border !border-neutral-800" />
+        <SourceNodeBadge isConnectSource={isConnectSource} isConnectorActive={isConnectorActive} />
+        <NodeHandles
+          selected={selected}
+          isConnectorActive={isConnectorActive}
+          isConnectSource={isConnectSource}
+          accentColor="#ffffff"
+        />
 
-        <button
-          onClick={handleDelete}
-          className="absolute -top-2 -right-2 p-1 rounded-full bg-white text-neutral-800 shadow-sm opacity-0 group-hover:opacity-100 transition z-10"
-        >
-          <Trash2 className="w-3 h-3 text-rose-500" />
-        </button>
+        <div className="absolute -top-2 -right-2 flex items-center gap-1 z-20">
+          <div className="relative">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setShowFontMenu(!showFontMenu)
+              }}
+              className={`p-1 rounded-full bg-white dark:bg-neutral-800 text-neutral-700 dark:text-neutral-200 shadow-sm transition cursor-pointer ${
+                showFontMenu || fontFamily ? 'opacity-100 ring-2 ring-[#1e96eb]' : 'opacity-0 group-hover:opacity-100'
+              }`}
+              title="Cambiar tipografía del banner"
+            >
+              <Type className="w-3 h-3 text-[#1e96eb]" />
+            </button>
+
+            <FontPickerPopover
+              isOpen={showFontMenu}
+              onClose={() => setShowFontMenu(false)}
+              currentFamily={fontFamily || 'Georgia, serif'}
+              onSelect={(family) => {
+                setFontFamily(family)
+                save({ fontFamily: family })
+              }}
+              align="right"
+            />
+          </div>
+
+          <button
+            onClick={handleDelete}
+            className="p-1 rounded-full bg-white text-neutral-800 shadow-sm opacity-0 group-hover:opacity-100 transition z-10 cursor-pointer"
+          >
+            <Trash2 className="w-3 h-3 text-rose-500" />
+          </button>
+        </div>
 
         {isEditingTitle ? (
           <input
@@ -197,60 +291,75 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
     )
   }
 
+  const customCardStyle = getCardCustomStyle(data, 16)
+  const isDarkFill = isColorDark(data?.fillColor)
+
   return (
     <div
       className={`group relative rounded-2xl transition-all duration-200 bg-white dark:bg-[#18181b] p-3.5 select-none ${
         selected
-          ? 'ring-2 ring-[var(--app-accent)] shadow-2xl'
+          ? 'shadow-2xl'
           : 'shadow-[0_4px_20px_-4px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_30px_-6px_rgba(0,0,0,0.5),0_1px_3px_rgba(0,0,0,0.3)]'
-      } hover:shadow-xl`}
+      } ${
+        isConnectSource
+          ? 'ring-4 ring-amber-500 shadow-2xl shadow-amber-500/25 scale-[1.02]'
+          : isConnectorActive
+          ? 'ring-1 ring-blue-500/40 hover:ring-2 hover:ring-blue-500 hover:shadow-xl cursor-pointer'
+          : 'hover:shadow-xl'
+      } ${isDarkFill ? 'text-zinc-100' : ''}`}
       style={{
         width: data.width || 280,
-        minHeight: 80
+        minHeight: 80,
+        ...(fontFamily ? { fontFamily } : {}),
+        ...customCardStyle
       }}
     >
-      {/* Handles */}
-      <Handle
-        id="top"
-        type="source"
-        position={Position.Top}
-        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
-          selected ? '!opacity-100' : ''
-        }`}
-      />
-      <Handle
-        id="bottom"
-        type="source"
-        position={Position.Bottom}
-        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
-          selected ? '!opacity-100' : ''
-        }`}
-      />
-      <Handle
-        id="left"
-        type="source"
-        position={Position.Left}
-        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
-          selected ? '!opacity-100' : ''
-        }`}
-      />
-      <Handle
-        id="right"
-        type="source"
-        position={Position.Right}
-        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
-          selected ? '!opacity-100' : ''
-        }`}
+      <CardSelectionOverlay selected={selected} />
+      <SourceNodeBadge isConnectSource={isConnectSource} isConnectorActive={isConnectorActive} />
+      <NodeHandles
+        selected={selected}
+        isConnectorActive={isConnectorActive}
+        isConnectSource={isConnectSource}
       />
 
-      {/* Floating delete button */}
-      <button
-        onClick={handleDelete}
-        className="absolute top-2.5 right-2.5 p-1 rounded-full bg-zinc-100 dark:bg-zinc-800 hover:bg-rose-50 dark:hover:bg-rose-950/50 text-zinc-400 hover:text-rose-500 shadow-sm opacity-0 group-hover:opacity-100 transition z-10"
-        title="Eliminar nota"
-      >
-        <Trash2 className="w-3.5 h-3.5" />
-      </button>
+      {/* Action buttons (Typography & Delete) */}
+      <div className="absolute top-2.5 right-2.5 flex items-center gap-1 z-20">
+        <div className="relative">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              setShowFontMenu(!showFontMenu)
+            }}
+            className={`p-1 rounded-full transition shadow-xs cursor-pointer ${
+              showFontMenu || fontFamily
+                ? 'bg-zinc-200 dark:bg-zinc-700 text-[#1e96eb] opacity-100'
+                : 'bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 opacity-0 group-hover:opacity-100'
+            }`}
+            title="Cambiar tipografía de la nota"
+          >
+            <Type className="w-3.5 h-3.5" />
+          </button>
+
+          <FontPickerPopover
+            isOpen={showFontMenu}
+            onClose={() => setShowFontMenu(false)}
+            currentFamily={fontFamily || 'Inter, system-ui, sans-serif'}
+            onSelect={(family) => {
+              setFontFamily(family)
+              save({ fontFamily: family })
+            }}
+            align="right"
+          />
+        </div>
+
+        <button
+          onClick={handleDelete}
+          className="p-1 rounded-full bg-zinc-100 dark:bg-zinc-800 hover:bg-rose-50 dark:hover:bg-rose-950/50 text-zinc-400 hover:text-rose-500 shadow-sm opacity-0 group-hover:opacity-100 transition cursor-pointer"
+          title="Eliminar nota"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
 
       {/* Header Pill: e.g. "Causas" */}
       {(title || data.showTitle) && (
@@ -308,7 +417,6 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
           ) : (
             <div
               onDoubleClick={() => setIsEditingContent(true)}
-              onPointerDown={(e) => e.stopPropagation()}
               className="nodrag cursor-text select-text whitespace-pre-wrap leading-relaxed text-[13px] italic text-zinc-800 dark:text-zinc-200 min-h-[36px]"
             >
               {content ? renderWithAppleEmoji(content) : (
@@ -318,7 +426,6 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
           )}
           {quoteAuthor && (
             <div
-              onPointerDown={(e) => e.stopPropagation()}
               className="not-italic mt-1.5 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 select-text nodrag"
             >
               {renderWithAppleEmoji(quoteAuthor)}
@@ -330,7 +437,6 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
         <div className="text-[13px] leading-relaxed relative z-10">
           {data.hasHtmlHighlight ? (
             <div
-              onPointerDown={(e) => e.stopPropagation()}
               dangerouslySetInnerHTML={{ __html: content }}
               className="nodrag select-text leading-relaxed text-zinc-800 dark:text-zinc-200"
             />
@@ -346,13 +452,16 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
               onPointerDown={(e) => e.stopPropagation()}
               rows={content.length > 120 ? 5 : 3}
               placeholder="Escribe tu nota aquí..."
-              className="nodrag nowheel w-full bg-transparent border-none outline-none resize-none text-[13px] leading-relaxed font-normal text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
+              className={`nodrag nowheel w-full bg-transparent border-none outline-none resize-none text-[14px] leading-relaxed font-normal ${
+                isDarkFill ? 'text-white placeholder:text-zinc-400' : 'text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 dark:placeholder:text-zinc-500'
+              }`}
             />
           ) : (
             <div
               onDoubleClick={() => setIsEditingContent(true)}
-              onPointerDown={(e) => e.stopPropagation()}
-              className="nodrag cursor-text select-text whitespace-pre-wrap leading-relaxed text-[13px] font-normal text-zinc-800 dark:text-zinc-200 min-h-[36px]"
+              className={`nodrag cursor-text select-text whitespace-pre-wrap leading-relaxed text-[14px] font-normal ${
+                isDarkFill ? 'text-zinc-100' : 'text-zinc-800 dark:text-zinc-200'
+              } min-h-[36px]`}
             >
               {content ? (
                 isSingleEmoji(content.trim()) && !title ? (
@@ -391,24 +500,6 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
           </a>
         </div>
       )}
-
-      {/* Color switcher on hover */}
-      <div className="absolute -bottom-3.5 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition flex items-center gap-1.5 p-1 rounded-full bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 shadow-lg z-20">
-        {['slate', 'yellow', 'blue', 'green', 'rose', 'peach', 'darkNote'].map((col) => (
-          <button
-            key={col}
-            onClick={() => {
-              setColor(col)
-              save({ color: col })
-            }}
-            className={`w-3.5 h-3.5 rounded-full transition-transform hover:scale-125 border border-black/10 dark:border-white/10 ${
-              color === col ? 'ring-2 ring-blue-500 scale-110' : ''
-            }`}
-            style={{ backgroundColor: COLOR_MAP[col]?.dot || '#9ca3af' }}
-            title={col}
-          />
-        ))}
-      </div>
     </div>
   )
 }, areNodePropsEqual)

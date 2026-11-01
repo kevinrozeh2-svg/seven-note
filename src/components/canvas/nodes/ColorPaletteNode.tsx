@@ -1,10 +1,9 @@
 import { memo, useState } from 'react'
-import { Handle, Position } from '@xyflow/react'
 import { Plus, Trash2, Check } from 'lucide-react'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
 import { toast } from 'sonner'
-import { areNodePropsEqual } from './nodeUtils'
+import { areNodePropsEqual, NodeHandles, SourceNodeBadge } from './nodeUtils'
 
 export interface ColorSwatchItem {
   id: string
@@ -100,18 +99,28 @@ export const ColorPaletteNode = memo(({ id, data, selected }: any) => {
     save(updated)
   }
 
+  const isConnectorActive = Boolean(data?.isConnectorActive)
+  const isConnectSource = Boolean(data?.isConnectSource)
+
   return (
     <div
       className={`group relative flex flex-col gap-3 rounded-xl transition-[box-shadow] duration-150 ${
         selected ? 'ring-2 ring-[var(--app-accent)] shadow-xl' : ''
+      } ${
+        isConnectSource
+          ? 'ring-4 ring-amber-500 shadow-2xl scale-[1.02]'
+          : isConnectorActive
+          ? 'ring-2 ring-blue-500/50 hover:ring-2 hover:ring-blue-500 cursor-pointer'
+          : ''
       }`}
       style={{ width: 180 }}
     >
-      {/* Handles */}
-      <Handle id="top" type="source" position={Position.Top} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
-      <Handle id="bottom" type="source" position={Position.Bottom} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
-      <Handle id="left" type="source" position={Position.Left} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
-      <Handle id="right" type="source" position={Position.Right} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
+      <SourceNodeBadge isConnectSource={isConnectSource} isConnectorActive={isConnectorActive} />
+      <NodeHandles
+        selected={selected}
+        isConnectorActive={isConnectorActive}
+        isConnectSource={isConnectSource}
+      />
 
       {/* Floating delete button */}
       <button

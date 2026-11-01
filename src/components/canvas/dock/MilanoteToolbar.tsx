@@ -1,6 +1,7 @@
 import React, { memo, useMemo, useState } from 'react'
 import {
   NoteBlank,
+  Smiley,
   LinkSimple,
   Image as ImageIcon,
   FolderSimplePlus,
@@ -12,7 +13,6 @@ import {
   PencilSimpleLine,
   Layout
 } from '@phosphor-icons/react'
-import { AppleEmoji } from '../../ui/AppleEmoji'
 import { EmojiPickerPopover } from '../../modals/EmojiPickerPopover'
 
 export interface MilanoteToolbarProps {
@@ -41,7 +41,7 @@ export const MilanoteToolbar: React.FC<MilanoteToolbarProps> = memo(({
     {
       id: 'emoji',
       label: 'Emoji',
-      icon: <AppleEmoji emoji="✨" size={20} />,
+      icon: <Smiley size={20} weight="duotone" />,
       onClick: () => setIsEmojiPickerOpen((prev) => !prev),
       isActive: isEmojiPickerOpen
     },
@@ -154,7 +154,7 @@ export const MilanoteToolbar: React.FC<MilanoteToolbarProps> = memo(({
               isOpen={isEmojiPickerOpen}
               onClose={() => setIsEmojiPickerOpen(false)}
               onSelectEmoji={(emoji) => {
-                onAddNode('note', { color: 'yellow', title: '', content: emoji, width: 140 })
+                onAddNode('note', { color: 'transparent', title: '', content: emoji, width: 90 })
                 setIsEmojiPickerOpen(false)
               }}
               title="Añadir Emoji al Tablero"

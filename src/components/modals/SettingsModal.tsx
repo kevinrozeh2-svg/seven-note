@@ -18,6 +18,8 @@ import {
 } from '../../lib/supabase'
 import { syncEngine, type SyncEngineStatus } from '../../lib/syncEngine'
 import { db } from '../../db'
+import { optimizeExistingLocalImages, formatBytes } from '../../lib/imageOptimizer'
+import { ImageIcon } from '@blocksuite/icons/rc'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -36,6 +38,8 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [copiedSql, setCopiedSql] = useState(false)
   const [manualSyncing, setManualSyncing] = useState(false)
+  const [isOptimizing, setIsOptimizing] = useState(false)
+  const [optimizeResult, setOptimizeResult] = useState<string | null>(null)
 
   useEffect(() => {
     if (isOpen) {
@@ -69,6 +73,27 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
     setManualSyncing(true)
     await syncEngine.triggerSync()
     setManualSyncing(false)
+  }
+
+  const handleOptimizeExistingImages = async () => {
+    setIsOptimizing(true)
+    setOptimizeResult(null)
+    try {
+      const res = await optimizeExistingLocalImages()
+      if (res.processedCount === 0) {
+        setOptimizeResult('¡Todas las fotos ya están optimizadas y en formato ligero!')
+      } else {
+        const saved = Math.max(0, res.totalOriginalBytes - res.totalCompressedBytes)
+        setOptimizeResult(
+          `¡Optimización completada! ${res.processedCount} foto(s) reducida(s), ahorraste ${formatBytes(saved)} de almacenamiento.`
+        )
+        syncEngine.scheduleSync(1000)
+      }
+    } catch (err: any) {
+      setOptimizeResult('Error durante la optimización: ' + (err?.message || 'Error desconocido'))
+    } finally {
+      setIsOptimizing(false)
+    }
   }
 
   const copySqlSchema = async () => {
@@ -211,6 +236,17 @@ create policy "Acceso total a seven_canvas_nodes" on public.seven_canvas_nodes f
 create policy "Acceso total a seven_canvas_edges" on public.seven_canvas_edges for all using (true) with check (true);
 create policy "Acceso total a seven_collections" on public.seven_collections for all using (true) with check (true);
 create policy "Acceso total a seven_tags" on public.seven_tags for all using (true) with check (true);
+
+-- Bucket de almacenamiento para fotos y audios optimizados
+insert into storage.buckets (id, name, public)
+values ('attachments', 'attachments', true)
+on conflict (id) do nothing;
+
+drop policy if exists "Permitir subida y lectura pública en attachments" on storage.objects;
+create policy "Permitir subida y lectura pública en attachments"
+  on storage.objects for all
+  using (bucket_id = 'attachments')
+  with check (bucket_id = 'attachments');
 `
     await navigator.clipboard.writeText(sqlText)
     setCopiedSql(true)
@@ -514,6 +550,47 @@ create policy "Acceso total a seven_tags" on public.seven_tags for all using (tr
               />
               <span>Sincronizar ahora</span>
             </button>
+          </div>
+
+          {/* Storage & Image Optimization Section */}
+          <div className="p-4 rounded-3xl border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.02] space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-500/10 text-blue-500 shrink-0">
+                  <ImageIcon style={{ width: 16, height: 16 }} />
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-[var(--app-text-primary)]">
+                    Ahorro y Optimización de Fotos (WebP & Supabase Storage)
+                  </div>
+                  <div className="text-[11px] text-neutral-400">
+                    Las fotos se comprimen automáticamente hasta un 95% en WebP y se guardan en el bucket <code className="font-mono text-[10px] bg-black/5 dark:bg-white/10 px-1 py-0.5 rounded">attachments</code> de Storage para no agotar los 500 MB de tu base de datos.
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleOptimizeExistingImages}
+                disabled={isOptimizing}
+                className="px-3.5 py-1.5 rounded-full text-xs font-semibold border border-black/[0.08] dark:border-white/[0.1] bg-white dark:bg-[#1a1b1e] hover:bg-black/5 dark:hover:bg-white/10 text-[var(--app-text-primary)] transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer active:scale-95 shadow-2xs shrink-0"
+              >
+                <ResetIcon
+                  style={{
+                    width: 14,
+                    height: 14,
+                    animation: isOptimizing ? 'spin 1s linear infinite' : 'none'
+                  }}
+                />
+                <span>{isOptimizing ? 'Optimizando...' : 'Comprimir fotos existentes'}</span>
+              </button>
+            </div>
+
+            {optimizeResult && (
+              <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-[11px] text-blue-700 dark:text-blue-300">
+                {optimizeResult}
+              </div>
+            )}
           </div>
 
           {/* Local Backups (Offline First) */}

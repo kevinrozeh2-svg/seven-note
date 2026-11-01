@@ -1,9 +1,8 @@
 import { memo, useState } from 'react'
-import { Handle, Position } from '@xyflow/react'
 import { ExternalLink, Trash2, Play, Globe } from 'lucide-react'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
-import { areNodePropsEqual } from './nodeUtils'
+import { areNodePropsEqual, NodeHandles, SourceNodeBadge, getCardCustomStyle, isColorDark, CardSelectionOverlay } from './nodeUtils'
 
 export const LinkNode = memo(({ id, data, selected }: any) => {
   const [title, setTitle] = useState(data.title ?? 'Designmuseum Denmark')
@@ -38,19 +37,31 @@ export const LinkNode = memo(({ id, data, selected }: any) => {
   }
 
   const isYouTube = url.includes('youtube') || url.includes('youtu.be')
+  const isConnectorActive = Boolean(data?.isConnectorActive)
+  const isConnectSource = Boolean(data?.isConnectSource)
+  const customCardStyle = getCardCustomStyle(data, 12)
+  const isDarkFill = isColorDark(data?.fillColor)
 
   return (
     <div
-      className={`group relative rounded-xl bg-white dark:bg-[#252525] transition-[box-shadow] duration-150 overflow-hidden ${
-        selected ? 'ring-2 ring-[var(--app-accent)] shadow-xl' : 'shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]'
-      }`}
-      style={{ width: data.width || 280 }}
+      className={`group relative rounded-xl bg-white dark:bg-[#252525] transition-[box-shadow] duration-150 overflow-visible ${
+        selected ? 'shadow-xl' : 'shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]'
+      } ${
+        isConnectSource
+          ? 'ring-4 ring-amber-500 shadow-2xl scale-[1.02]'
+          : isConnectorActive
+          ? 'ring-2 ring-blue-500/50 hover:ring-2 hover:ring-blue-500 cursor-pointer'
+          : ''
+      } ${isDarkFill ? 'text-zinc-100' : ''}`}
+      style={{ width: data.width || 280, ...customCardStyle }}
     >
-      {/* Handles */}
-      <Handle id="top" type="source" position={Position.Top} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
-      <Handle id="bottom" type="source" position={Position.Bottom} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
-      <Handle id="left" type="source" position={Position.Left} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
-      <Handle id="right" type="source" position={Position.Right} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
+      <CardSelectionOverlay selected={selected} />
+      <SourceNodeBadge isConnectSource={isConnectSource} isConnectorActive={isConnectorActive} />
+      <NodeHandles
+        selected={selected}
+        isConnectorActive={isConnectorActive}
+        isConnectSource={isConnectSource}
+      />
 
       {/* Floating delete button */}
       <button

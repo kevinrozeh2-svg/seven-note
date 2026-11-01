@@ -8,7 +8,7 @@ import {
   type TagItem
 } from '../db'
 import { getSupabaseClient, getStoredSupabaseConfig, getAuthUser } from './supabase'
-import { getCurrentMember } from './teamAuth'
+import { getCurrentMember, isUserAdmin } from './teamAuth'
 
 export type NetworkStatus = 'online' | 'offline'
 export type SyncEngineState = 'idle' | 'syncing' | 'synced' | 'error' | 'offline' | 'unconfigured'
@@ -422,7 +422,7 @@ class SyncEngine {
         for (const rw of remoteWorkspaces) {
           // Si la nota remota es privada y NO pertenece al miembro actual ni es admin, NO la guardamos localmente
           const isOwner = rw.owner_member === currentMember.id || rw.user_id === currentMember.id
-          if (rw.is_private && !isOwner && currentMember.role !== 'admin') {
+          if (rw.is_private && !isOwner && !isUserAdmin(currentMember)) {
             continue
           }
 

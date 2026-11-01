@@ -19,6 +19,17 @@ export interface TeamMember extends UserProfile {
   icon: string
 }
 
+/**
+ * Lista de correos autorizados con rol de Administrador.
+ * Todos los usuarios con estos correos (como Maikol y Kevin) tienen permisos totales de Administrador.
+ */
+export const AUTHORIZED_ADMIN_EMAILS: string[] = [
+  'kevin.rozeh@gmail.com',
+  'kevin.rozeh2@gmail.com',
+  'badmaik60@gmail.com',
+  'marcos@sevennote.local'
+]
+
 export const TEAM_MEMBERS: TeamMember[] = [
   {
     id: 'kevin',
@@ -37,9 +48,9 @@ export const TEAM_MEMBERS: TeamMember[] = [
     fullName: 'Maikol',
     color: '#10b981',
     initial: 'M',
-    role: 'member',
+    role: 'admin',
     status: 'active',
-    icon: '🚀',
+    icon: '⚡',
     email: 'badmaik60@gmail.com'
   },
   {
@@ -48,12 +59,21 @@ export const TEAM_MEMBERS: TeamMember[] = [
     fullName: 'Marcos',
     color: '#8b5cf6',
     initial: 'Mc',
-    role: 'member',
+    role: 'admin',
     status: 'active',
-    icon: '🎯',
+    icon: '⚡',
     email: 'marcos@sevennote.local'
   }
 ]
+
+export function isAuthorizedAdminEmail(email?: string | null): boolean {
+  if (!email) return false
+  const normalized = email.toLowerCase().trim()
+  return (
+    AUTHORIZED_ADMIN_EMAILS.some((e) => e.toLowerCase() === normalized) ||
+    TEAM_MEMBERS.some((m) => m.email?.toLowerCase() === normalized && m.role === 'admin')
+  )
+}
 
 const CURRENT_MEMBER_STORAGE_KEY = 'seven_note_current_member_id'
 const CURRENT_PROFILE_STORAGE_KEY = 'seven_note_current_user_profile'
@@ -62,7 +82,16 @@ const MEMBER_CHANGE_EVENT = 'seven_note_member_changed'
 let activeProfileMemory: TeamMember | null = null
 
 export function getCurrentMember(): TeamMember {
-  if (activeProfileMemory) return activeProfileMemory
+  if (activeProfileMemory) {
+    if (
+      (activeProfileMemory.email && isAuthorizedAdminEmail(activeProfileMemory.email)) ||
+      activeProfileMemory.id === 'kevin' ||
+      activeProfileMemory.id === 'maikol'
+    ) {
+      activeProfileMemory.role = 'admin'
+    }
+    return activeProfileMemory
+  }
 
   if (typeof window === 'undefined') return TEAM_MEMBERS[0]
 
@@ -71,6 +100,13 @@ export function getCurrentMember(): TeamMember {
     if (savedProfile) {
       const parsed = JSON.parse(savedProfile)
       if (parsed && parsed.id) {
+        if (
+          (parsed.email && isAuthorizedAdminEmail(parsed.email)) ||
+          parsed.id === 'kevin' ||
+          parsed.id === 'maikol'
+        ) {
+          parsed.role = 'admin'
+        }
         activeProfileMemory = parsed
         return parsed
       }
@@ -79,8 +115,16 @@ export function getCurrentMember(): TeamMember {
     const savedId = localStorage.getItem(CURRENT_MEMBER_STORAGE_KEY)
     const found = TEAM_MEMBERS.find((m) => m.id === savedId)
     if (found) {
-      activeProfileMemory = found
-      return found
+      const copy = { ...found }
+      if (
+        (copy.email && isAuthorizedAdminEmail(copy.email)) ||
+        copy.id === 'kevin' ||
+        copy.id === 'maikol'
+      ) {
+        copy.role = 'admin'
+      }
+      activeProfileMemory = copy
+      return copy
     }
   } catch (e) {
     console.warn('Error reading current member from localStorage', e)
@@ -95,7 +139,7 @@ export function setCurrentMember(memberIdOrMember: string | TeamMember): TeamMem
   if (typeof memberIdOrMember === 'string') {
     const found = TEAM_MEMBERS.find((m) => m.id === memberIdOrMember)
     if (found) {
-      memberToSet = found
+      memberToSet = { ...found }
     } else {
       memberToSet = {
         id: memberIdOrMember,
@@ -109,7 +153,16 @@ export function setCurrentMember(memberIdOrMember: string | TeamMember): TeamMem
       }
     }
   } else {
-    memberToSet = memberIdOrMember
+    memberToSet = { ...memberIdOrMember }
+  }
+
+  if (
+    (memberToSet.email && isAuthorizedAdminEmail(memberToSet.email)) ||
+    memberToSet.id === 'kevin' ||
+    memberToSet.id === 'maikol'
+  ) {
+    memberToSet.role = 'admin'
+    memberToSet.icon = '⚡'
   }
 
   activeProfileMemory = memberToSet
@@ -142,15 +195,16 @@ export function subscribeToMemberChanges(callback: (member: TeamMember) => void)
 export function mapSupabaseUserToMember(user: any, profile?: Partial<UserProfile> | null): TeamMember {
   if (!user) return TEAM_MEMBERS[0]
 
-  const email = (user.email || profile?.email || '').toLowerCase()
+  const email = (user.email || profile?.email || '').toLowerCase().trim()
   const fullName = profile?.fullName || user.user_metadata?.full_name || email.split('@')[0] || 'Usuario'
   const initial = fullName.charAt(0).toUpperCase() || 'U'
   const color = profile?.color || '#2563eb'
-  const role: UserRole = profile?.role || (email === 'kevin.rozeh@gmail.com' ? 'admin' : 'member')
+  const isAuthorized = isAuthorizedAdminEmail(email) || user.id === 'kevin' || user.id === 'maikol'
+  const role: UserRole = isAuthorized ? 'admin' : (profile?.role || 'member')
   const status: UserStatus = profile?.status || 'active'
 
   const member: TeamMember = {
-    id: user.id || profile?.id || 'kevin',
+    id: user.id || profile?.id || (email.includes('maikol') || email === 'badmaik60@gmail.com' ? 'maikol' : 'kevin'),
     name: fullName,
     fullName: fullName,
     email: email,
@@ -172,7 +226,11 @@ export function mapSupabaseUserToMember(user: any, profile?: Partial<UserProfile
  */
 export function isUserAdmin(member?: TeamMember | UserProfile | null): boolean {
   if (!member) return false
-  return member.role === 'admin'
+  if (member.role === 'admin') return true
+  if (member.email && isAuthorizedAdminEmail(member.email)) return true
+  if (member.id && (member.id === 'kevin' || member.id === 'maikol')) return true
+  if (member.id && TEAM_MEMBERS.some((tm) => tm.id === member.id && tm.role === 'admin')) return true
+  return false
 }
 
 /**

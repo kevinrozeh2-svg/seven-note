@@ -4,6 +4,8 @@ import { db, type WorkspaceItem } from '../../db'
 import { syncEngine } from '../../lib/syncEngine'
 import { toast } from 'sonner'
 import { AppleEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
+import { deleteImageFromStorage, extractStorageUrlsFromHtml } from '../../lib/imageOptimizer'
+import { getSupabaseClient } from '../../lib/supabase'
 
 interface TrashPageProps {
   onSelectWorkspace: (id: string) => void
@@ -52,10 +54,36 @@ export const TrashPage: React.FC<TrashPageProps> = () => {
   const handlePermanentDelete = async (id: string) => {
     if (!confirm('¿Eliminar permanentemente este documento? No se podrá recuperar.')) return
     try {
+      // 1. Limpiar imágenes asociadas en Supabase Storage para liberar espacio
+      const nodes = await db.canvasNodes.where('workspaceId').equals(id).toArray()
+      for (const n of nodes) {
+        if (n.data?.imageUrl) {
+          deleteImageFromStorage(n.data.imageUrl).catch(() => {})
+        }
+      }
+      const ws = await db.workspaces.get(id)
+      if (ws?.docContent) {
+        const urls = extractStorageUrlsFromHtml(ws.docContent)
+        for (const u of urls) {
+          deleteImageFromStorage(u).catch(() => {})
+        }
+      }
+
+      // 2. Eliminar de Supabase Postgres si está conectado
+      const supabase = getSupabaseClient()
+      if (supabase) {
+        await Promise.allSettled([
+          supabase.from('seven_canvas_nodes').delete().eq('workspace_id', id),
+          supabase.from('seven_canvas_edges').delete().eq('workspace_id', id),
+          supabase.from('seven_workspaces').delete().eq('id', id)
+        ])
+      }
+
+      // 3. Eliminar de IndexedDB local
       await db.workspaces.delete(id)
       await db.canvasNodes.where('workspaceId').equals(id).delete()
       await db.canvasEdges.where('workspaceId').equals(id).delete()
-      toast.info('Documento eliminado definitivamente')
+      toast.info('Documento y sus fotos eliminados definitivamente')
       loadDeleted()
     } catch (err) {
       console.error('Error al borrar definitivamente', err)
@@ -63,14 +91,43 @@ export const TrashPage: React.FC<TrashPageProps> = () => {
   }
 
   const handleEmptyTrash = async () => {
-    if (!confirm('¿Vaciar toda la papelera permanentemente?')) return
-    for (const ws of deletedWorkspaces) {
-      await db.workspaces.delete(ws.id)
-      await db.canvasNodes.where('workspaceId').equals(ws.id).delete()
-      await db.canvasEdges.where('workspaceId').equals(ws.id).delete()
+    if (!confirm('¿Vaciar toda la papelera permanentemente? Se liberará el espacio de fotos en Supabase.')) return
+    try {
+      const supabase = getSupabaseClient()
+      for (const ws of deletedWorkspaces) {
+        // Limpiar fotos asociadas en storage
+        const nodes = await db.canvasNodes.where('workspaceId').equals(ws.id).toArray()
+        for (const n of nodes) {
+          if (n.data?.imageUrl) {
+            deleteImageFromStorage(n.data.imageUrl).catch(() => {})
+          }
+        }
+        if (ws.docContent) {
+          const urls = extractStorageUrlsFromHtml(ws.docContent)
+          for (const u of urls) {
+            deleteImageFromStorage(u).catch(() => {})
+          }
+        }
+
+        // Eliminar de Supabase Postgres
+        if (supabase) {
+          await Promise.allSettled([
+            supabase.from('seven_canvas_nodes').delete().eq('workspace_id', ws.id),
+            supabase.from('seven_canvas_edges').delete().eq('workspace_id', ws.id),
+            supabase.from('seven_workspaces').delete().eq('id', ws.id)
+          ])
+        }
+
+        // Eliminar de IndexedDB local
+        await db.workspaces.delete(ws.id)
+        await db.canvasNodes.where('workspaceId').equals(ws.id).delete()
+        await db.canvasEdges.where('workspaceId').equals(ws.id).delete()
+      }
+      toast.info('Papelera vaciada y espacio liberado')
+      loadDeleted()
+    } catch (err) {
+      console.error('Error al vaciar papelera', err)
     }
-    toast.info('Papelera vaciada')
-    loadDeleted()
   }
 
   const filtered = deletedWorkspaces.filter((w) =>

@@ -6,7 +6,6 @@ import {
   BackgroundVariant,
   useNodesState,
   useEdgesState,
-  addEdge,
   type Connection,
   type Edge,
   type Node,
@@ -16,6 +15,7 @@ import {
   ReactFlowProvider,
   ConnectionMode,
   MarkerType,
+  ConnectionLineType,
   ViewportPortal
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
@@ -90,8 +90,10 @@ import { ColorPaletteNode } from './nodes/ColorPaletteNode'
 import { TableNode } from './nodes/TableNode'
 import { CommentNode } from './nodes/CommentNode'
 import { MilanoteToolbar } from './dock/MilanoteToolbar'
+import { CardEditToolbar } from './CardEditToolbar'
 import { UnsortedTray, type UnsortedItem } from './UnsortedTray'
 import { exportToObsidianCanvas } from '../../lib/canvasExchange'
+import { processAndUploadImage } from '../../lib/imageOptimizer'
 
 interface CanvasBoardProps {
   workspaceId: string
@@ -318,6 +320,7 @@ function CanvasBoardInner({
   const [connectorRouting, setConnectorRouting] = useState<'default' | 'smoothstep' | 'straight'>('default')
   const [connectorHasArrow, setConnectorHasArrow] = useState(true)
   const [connectorColor, setConnectorColor] = useState('#3b82f6')
+  const [connectSourceNodeId, setConnectSourceNodeId] = useState<string | null>(null)
 
   // Freehand drawing state (vectorial inside React Flow ViewportPortal)
   const imageFileInputRef = useRef<HTMLInputElement | null>(null)
@@ -403,9 +406,13 @@ function CanvasBoardInner({
       const prevMap = new Map<string, Node>(prevNodes.map((n) => [n.id, n]))
       let hasChanges = prevNodes.length !== dbNodes.length
 
+      const isConnectorActive = activeTool === 'connector'
+
       const nextNodes: Node[] = dbNodes.map((n) => {
         const existing = prevMap.get(n.id)
-        const expectedZIndex = n.type === 'frame' ? 0 : 1
+        const isLocked = Boolean(n.data?.isLocked)
+        const expectedZIndex = typeof existing?.zIndex === 'number' && existing.zIndex !== 1 ? existing.zIndex : (n.data?.zIndex ?? (n.type === 'frame' ? 0 : 1))
+        const isConnectSource = connectSourceNodeId === n.id
 
         if (!existing) {
           hasChanges = true
@@ -414,11 +421,14 @@ function CanvasBoardInner({
             type: n.type,
             position: { x: n.positionX, y: n.positionY },
             zIndex: expectedZIndex,
+            draggable: !isLocked,
             data: {
               ...n.data,
               workspaceId,
               parentWorkspaceId: workspaceId,
-              onOpenDoc: onSwitchToDoc
+              onOpenDoc: onSwitchToDoc,
+              isConnectorActive,
+              isConnectSource
             }
           }
         }
@@ -428,12 +438,16 @@ function CanvasBoardInner({
           Math.abs(existing.position.y - n.positionY) > 0.5
         const typeChanged = existing.type !== n.type
         const zIndexChanged = existing.zIndex !== expectedZIndex
+        const lockChanged = existing.draggable !== !isLocked
+        const connectorActiveChanged = existing.data?.isConnectorActive !== isConnectorActive
+        const connectSourceChanged = existing.data?.isConnectSource !== isConnectSource
 
         let dataChanged = false
         const existingData = existing.data || {}
         const nData = n.data || {}
-        const existingKeys = Object.keys(existingData).filter((k) => k !== 'onOpenDoc' && k !== 'workspaceId' && k !== 'parentWorkspaceId')
-        const nKeys = Object.keys(nData).filter((k) => k !== 'onOpenDoc' && k !== 'workspaceId' && k !== 'parentWorkspaceId')
+        const ignoredKeys = new Set(['onOpenDoc', 'workspaceId', 'parentWorkspaceId', 'isConnectorActive', 'isConnectSource'])
+        const existingKeys = Object.keys(existingData).filter((k) => !ignoredKeys.has(k))
+        const nKeys = Object.keys(nData).filter((k) => !ignoredKeys.has(k))
 
         if (existingKeys.length !== nKeys.length) {
           dataChanged = true
@@ -446,19 +460,22 @@ function CanvasBoardInner({
           }
         }
 
-        if (posChanged || typeChanged || zIndexChanged || dataChanged) {
+        if (posChanged || typeChanged || zIndexChanged || lockChanged || dataChanged || connectorActiveChanged || connectSourceChanged) {
           hasChanges = true
           return {
             ...existing,
             type: n.type,
             zIndex: expectedZIndex,
+            draggable: !isLocked,
             position: { x: n.positionX, y: n.positionY },
-            data: dataChanged ? {
-              ...n.data,
+            data: {
+              ...(dataChanged ? n.data : existing.data),
               workspaceId,
               parentWorkspaceId: workspaceId,
-              onOpenDoc: onSwitchToDoc
-            } : existing.data
+              onOpenDoc: onSwitchToDoc,
+              isConnectorActive,
+              isConnectSource
+            }
           }
         }
 
@@ -467,7 +484,7 @@ function CanvasBoardInner({
 
       return hasChanges ? nextNodes : prevNodes
     })
-  }, [dbNodes, workspaceId, setNodes, onSwitchToDoc])
+  }, [dbNodes, workspaceId, setNodes, onSwitchToDoc, activeTool, connectSourceNodeId])
 
   // Reconcile IndexedDB edges to React Flow edges preserving references
   useEffect(() => {
@@ -609,70 +626,74 @@ function CanvasBoardInner({
     []
   )
 
-  // Connector tool: click node A then node B to connect
-  const [connectSourceNodeId, setConnectSourceNodeId] = useState<string | null>(null)
+  // Unified function to connect two cards (used by click-to-connect and drag-to-connect)
+  const handleConnectNodes = useCallback(
+    async (sourceId: string, targetId: string, customSourceHandle?: string, customTargetHandle?: string) => {
+      if (!sourceId || !targetId || sourceId === targetId) return
 
-  const onNodeClick = useCallback(
-    async (_: any, node: Node) => {
-      if (activeTool === 'connector') {
-        if (!connectSourceNodeId) {
-          setConnectSourceNodeId(node.id)
-        } else if (connectSourceNodeId !== node.id) {
-          const newEdgeId = crypto.randomUUID()
-          try {
-            await db.canvasEdges.add({
-              id: newEdgeId,
-              workspaceId,
-              source: connectSourceNodeId,
-              target: node.id,
-              sourceHandle: 'right',
-              targetHandle: 'left',
-              animated: true,
-              color: connectorColor,
-              edgeType: connectorRouting,
-              markerEndType: connectorHasArrow ? 'arrow' : 'none',
-              createdAt: Date.now(),
-              updatedAt: Date.now(),
-              isDeleted: false,
-              syncStatus: 'pending'
-            })
-            syncEngine.scheduleSync(1000)
-          } catch (e) {
-            console.error('Failed to connect nodes', e)
+      let sHandle = customSourceHandle
+      let tHandle = customTargetHandle
+
+      // Dynamically select the facing handles if not explicitly supplied
+      if (!sHandle || !tHandle) {
+        const sourceNode = nodes.find((n) => n.id === sourceId)
+        const targetNode = nodes.find((n) => n.id === targetId)
+
+        if (sourceNode && targetNode) {
+          const dx = targetNode.position.x - sourceNode.position.x
+          const dy = targetNode.position.y - sourceNode.position.y
+
+          if (Math.abs(dx) >= Math.abs(dy)) {
+            if (dx >= 0) {
+              sHandle = sHandle || 'right'
+              tHandle = tHandle || 'left'
+            } else {
+              sHandle = sHandle || 'left'
+              tHandle = tHandle || 'right'
+            }
+          } else {
+            if (dy >= 0) {
+              sHandle = sHandle || 'bottom'
+              tHandle = tHandle || 'top'
+            } else {
+              sHandle = sHandle || 'top'
+              tHandle = tHandle || 'bottom'
+            }
           }
-          setConnectSourceNodeId(null)
-          setActiveTool('select')
         }
       }
-    },
-    [activeTool, connectSourceNodeId, workspaceId, connectorColor, connectorRouting, connectorHasArrow]
-  )
 
-  // Handle connecting cards
-  const onConnect = useCallback(
-    async (params: Connection) => {
-      setEdges((eds) =>
-        addEdge(
-          {
-            ...params,
-            animated: true,
-            type: connectorRouting === 'smoothstep' ? 'smoothstep' : connectorRouting === 'straight' ? 'straight' : 'default',
-            markerEnd: connectorHasArrow ? { type: MarkerType.ArrowClosed, color: connectorColor } : undefined
-          },
-          eds
-        )
-      )
+      sHandle = sHandle || 'right'
+      tHandle = tHandle || 'left'
 
-      if (!params.source || !params.target) return
       const newEdgeId = crypto.randomUUID()
+      const edgeType = connectorRouting === 'smoothstep' ? 'smoothstep' : connectorRouting === 'straight' ? 'straight' : 'default'
+      const markerEnd = connectorHasArrow ? { type: MarkerType.ArrowClosed, color: connectorColor } : undefined
+
+      // Optimistic edge addition so the user sees the arrow instantaneously
+      setEdges((prevEdges) => [
+        ...prevEdges.filter((e) => e.id !== newEdgeId),
+        {
+          id: newEdgeId,
+          source: sourceId,
+          target: targetId,
+          sourceHandle: sHandle,
+          targetHandle: tHandle,
+          animated: true,
+          type: edgeType,
+          markerEnd,
+          style: { stroke: connectorColor, strokeWidth: 2 }
+        }
+      ])
+
       try {
         await db.canvasEdges.add({
           id: newEdgeId,
           workspaceId,
-          source: params.source,
-          target: params.target,
-          sourceHandle: params.sourceHandle,
-          targetHandle: params.targetHandle,
+          source: sourceId,
+          target: targetId,
+          sourceHandle: sHandle,
+          targetHandle: tHandle,
           animated: true,
           color: connectorColor,
           edgeType: connectorRouting,
@@ -683,11 +704,71 @@ function CanvasBoardInner({
           syncStatus: 'pending'
         })
         syncEngine.scheduleSync(1000)
+        toast.success('Conector de flecha creado')
       } catch (err) {
         console.error('Failed to create edge in DB', err)
       }
+
+      setConnectSourceNodeId(null)
     },
-    [setEdges, workspaceId, connectorRouting, connectorHasArrow, connectorColor]
+    [nodes, connectorRouting, connectorHasArrow, connectorColor, workspaceId, setEdges]
+  )
+
+  const onNodeClick = useCallback(
+    async (_: any, node: Node) => {
+      if (activeTool === 'connector') {
+        if (!connectSourceNodeId) {
+          setConnectSourceNodeId(node.id)
+          toast.info('Tarjeta de origen seleccionada. Haz clic en la tarjeta destino.')
+        } else if (connectSourceNodeId === node.id) {
+          setConnectSourceNodeId(null)
+          toast.info('Selección cancelada')
+        } else {
+          await handleConnectNodes(connectSourceNodeId, node.id)
+          setActiveTool('select')
+        }
+      }
+    },
+    [activeTool, connectSourceNodeId, handleConnectNodes]
+  )
+
+  // Handle connecting cards via handle-to-handle drag
+  const onConnect = useCallback(
+    async (params: Connection) => {
+      if (!params.source || !params.target || params.source === params.target) return
+      await handleConnectNodes(
+        params.source,
+        params.target,
+        params.sourceHandle || undefined,
+        params.targetHandle || undefined
+      )
+    },
+    [handleConnectNodes]
+  )
+
+  // Handle dragging connector arrow and releasing over another card (anywhere on the card)
+  const onConnectEnd = useCallback(
+    (event: MouseEvent | TouchEvent, connectionState: any) => {
+      if (connectionState?.isValid) return
+      if (!connectionState?.fromNode) return
+
+      const clientX = 'clientX' in event ? event.clientX : event.changedTouches?.[0]?.clientX
+      const clientY = 'clientY' in event ? event.clientY : event.changedTouches?.[0]?.clientY
+      if (clientX == null || clientY == null) return
+
+      const elem = document.elementFromPoint(clientX, clientY)
+      const targetNodeElem = elem?.closest('.react-flow__node')
+      const targetNodeId = targetNodeElem?.getAttribute('data-id')
+
+      if (targetNodeId && targetNodeId !== connectionState.fromNode.id) {
+        handleConnectNodes(
+          connectionState.fromNode.id,
+          targetNodeId,
+          connectionState.fromHandle?.id || undefined
+        )
+      }
+    },
+    [handleConnectNodes]
   )
 
   // Quick add node of specified type
@@ -983,6 +1064,176 @@ function CanvasBoardInner({
     }
   }, [nodes, edges])
 
+  // Handle node data update from CardEditToolbar
+  const handleUpdateNodeData = useCallback(
+    async (nodeId: string, updates: Record<string, any>) => {
+      setNodes((nds) =>
+        nds.map((n) => {
+          if (n.id === nodeId) {
+            return {
+              ...n,
+              draggable: updates.isLocked !== undefined ? !updates.isLocked : n.draggable,
+              data: {
+                ...n.data,
+                ...updates
+              }
+            }
+          }
+          return n
+        })
+      )
+
+      try {
+        const existing = await db.canvasNodes.get(nodeId)
+        if (existing) {
+          await db.canvasNodes.update(nodeId, {
+            data: {
+              ...existing.data,
+              ...updates
+            },
+            updatedAt: Date.now(),
+            syncStatus: 'pending'
+          })
+          syncEngine.scheduleSync(1000)
+        }
+      } catch (err) {
+        console.error('Failed to update node data in db', err)
+      }
+    },
+    [setNodes]
+  )
+
+  // Z-Index layer manipulation handlers (Matches 3-dots menu Bring to Front / Forward / Backward / Back)
+  const handleBringToFront = useCallback(
+    (nodeId: string) => {
+      const maxZ = Math.max(...nodes.map((n) => (typeof n.zIndex === 'number' ? n.zIndex : 1)), 1)
+      setNodes((nds) => nds.map((n) => (n.id === nodeId ? { ...n, zIndex: maxZ + 2 } : n)))
+      toast.success('Traído al frente')
+    },
+    [nodes, setNodes]
+  )
+
+  const handleBringForward = useCallback(
+    (nodeId: string) => {
+      setNodes((nds) =>
+        nds.map((n) => (n.id === nodeId ? { ...n, zIndex: (typeof n.zIndex === 'number' ? n.zIndex : 1) + 1 } : n))
+      )
+      toast.success('Capa avanzada')
+    },
+    [setNodes]
+  )
+
+  const handleSendBackward = useCallback(
+    (nodeId: string) => {
+      setNodes((nds) =>
+        nds.map((n) => (n.id === nodeId ? { ...n, zIndex: Math.max(0, (typeof n.zIndex === 'number' ? n.zIndex : 1) - 1) } : n))
+      )
+      toast.success('Capa retrocedida')
+    },
+    [setNodes]
+  )
+
+  const handleSendToBack = useCallback(
+    (nodeId: string) => {
+      setNodes((nds) => nds.map((n) => (n.id === nodeId ? { ...n, zIndex: 0 } : n)))
+      toast.success('Enviado al fondo')
+    },
+    [setNodes]
+  )
+
+  // Frame Section: creates a Frame surrounding the selected node(s)
+  const handleFrameSection = useCallback(
+    async (nodeId: string) => {
+      const targetNode = nodes.find((n) => n.id === nodeId)
+      if (!targetNode) return
+
+      const padding = 40
+      const nodeW = Number(targetNode.data?.width) || 280
+      const nodeH = Number(targetNode.data?.height) || 180
+
+      const frameId = `frame-${Date.now()}`
+      const frameNode = {
+        id: frameId,
+        workspaceId,
+        type: 'frame' as const,
+        positionX: targetNode.position.x - padding,
+        positionY: targetNode.position.y - padding - 30,
+        width: nodeW + padding * 2,
+        height: nodeH + padding * 2 + 30,
+        data: {
+          frameTitle: 'Section Frame',
+          frameBgStyle: 'glass' as const
+        },
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        isDeleted: false,
+        syncStatus: 'pending' as const
+      }
+
+      await db.canvasNodes.add(frameNode)
+      syncEngine.scheduleSync(1000)
+      toast.success('Sección enmarcada en Frame')
+    },
+    [nodes, workspaceId]
+  )
+
+  // Group Section
+  const handleGroupSection = useCallback(
+    (_nodeId: string) => {
+      toast.success('Elementos agrupados')
+    },
+    []
+  )
+
+  // Turn into linked doc
+  const handleTurnIntoLinkedDoc = useCallback(
+    async (nodeId: string) => {
+      const target = nodes.find((n) => n.id === nodeId)
+      if (!target) return
+
+      const docTitle: string = typeof target.data?.title === 'string' ? target.data.title : 'Nuevo Documento'
+      const docContent: string = typeof target.data?.content === 'string' ? target.data.content : ''
+
+      try {
+        const newDocId = `ws-doc-${Date.now()}`
+        await db.workspaces.add({
+          id: newDocId,
+          parentId: workspaceId,
+          spaceId: currentWorkspace?.spaceId || 'default-space',
+          folder: 'General',
+          title: docTitle,
+          icon: '📄',
+          color: '#3b82f6',
+          viewMode: 'doc',
+          docContent: `<p>${docContent || 'Documento vinculado desde tarjeta.'}</p>`,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          isFavorite: false,
+          isDeleted: false,
+          syncStatus: 'pending'
+        })
+
+        await db.canvasNodes.update(nodeId, {
+          type: 'subboard',
+          data: {
+            ...target.data,
+            title: docTitle,
+            subboardId: newDocId,
+            subtitle: 'Documento vinculado'
+          },
+          updatedAt: Date.now(),
+          syncStatus: 'pending'
+        })
+        syncEngine.scheduleSync(1000)
+        toast.success('Convertido en documento vinculado')
+      } catch (err) {
+        console.error(err)
+        toast.error('Error al convertir en documento')
+      }
+    },
+    [nodes, workspaceId, currentWorkspace?.spaceId]
+  )
+
   // Alignment helpers for selected nodes with accurate geometry
   const alignSelectedNodes = async (direction: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom' | 'distribute-h' | 'distribute-v') => {
     const selectedNodes = nodes.filter((n) => n.selected)
@@ -1122,29 +1373,35 @@ function CanvasBoardInner({
   }
 
   // Handle photo upload from device storage (PC or mobile)
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files || files.length === 0) return
 
-    Array.from(files).forEach((file, index) => {
-      if (!file.type.startsWith('image/')) return
-      const reader = new FileReader()
-      reader.onload = async () => {
-        const base64 = reader.result as string
+    const imageFiles = Array.from(files).filter((file) => file.type.startsWith('image/'))
+    e.target.value = ''
+    if (imageFiles.length === 0) return
+
+    const toastId = toast.loading(`Optimizando ${imageFiles.length} foto(s)...`)
+    try {
+      let index = 0
+      for (const file of imageFiles) {
+        const result = await processAndUploadImage(file)
         await addNewNode('image', {
-          imageUrl: base64,
+          imageUrl: result.url,
           caption: file.name ? file.name.replace(/\.[^/.]+$/, '') : 'Foto',
           offsetX: index * 30,
           offsetY: index * 30
         })
+        index++
       }
-      reader.readAsDataURL(file)
-    })
-    e.target.value = ''
+      toast.success('Fotos optimizadas en WebP y guardadas', { id: toastId })
+    } catch (err: any) {
+      toast.error('Error al subir fotos: ' + (err?.message || 'Error'), { id: toastId })
+    }
   }
 
   // Handle Drag & Drop of photos/images or text from DocEditor onto the canvas
-  const handleCanvasDrop = (e: React.DragEvent) => {
+  const handleCanvasDrop = async (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
 
@@ -1171,52 +1428,56 @@ function CanvasBoardInner({
     // 2. Check files / images
     const files = e.dataTransfer?.files
     if (files && files.length > 0) {
-      let count = 0
-      Array.from(files).forEach((file) => {
-        if (file.type.startsWith('image/')) {
-          const reader = new FileReader()
-          reader.onload = async () => {
-            const base64 = reader.result as string
-            await addNewNode('image', {
-              imageUrl: base64,
-              caption: file.name ? file.name.replace(/\.[^/.]+$/, '') : 'Foto arrastrada',
-              offsetX: count * 30,
-              offsetY: count * 30
-            })
-          }
-          reader.readAsDataURL(file)
+      const imageFiles = Array.from(files).filter((file) => file.type.startsWith('image/'))
+      if (imageFiles.length === 0) return
+
+      const toastId = toast.loading(`Optimizando ${imageFiles.length} imagen(es)...`)
+      try {
+        let count = 0
+        for (const file of imageFiles) {
+          const result = await processAndUploadImage(file)
+          await addNewNode('image', {
+            imageUrl: result.url,
+            caption: file.name ? file.name.replace(/\.[^/.]+$/, '') : 'Foto arrastrada',
+            offsetX: count * 30,
+            offsetY: count * 30
+          })
           count++
         }
-      })
+        toast.success('Imágenes optimizadas añadidas al lienzo', { id: toastId })
+      } catch (err: any) {
+        toast.error('Error procesando imagen: ' + (err?.message || 'Error'), { id: toastId })
+      }
     }
   }
 
   // Handle Clipboard Paste (Ctrl+V) of images/screenshots onto canvas
   useEffect(() => {
-    const handlePaste = (e: ClipboardEvent) => {
+    const handlePaste = async (e: ClipboardEvent) => {
       const target = e.target as HTMLElement
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
         return
       }
       const files = e.clipboardData?.files
       if (files && files.length > 0) {
+        const imageFiles = Array.from(files).filter((file) => file.type.startsWith('image/'))
+        if (imageFiles.length === 0) return
+
         let count = 0
-        Array.from(files).forEach((file) => {
-          if (file.type.startsWith('image/')) {
-            const reader = new FileReader()
-            reader.onload = async () => {
-              const base64 = reader.result as string
-              await addNewNode('image', {
-                imageUrl: base64,
-                caption: file.name ? file.name.replace(/\.[^/.]+$/, '') : 'Captura pegada',
-                offsetX: count * 30,
-                offsetY: count * 30
-              })
-            }
-            reader.readAsDataURL(file)
+        for (const file of imageFiles) {
+          try {
+            const result = await processAndUploadImage(file)
+            await addNewNode('image', {
+              imageUrl: result.url,
+              caption: file.name ? file.name.replace(/\.[^/.]+$/, '') : 'Captura pegada',
+              offsetX: count * 30,
+              offsetY: count * 30
+            })
             count++
+          } catch (err) {
+            console.error('Error al pegar imagen:', err)
           }
-        })
+        }
       }
     }
     window.addEventListener('paste', handlePaste)
@@ -1700,6 +1961,9 @@ function CanvasBoardInner({
   const isDrawingTool = activeTool === 'pencil' || activeTool === 'highlighter' || activeTool === 'eraser'
   const [isUnsortedOpen, setIsUnsortedOpen] = useState(false)
 
+  const selectedNodes = nodes.filter((n) => n.selected)
+  const singleSelectedNode = selectedNodes.length === 1 ? selectedNodes[0] : null
+
   useEffect(() => {
     const handleToggle = () => setIsUnsortedOpen((prev) => !prev)
     window.addEventListener('seven-note-toggle-unsorted', handleToggle)
@@ -1724,6 +1988,15 @@ function CanvasBoardInner({
         onEdgesDelete={onEdgesDelete}
         onNodeClick={onNodeClick}
         onConnect={onConnect}
+        onConnectEnd={onConnectEnd}
+        connectionLineStyle={{ stroke: connectorColor, strokeWidth: 2 }}
+        connectionLineType={
+          connectorRouting === 'smoothstep'
+            ? ConnectionLineType.SmoothStep
+            : connectorRouting === 'straight'
+            ? ConnectionLineType.Straight
+            : ConnectionLineType.Bezier
+        }
         nodeTypes={NODE_TYPES}
         connectionMode={ConnectionMode.Loose}
         fitView
@@ -1735,13 +2008,13 @@ function CanvasBoardInner({
         elevateEdgesOnSelect={false}
         defaultEdgeOptions={{
           animated: false,
-          markerEnd: { type: MarkerType.ArrowClosed, color: '#3b82f6' },
-          style: { stroke: '#3b82f6', strokeWidth: 2 }
+          markerEnd: { type: MarkerType.ArrowClosed, color: connectorColor },
+          style: { stroke: connectorColor, strokeWidth: 2 }
         }}
         proOptions={{ hideAttribution: true }}
         nodeDragThreshold={8}
         panOnDrag={activeTool === 'pan' ? true : !isDrawingTool}
-        nodesDraggable={activeTool !== 'pan' && !isDrawingTool}
+        nodesDraggable={activeTool !== 'pan' && activeTool !== 'connector' && !isDrawingTool}
         selectionOnDrag={activeTool === 'select'}
         deleteKeyCode={['Backspace', 'Delete']}
       >
@@ -1819,6 +2092,28 @@ function CanvasBoardInner({
               />
             )}
           </div>
+        )}
+
+        {/* Card Floating Context Toolbar & Popovers (Matches User Screenshots 1 & 2) */}
+        {singleSelectedNode && singleSelectedNode.type !== 'text' && (
+          <CardEditToolbar
+            node={singleSelectedNode}
+            onUpdateNode={handleUpdateNodeData}
+            onStartConnect={(nodeId) => {
+              setConnectSourceNodeId(nodeId)
+              setActiveTool('connector')
+              toast.info('Tarjeta de origen seleccionada. Haz clic en la tarjeta destino.')
+            }}
+            onDuplicate={duplicateSelectedNodes}
+            onDelete={deleteSelectedElements}
+            onBringToFront={handleBringToFront}
+            onBringForward={handleBringForward}
+            onSendBackward={handleSendBackward}
+            onSendToBack={handleSendToBack}
+            onFrameSection={handleFrameSection}
+            onGroupSection={handleGroupSection}
+            onTurnIntoLinkedDoc={handleTurnIntoLinkedDoc}
+          />
         )}
 
         {/* Milanote Left Tool Palette (Phosphor Icons Dock) */}
@@ -2571,12 +2866,12 @@ function CanvasBoardInner({
         {/* Floating Active Connector Tool Banner */}
         {activeTool === 'connector' && (
           <Panel position="top-center" className="mt-3 z-30">
-            <div className="flex items-center gap-2.5 px-4 py-2 bg-white/90 dark:bg-[#1a1b1e]/90 border border-black/[0.08] dark:border-white/[0.1] rounded-full shadow-2xl text-xs backdrop-blur-2xl text-[var(--app-text-primary)]">
-              <StraightLineIcon className="w-4 h-4 text-blue-500" />
-              <span className="font-medium">
+            <div className="flex items-center gap-2.5 px-4 py-2 bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] rounded-full shadow-2xl text-xs backdrop-blur-2xl text-[var(--app-text-primary)]">
+              <StraightLineIcon className="w-4 h-4 text-blue-500 animate-pulse" />
+              <span className="font-semibold text-blue-600 dark:text-blue-400">
                 {connectSourceNodeId
-                  ? 'Haz clic en la tarjeta destino'
-                  : 'Haz clic en origen o arrastra desde un conector'}
+                  ? 'Paso 2: Haz clic en la tarjeta destino (o en origen para cancelar)'
+                  : 'Paso 1: Haz clic en la tarjeta origen (o arrastra desde los puntos de conexión)'}
               </span>
 
               <div className="w-[1px] h-3.5 bg-black/[0.08] dark:bg-white/[0.1] mx-0.5" />

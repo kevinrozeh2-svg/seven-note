@@ -8,6 +8,8 @@ import {
 import { db, type WorkspaceItem } from '../../db'
 import { syncEngine } from '../../lib/syncEngine'
 import { AppleEmoji } from '../ui/AppleEmoji'
+import { deleteImageFromStorage, extractStorageUrlsFromHtml } from '../../lib/imageOptimizer'
+import { getSupabaseClient } from '../../lib/supabase'
 
 interface TrashModalProps {
   isOpen: boolean
@@ -47,6 +49,31 @@ export function TrashModal({ isOpen, onClose }: TrashModalProps) {
   const handlePermanentDelete = async (id: string) => {
     if (!confirm('¿Eliminar permanentemente esta página y todas sus tarjetas? Esta acción no se puede deshacer.')) return
     try {
+      // Limpiar fotos asociadas en Supabase Storage
+      const nodes = await db.canvasNodes.where('workspaceId').equals(id).toArray()
+      for (const n of nodes) {
+        if (n.data?.imageUrl) {
+          deleteImageFromStorage(n.data.imageUrl).catch(() => {})
+        }
+      }
+      const ws = await db.workspaces.get(id)
+      if (ws?.docContent) {
+        const urls = extractStorageUrlsFromHtml(ws.docContent)
+        for (const u of urls) {
+          deleteImageFromStorage(u).catch(() => {})
+        }
+      }
+
+      // Eliminar de Supabase Postgres
+      const supabase = getSupabaseClient()
+      if (supabase) {
+        await Promise.allSettled([
+          supabase.from('seven_canvas_nodes').delete().eq('workspace_id', id),
+          supabase.from('seven_canvas_edges').delete().eq('workspace_id', id),
+          supabase.from('seven_workspaces').delete().eq('id', id)
+        ])
+      }
+
       await db.workspaces.delete(id)
       await db.canvasNodes.where('workspaceId').equals(id).delete()
       await db.canvasEdges.where('workspaceId').equals(id).delete()
@@ -58,12 +85,38 @@ export function TrashModal({ isOpen, onClose }: TrashModalProps) {
 
   const handleEmptyTrash = async () => {
     if (!confirm('¿Vaciar toda la papelera permanentemente?')) return
-    for (const ws of deletedWorkspaces) {
-      await db.workspaces.delete(ws.id)
-      await db.canvasNodes.where('workspaceId').equals(ws.id).delete()
-      await db.canvasEdges.where('workspaceId').equals(ws.id).delete()
+    try {
+      const supabase = getSupabaseClient()
+      for (const ws of deletedWorkspaces) {
+        const nodes = await db.canvasNodes.where('workspaceId').equals(ws.id).toArray()
+        for (const n of nodes) {
+          if (n.data?.imageUrl) {
+            deleteImageFromStorage(n.data.imageUrl).catch(() => {})
+          }
+        }
+        if (ws.docContent) {
+          const urls = extractStorageUrlsFromHtml(ws.docContent)
+          for (const u of urls) {
+            deleteImageFromStorage(u).catch(() => {})
+          }
+        }
+
+        if (supabase) {
+          await Promise.allSettled([
+            supabase.from('seven_canvas_nodes').delete().eq('workspace_id', ws.id),
+            supabase.from('seven_canvas_edges').delete().eq('workspace_id', ws.id),
+            supabase.from('seven_workspaces').delete().eq('id', ws.id)
+          ])
+        }
+
+        await db.workspaces.delete(ws.id)
+        await db.canvasNodes.where('workspaceId').equals(ws.id).delete()
+        await db.canvasEdges.where('workspaceId').equals(ws.id).delete()
+      }
+      loadDeleted()
+    } catch (err) {
+      console.error('Error emptying trash', err)
     }
-    loadDeleted()
   }
 
   return (

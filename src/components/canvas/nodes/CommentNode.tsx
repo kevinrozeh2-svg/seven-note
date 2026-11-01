@@ -1,10 +1,9 @@
 import { memo, useState } from 'react'
-import { Handle, Position } from '@xyflow/react'
 import { MessageSquare, CornerDownRight, Trash2 } from 'lucide-react'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
 import { toast } from 'sonner'
-import { areNodePropsEqual } from './nodeUtils'
+import { areNodePropsEqual, NodeHandles, SourceNodeBadge } from './nodeUtils'
 import { renderWithAppleEmoji } from '../../ui/AppleEmoji'
 
 export const CommentNode = memo(({ id, data, selected }: any) => {
@@ -59,44 +58,26 @@ export const CommentNode = memo(({ id, data, selected }: any) => {
     toast.success('Respuesta agregada')
   }
 
+  const isConnectorActive = Boolean(data?.isConnectorActive)
+  const isConnectSource = Boolean(data?.isConnectSource)
+
   return (
     <div
       className={`group relative w-[280px] rounded-xl bg-white dark:bg-[#282828] p-3.5 transition-[box-shadow] duration-150 ${
         selected ? 'ring-2 ring-[var(--app-accent)] shadow-xl' : 'shadow-[0_2px_10px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]'
+      } ${
+        isConnectSource
+          ? 'ring-4 ring-amber-500 shadow-2xl scale-[1.02]'
+          : isConnectorActive
+          ? 'ring-2 ring-blue-500/50 hover:ring-2 hover:ring-blue-500 cursor-pointer'
+          : ''
       }`}
     >
-      {/* Handles */}
-      <Handle
-        id="top"
-        type="source"
-        position={Position.Top}
-        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
-          selected ? '!opacity-100' : ''
-        }`}
-      />
-      <Handle
-        id="bottom"
-        type="source"
-        position={Position.Bottom}
-        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
-          selected ? '!opacity-100' : ''
-        }`}
-      />
-      <Handle
-        id="left"
-        type="source"
-        position={Position.Left}
-        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
-          selected ? '!opacity-100' : ''
-        }`}
-      />
-      <Handle
-        id="right"
-        type="source"
-        position={Position.Right}
-        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
-          selected ? '!opacity-100' : ''
-        }`}
+      <SourceNodeBadge isConnectSource={isConnectSource} isConnectorActive={isConnectorActive} />
+      <NodeHandles
+        selected={selected}
+        isConnectorActive={isConnectorActive}
+        isConnectSource={isConnectSource}
       />
 
       {/* Floating delete button */}

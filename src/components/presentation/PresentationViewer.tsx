@@ -986,7 +986,7 @@ export function PresentationViewer({
             className={`px-6 py-3 rounded-xl shadow-md bg-rose-600 text-white ${
               isSelected ? 'ring-2 ring-white shadow-2xl' : ''
             }`}
-            style={{ minWidth: 200, maxWidth: 360 }}
+            style={{ minWidth: 200, maxWidth: 360, ...(n.data?.fontFamily ? { fontFamily: n.data.fontFamily } : {}) }}
           >
             {isEditing ? (
               <input
@@ -1023,7 +1023,7 @@ export function PresentationViewer({
           className={`rounded-2xl bg-[#18181b] border border-zinc-800/80 p-3.5 shadow-[0_8px_30px_-6px_rgba(0,0,0,0.5),0_1px_3px_rgba(0,0,0,0.3)] text-zinc-200 ${
             isSelected ? 'ring-2 ring-[#1e96eb] shadow-2xl' : ''
           }`}
-          style={{ width: n.data?.width || 280, minHeight: 80 }}
+          style={{ width: n.data?.width || 280, minHeight: 80, ...(n.data?.fontFamily ? { fontFamily: n.data.fontFamily } : {}) }}
         >
           {/* Header Tag / Title */}
           {(n.data?.title || n.data?.showTitle || isEditing) && (

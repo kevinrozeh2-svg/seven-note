@@ -1,9 +1,11 @@
 import { memo, useState, useRef } from 'react'
-import { Handle, Position, NodeResizer } from '@xyflow/react'
+import { NodeResizer } from '@xyflow/react'
 import { DeleteIcon, UploadIcon, ImageIcon, EditIcon, LinkIcon } from '@blocksuite/icons/rc'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
-import { areNodePropsEqual } from './nodeUtils'
+import { processAndUploadImage, deleteImageFromStorage, formatBytes } from '../../../lib/imageOptimizer'
+import { toast } from 'sonner'
+import { areNodePropsEqual, NodeHandles, SourceNodeBadge } from './nodeUtils'
 
 export const ImageNode = memo(({ id, data, selected }: any) => {
   const [imageUrl, setImageUrl] = useState<string | null>(data.imageUrl ?? null)
@@ -11,7 +13,10 @@ export const ImageNode = memo(({ id, data, selected }: any) => {
   const [showUrlInput, setShowUrlInput] = useState(false)
   const [urlInput, setUrlInput] = useState('')
   const [width, setWidth] = useState<number>(data.width || 280)
+  const [isProcessing, setIsProcessing] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const isConnectorActive = Boolean(data?.isConnectorActive)
+  const isConnectSource = Boolean(data?.isConnectSource)
 
   const save = async (updates: any) => {
     try {
@@ -29,20 +34,40 @@ export const ImageNode = memo(({ id, data, selected }: any) => {
     }
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    e.target.value = ''
 
-    const reader = new FileReader()
-    reader.onload = async () => {
-      const base64 = reader.result as string
-      setImageUrl(base64)
+    setIsProcessing(true)
+    const toastId = toast.loading('Optimizando foto y reduciendo tamaño...')
+
+    try {
+      // Si ya existía una imagen remota y se está reemplazando, liberamos el espacio remoto previo
+      if (imageUrl) {
+        deleteImageFromStorage(imageUrl).catch(() => {})
+      }
+
+      const result = await processAndUploadImage(file)
+      setImageUrl(result.url)
       const newCaption = caption || file.name.replace(/\.[^/.]+$/, '')
       setCaption(newCaption)
-      save({ imageUrl: base64, caption: newCaption })
+      await save({ imageUrl: result.url, caption: newCaption })
+
+      const savedRatio = result.originalSize > 0 
+        ? Math.round((1 - result.compressedSize / result.originalSize) * 100) 
+        : 0
+      
+      toast.success(
+        `Foto optimizada: ${formatBytes(result.originalSize)} ➔ ${formatBytes(result.compressedSize)} (-${Math.max(0, savedRatio)}%)`,
+        { id: toastId }
+      )
+    } catch (err: any) {
+      console.error('Error procesando imagen', err)
+      toast.error('Error al procesar la imagen: ' + (err?.message || 'Error desconocido'), { id: toastId })
+    } finally {
+      setIsProcessing(false)
     }
-    reader.readAsDataURL(file)
-    e.target.value = ''
   }
 
   const handleSaveUrl = () => {
@@ -56,6 +81,9 @@ export const ImageNode = memo(({ id, data, selected }: any) => {
 
   const handleDelete = async () => {
     try {
+      if (imageUrl) {
+        deleteImageFromStorage(imageUrl).catch(() => {})
+      }
       await db.canvasNodes.update(id, { isDeleted: true, updatedAt: Date.now(), syncStatus: 'pending' })
       syncEngine.scheduleSync(1000)
     } catch (e) {
@@ -67,7 +95,13 @@ export const ImageNode = memo(({ id, data, selected }: any) => {
   if (imageUrl) {
     return (
       <div
-        className="relative group transition-shadow duration-150"
+        className={`relative group transition-shadow duration-150 ${
+          isConnectSource
+            ? 'ring-4 ring-amber-500 shadow-2xl scale-[1.02] rounded-xl'
+            : isConnectorActive
+            ? 'ring-2 ring-blue-500/50 hover:ring-2 hover:ring-blue-500 cursor-pointer rounded-xl'
+            : ''
+        }`}
         style={{ width: `${width}px` }}
       >
         <NodeResizer
@@ -86,34 +120,11 @@ export const ImageNode = memo(({ id, data, selected }: any) => {
           handleClassName="!w-2.5 !h-2.5 !bg-white !border-2 !border-[#1e96eb] !rounded-full shadow-sm"
         />
 
-        {/* 4 Handles for connecting lines */}
-        <Handle
-          type="target"
-          position={Position.Top}
-          className={`!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800 transition-opacity ${
-            selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-          }`}
-        />
-        <Handle
-          type="source"
-          position={Position.Bottom}
-          className={`!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800 transition-opacity ${
-            selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-          }`}
-        />
-        <Handle
-          type="target"
-          position={Position.Left}
-          className={`!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800 transition-opacity ${
-            selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-          }`}
-        />
-        <Handle
-          type="source"
-          position={Position.Right}
-          className={`!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800 transition-opacity ${
-            selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-          }`}
+        <SourceNodeBadge isConnectSource={isConnectSource} isConnectorActive={isConnectorActive} />
+        <NodeHandles
+          selected={selected}
+          isConnectorActive={isConnectorActive}
+          isConnectSource={isConnectSource}
         />
 
         {/* Floating Quick Action Overlay on Hover/Selected */}
@@ -181,17 +192,25 @@ export const ImageNode = memo(({ id, data, selected }: any) => {
   // Placeholder mode (when no image is set yet)
   return (
     <div
-      className="relative w-[280px] rounded-2xl transition-[box-shadow,border-color] duration-150 border overflow-hidden p-3"
+      className={`relative w-[280px] rounded-2xl transition-[box-shadow,border-color] duration-150 border overflow-hidden p-3 ${
+        isConnectSource
+          ? 'ring-4 ring-amber-500 shadow-2xl scale-[1.02]'
+          : isConnectorActive
+          ? 'ring-2 ring-blue-500/50 hover:ring-2 hover:ring-blue-500 cursor-pointer'
+          : ''
+      }`}
       style={{
         backgroundColor: 'var(--app-bg-primary)',
         borderColor: selected ? 'var(--app-accent)' : 'var(--app-border)',
         boxShadow: selected ? '0 0 0 1.5px var(--app-accent), var(--app-shadow-card-hover)' : 'var(--app-shadow-card)'
       }}
     >
-      <Handle type="target" position={Position.Top} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
-      <Handle type="source" position={Position.Bottom} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
-      <Handle type="target" position={Position.Left} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
-      <Handle type="source" position={Position.Right} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
+      <SourceNodeBadge isConnectSource={isConnectSource} isConnectorActive={isConnectorActive} />
+      <NodeHandles
+        selected={selected}
+        isConnectorActive={isConnectorActive}
+        isConnectSource={isConnectSource}
+      />
 
       <input
         type="file"
@@ -246,16 +265,19 @@ export const ImageNode = memo(({ id, data, selected }: any) => {
           </div>
           <button
             type="button"
+            disabled={isProcessing}
             onClick={() => fileInputRef.current?.click()}
-            className="w-full py-7 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition cursor-pointer"
+            className="w-full py-7 rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-50"
             style={{
               borderColor: 'var(--affine-border-color)',
               backgroundColor: 'var(--affine-background-secondary-color)',
               color: 'var(--affine-text-secondary-color)'
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = '#1e96eb'
-              e.currentTarget.style.color = '#1e96eb'
+              if (!isProcessing) {
+                e.currentTarget.style.borderColor = '#1e96eb'
+                e.currentTarget.style.color = '#1e96eb'
+              }
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.borderColor = 'var(--affine-border-color)'
@@ -263,8 +285,12 @@ export const ImageNode = memo(({ id, data, selected }: any) => {
             }}
           >
             <UploadIcon style={{ width: 22, height: 22 }} />
-            <span className="text-xs font-semibold">Elegir foto del almacenamiento</span>
-            <span className="text-[10px] opacity-75">Celular (Galería/Cámara) o PC</span>
+            <span className="text-xs font-semibold">
+              {isProcessing ? 'Optimizando foto en WebP...' : 'Elegir foto del almacenamiento'}
+            </span>
+            <span className="text-[10px] opacity-75">
+              {isProcessing ? 'Reduciendo peso automáticamente' : 'Celular (Galería/Cámara) o PC'}
+            </span>
           </button>
           <button
             type="button"
