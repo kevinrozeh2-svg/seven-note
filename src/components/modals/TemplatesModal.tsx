@@ -5,6 +5,8 @@ import {
   AiIcon
 } from '@blocksuite/icons/rc'
 import { APP_TEMPLATES, type AppTemplate } from '../../lib/templates'
+import { AppleEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
+import { DocThumbnailPreview } from '../ui/DocThumbnailPreview'
 
 interface TemplatesModalProps {
   isOpen: boolean
@@ -96,14 +98,21 @@ export function TemplatesModal({
                 onClose()
               }}
             >
-              <span className="text-xl p-2 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)] shrink-0 flex items-center justify-center">
-                {tpl.icon}
-              </span>
+              <DocThumbnailPreview
+                template={tpl}
+                size="md"
+                className="w-16 h-14 rounded-lg shrink-0"
+              />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
+                    {tpl.icon && (
+                      <span className="shrink-0 flex items-center">
+                        <AppleEmoji emoji={tpl.icon} size={15} />
+                      </span>
+                    )}
                     <h4 className="font-semibold text-xs text-[var(--app-text-primary)]">
-                      {tpl.title}
+                      {renderWithAppleEmoji(tpl.title)}
                     </h4>
                     {tpl.type === 'canvas' && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded border border-[var(--app-border)] font-medium bg-[var(--app-bg-primary)] text-[var(--app-text-secondary)]">
@@ -116,7 +125,7 @@ export function TemplatesModal({
                   </span>
                 </div>
                 <p className="mt-1 leading-relaxed text-xs text-[var(--app-text-secondary)]">
-                  {tpl.description}
+                  {renderWithAppleEmoji(tpl.description)}
                 </p>
                 <div className="mt-2.5 flex justify-end">
                   <button className="px-2.5 py-1 rounded-md font-medium text-xs transition flex items-center gap-1.5 border border-[var(--app-border)] bg-[var(--app-bg-primary)] group-hover:border-[var(--app-text-primary)] text-[var(--app-text-primary)]">

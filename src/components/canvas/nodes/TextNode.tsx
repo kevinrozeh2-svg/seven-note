@@ -9,6 +9,7 @@ import {
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
 import { areNodePropsEqual } from './nodeUtils'
+import { renderWithAppleEmoji } from '../../ui/AppleEmoji'
 
 export interface FontOption {
   id: string
@@ -364,7 +365,9 @@ export const TextNode = memo(({ id, data, selected }: any) => {
           className={`nodrag cursor-text whitespace-pre-wrap select-text leading-relaxed ${textColorClass} ${fontSizeClass} text-${align}`}
           style={{ fontFamily }}
         >
-          {content || (
+          {content ? (
+            renderWithAppleEmoji(content)
+          ) : (
             <span className="italic text-xs opacity-60 select-none">Doble clic para escribir texto</span>
           )}
         </div>

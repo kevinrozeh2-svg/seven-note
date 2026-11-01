@@ -5,49 +5,62 @@ import confetti from 'canvas-confetti'
 import { db, type CanvasTodoItem } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
 import { areNodePropsEqual } from './nodeUtils'
+import { renderWithAppleEmoji } from '../../ui/AppleEmoji'
 
-const COLOR_MAP: Record<string, { bg: string; border: string; header: string; text: string; dot: string }> = {
+const COLOR_MAP: Record<string, { cardBorder: string; accentBar: string; badgeBg: string; badgeBorder: string; badgeText: string; dot: string; topGlow: string }> = {
   blue: {
-    bg: 'bg-[#e0f0fd] dark:bg-[#183048]',
-    border: 'border-[#bde0fb] dark:border-[#23496e]',
-    header: 'bg-[#bae6fd] dark:bg-[#1e3d5c]',
-    text: 'text-[#11446e] dark:text-[#bae6fd]',
-    dot: '#38bdf8'
+    cardBorder: '',
+    accentBar: '',
+    badgeBg: 'bg-zinc-100 dark:bg-zinc-800/80',
+    badgeBorder: 'border-transparent',
+    badgeText: 'text-zinc-600 dark:text-zinc-400',
+    dot: '#71717a',
+    topGlow: ''
   },
   yellow: {
-    bg: 'bg-[#fff9db] dark:bg-[#3a341b]',
-    border: 'border-[#f5eeaf] dark:border-[#574e22]',
-    header: 'bg-[#fef3c7] dark:bg-[#453d1e]',
-    text: 'text-[#49420d] dark:text-[#fef08a]',
-    dot: '#facc15'
+    cardBorder: '',
+    accentBar: '',
+    badgeBg: 'bg-zinc-100 dark:bg-zinc-800/80',
+    badgeBorder: 'border-transparent',
+    badgeText: 'text-zinc-600 dark:text-zinc-400',
+    dot: '#71717a',
+    topGlow: ''
   },
   green: {
-    bg: 'bg-[#dcf5e3] dark:bg-[#1a3424]',
-    border: 'border-[#b6e8c4] dark:border-[#285338]',
-    header: 'bg-[#bbf7d0] dark:bg-[#204530]',
-    text: 'text-[#184a25] dark:text-[#bbf7d0]',
-    dot: '#4ade80'
+    cardBorder: '',
+    accentBar: '',
+    badgeBg: 'bg-zinc-100 dark:bg-zinc-800/80',
+    badgeBorder: 'border-transparent',
+    badgeText: 'text-zinc-600 dark:text-zinc-400',
+    dot: '#71717a',
+    topGlow: ''
   },
   purple: {
-    bg: 'bg-[#ede7fb] dark:bg-[#2d2345]',
-    border: 'border-[#d7c9f7] dark:border-[#46346e]',
-    header: 'bg-[#ddd6fe] dark:bg-[#382b57]',
-    text: 'text-[#3d2870] dark:text-[#e9d5ff]',
-    dot: '#c084fc'
+    cardBorder: '',
+    accentBar: '',
+    badgeBg: 'bg-zinc-100 dark:bg-zinc-800/80',
+    badgeBorder: 'border-transparent',
+    badgeText: 'text-zinc-600 dark:text-zinc-400',
+    dot: '#71717a',
+    topGlow: ''
   },
   rose: {
-    bg: 'bg-[#ffe8d4] dark:bg-[#3d271a]',
-    border: 'border-[#fcd2af] dark:border-[#5e3820]',
-    header: 'bg-[#fed7aa] dark:bg-[#4d3120]',
-    text: 'text-[#5c310b] dark:text-[#fed7aa]',
-    dot: '#fb923c'
+    cardBorder: '',
+    accentBar: '',
+    badgeBg: 'bg-zinc-100 dark:bg-zinc-800/80',
+    badgeBorder: 'border-transparent',
+    badgeText: 'text-zinc-600 dark:text-zinc-400',
+    dot: '#71717a',
+    topGlow: ''
   },
   slate: {
-    bg: 'bg-[#ffffff] dark:bg-[#252525]',
-    border: 'border-[#e8e7e4] dark:border-[#383838]',
-    header: 'bg-[#f7f6f5] dark:bg-[#2d2d2d]',
-    text: 'text-[#37352f] dark:text-[#e6e6e5]',
-    dot: '#9ca3af'
+    cardBorder: '',
+    accentBar: '',
+    badgeBg: 'bg-zinc-100 dark:bg-zinc-800/80',
+    badgeBorder: 'border-transparent',
+    badgeText: 'text-zinc-600 dark:text-zinc-400',
+    dot: '#71717a',
+    topGlow: ''
   }
 }
 
@@ -59,8 +72,7 @@ export const TodoNode = memo(({ id, data, selected }: any) => {
   const [newTaskText, setNewTaskText] = useState('')
   const [color, setColor] = useState(data.color ?? 'blue')
   const [showPalette, setShowPalette] = useState(false)
-
-  const colorScheme = COLOR_MAP[color] || COLOR_MAP.blue
+  const [isEditingTitle, setIsEditingTitle] = useState(false)
 
   const save = async (updates: any) => {
     try {
@@ -128,30 +140,78 @@ export const TodoNode = memo(({ id, data, selected }: any) => {
 
   return (
     <div
-      className={`relative w-[290px] rounded-lg transition-[box-shadow,border-color] duration-150 border ${colorScheme.bg} ${colorScheme.border}`}
-      style={{
-        boxShadow: selected
-          ? '0 0 0 1.5px var(--app-accent), var(--app-shadow-card-hover)'
-          : 'var(--app-shadow-card)'
-      }}
+      className={`group relative w-[290px] rounded-2xl transition-all duration-200 bg-white dark:bg-[#18181b] overflow-hidden ${
+        selected
+          ? 'ring-2 ring-[var(--app-accent)] shadow-2xl'
+          : 'shadow-[0_4px_20px_-4px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_30px_-6px_rgba(0,0,0,0.5),0_1px_3px_rgba(0,0,0,0.3)]'
+      } hover:shadow-xl`}
     >
-      <Handle id="top" type="source" position={Position.Top} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
-      <Handle id="bottom" type="source" position={Position.Bottom} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
-      <Handle id="left" type="source" position={Position.Left} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
-      <Handle id="right" type="source" position={Position.Right} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
+
+      {/* Handles */}
+      <Handle
+        id="top"
+        type="source"
+        position={Position.Top}
+        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
+          selected ? '!opacity-100' : ''
+        }`}
+      />
+      <Handle
+        id="bottom"
+        type="source"
+        position={Position.Bottom}
+        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
+          selected ? '!opacity-100' : ''
+        }`}
+      />
+      <Handle
+        id="left"
+        type="source"
+        position={Position.Left}
+        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
+          selected ? '!opacity-100' : ''
+        }`}
+      />
+      <Handle
+        id="right"
+        type="source"
+        position={Position.Right}
+        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
+          selected ? '!opacity-100' : ''
+        }`}
+      />
 
       {/* Header */}
-      <div className={`flex items-center justify-between px-3 py-1.5 rounded-t-[7px] border-b ${colorScheme.header} ${colorScheme.border}`}>
-        <input
-          type="text"
-          value={title}
-          onChange={(e) => {
-            setTitle(e.target.value)
-            save({ title: e.target.value })
-          }}
-          placeholder="Lista de tareas..."
-          className={`font-semibold text-xs bg-transparent border-none outline-none w-full placeholder-current/40 ${colorScheme.text}`}
-        />
+      <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-zinc-100 dark:border-zinc-800/80 relative z-10">
+        <div
+          className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold tracking-wide uppercase bg-zinc-100 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-400 shadow-xs flex-1 mr-2"
+        >
+          <span
+            className="w-1.5 h-1.5 rounded-full shrink-0 bg-zinc-400 dark:bg-zinc-500"
+          />
+          {isEditingTitle ? (
+            <input
+              autoFocus
+              type="text"
+              value={title}
+              onChange={(e) => {
+                setTitle(e.target.value)
+                save({ title: e.target.value })
+              }}
+              onBlur={() => setIsEditingTitle(false)}
+              onKeyDown={(e) => e.key === 'Enter' && setIsEditingTitle(false)}
+              placeholder="Lista de tareas..."
+              className="font-sans font-semibold text-[11px] bg-transparent border-none outline-none w-full truncate text-zinc-700 dark:text-zinc-300"
+            />
+          ) : (
+            <span
+              onDoubleClick={() => setIsEditingTitle(true)}
+              className="font-sans font-semibold text-[11px] text-zinc-700 dark:text-zinc-300 truncate cursor-text select-text"
+            >
+              {renderWithAppleEmoji(title || 'Lista de tareas...')}
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-0.5">
           <button
             onClick={() => setShowPalette(!showPalette)}
@@ -184,8 +244,10 @@ export const TodoNode = memo(({ id, data, selected }: any) => {
                 save({ color: c })
               }}
               className={`w-4 h-4 rounded-full border border-black/10 transition-transform ${
-                COLOR_MAP[c].bg
-              } ${color === c ? 'scale-125 ring-1 ring-[var(--app-accent)]' : 'hover:scale-110'}`}
+                color === c ? 'scale-125 ring-2 ring-[var(--app-accent)]' : 'hover:scale-110'
+              }`}
+              style={{ backgroundColor: COLOR_MAP[c]?.dot || '#9ca3af' }}
+              title={c}
             />
           ))}
         </div>
@@ -231,9 +293,13 @@ export const TodoNode = memo(({ id, data, selected }: any) => {
                 {todo.completed && <DoneIcon style={{ width: 10, height: 10 }} />}
               </div>
               <span
-                className={`truncate ${todo.completed ? 'line-through opacity-50' : colorScheme.text}`}
+                className={`truncate ${
+                  todo.completed
+                    ? 'line-through text-zinc-400 dark:text-zinc-500'
+                    : 'text-zinc-800 dark:text-zinc-200'
+                }`}
               >
-                {todo.text}
+                {renderWithAppleEmoji(todo.text)}
               </span>
             </button>
             <button
@@ -256,7 +322,7 @@ export const TodoNode = memo(({ id, data, selected }: any) => {
             value={newTaskText}
             onChange={(e) => setNewTaskText(e.target.value)}
             placeholder="Añadir tarea..."
-            className={`flex-1 text-xs bg-transparent border-none outline-none placeholder-current/40 ${colorScheme.text}`}
+            className="flex-1 text-xs bg-transparent border-none outline-none text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
           />
           <button
             type="submit"

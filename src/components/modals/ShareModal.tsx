@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   CloseIcon,
   ShareIcon,
@@ -10,7 +10,12 @@ import {
   PrinterIcon,
   AdminIcon
 } from '@blocksuite/icons/rc'
+import { Lock, Unlock } from 'lucide-react'
 import { db, type WorkspaceItem } from '../../db'
+import { syncEngine } from '../../lib/syncEngine'
+import { getCurrentMember } from '../../lib/teamAuth'
+import { toast } from 'sonner'
+import { AppleEmoji } from '../ui/AppleEmoji'
 
 interface ShareModalProps {
   isOpen: boolean
@@ -23,15 +28,75 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
   const [copiedMd, setCopiedMd] = useState(false)
   const [isPublic, setIsPublic] = useState(false)
   const [permission, setPermission] = useState<'view' | 'edit'>('view')
+  const [shareToken, setShareToken] = useState('')
+  const [isPrivate, setIsPrivate] = useState(false)
+
+  const currentMember = getCurrentMember()
+
+  useEffect(() => {
+    if (workspace && isOpen) {
+      setIsPublic(Boolean(workspace.isPublicShared))
+      setPermission(workspace.sharePermission || 'view')
+      setShareToken(workspace.shareToken || crypto.randomUUID())
+      setIsPrivate(Boolean(workspace.isPrivate))
+    }
+  }, [workspace, isOpen, currentMember.id])
 
   if (!isOpen || !workspace) return null
 
-  const shareUrl = `${window.location.origin}/#note=${workspace.id}`
+  const externalShareUrl = `${window.location.origin}/?share=${workspace.id}&token=${shareToken}`
+  const internalShareUrl = `${window.location.origin}/#note=${workspace.id}`
+  const currentUrl = isPublic ? externalShareUrl : internalShareUrl
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(shareUrl)
+    navigator.clipboard.writeText(currentUrl)
     setCopiedLink(true)
+    toast.success('Enlace copiado al portapapeles')
     setTimeout(() => setCopiedLink(false), 2000)
+  }
+
+  const handleTogglePublic = async () => {
+    const nextPublic = !isPublic
+    const token = shareToken || crypto.randomUUID()
+    setShareToken(token)
+    setIsPublic(nextPublic)
+
+    await db.workspaces.update(workspace.id, {
+      isPublicShared: nextPublic,
+      shareToken: token,
+      sharePermission: permission,
+      updatedAt: Date.now(),
+      syncStatus: 'pending'
+    })
+    syncEngine.scheduleSync(500)
+    toast.success(nextPublic ? 'Enlace público externo activado' : 'Enlace público externo desactivado')
+  }
+
+  const handleChangePermission = async (newPerm: 'view' | 'edit') => {
+    setPermission(newPerm)
+    await db.workspaces.update(workspace.id, {
+      sharePermission: newPerm,
+      updatedAt: Date.now(),
+      syncStatus: 'pending'
+    })
+    syncEngine.scheduleSync(500)
+    toast.success(`Permiso cambiado a: ${newPerm === 'view' ? 'Solo lectura' : 'Permitir edición'}`)
+  }
+
+  const handleTogglePrivate = async () => {
+    const nextPrivate = !isPrivate
+    setIsPrivate(nextPrivate)
+    const targetOwner = nextPrivate ? (workspace.ownerMember || currentMember.id) : (workspace.ownerMember || currentMember.id)
+
+    await db.workspaces.update(workspace.id, {
+      isPrivate: nextPrivate,
+      ownerMember: targetOwner,
+      ownerName: currentMember.name,
+      updatedAt: Date.now(),
+      syncStatus: 'pending'
+    })
+    syncEngine.scheduleSync(500)
+    toast.success(nextPrivate ? 'Nota cambiada a MODO PRIVADO' : 'Nota compartida con todo el equipo')
   }
 
   // Convert HTML content into high-fidelity markdown
@@ -209,34 +274,69 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
         </div>
 
         <div className="p-5 space-y-4 text-xs">
-          {/* Document summary */}
-          <div className="p-3 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)] flex items-center gap-3">
-            <span className="text-2xl">{workspace.icon || '📄'}</span>
-            <div className="min-w-0 flex-1">
-              <h4 className="font-semibold text-xs text-[var(--app-text-primary)] truncate">
-                {workspace.title || 'Untitled'}
-              </h4>
-              <p className="text-[11px] text-[var(--app-text-secondary)]">
-                Modo {workspace.viewMode}
-              </p>
+          {/* Document summary and Privacy Badge */}
+          <div className="p-3 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)] flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
+              <AppleEmoji emoji={workspace.icon || '📄'} size={26} className="shrink-0" />
+              <div className="min-w-0 flex-1">
+                <h4 className="font-semibold text-xs text-[var(--app-text-primary)] truncate">
+                  {workspace.title || 'Untitled'}
+                </h4>
+                <div className="flex items-center gap-2 mt-0.5 text-[11px] text-[var(--app-text-secondary)]">
+                  <span>Modo {workspace.viewMode}</span>
+                  <span>•</span>
+                  <span className="flex items-center gap-1 font-medium">
+                    {isPrivate ? (
+                      <span className="text-amber-600 dark:text-amber-400 flex items-center gap-0.5">
+                        <Lock className="w-3 h-3" /> Privada
+                      </span>
+                    ) : (
+                      <span className="text-blue-600 dark:text-blue-400 flex items-center gap-0.5">
+                        <Unlock className="w-3 h-3" /> Equipo
+                      </span>
+                    )}
+                  </span>
+                </div>
+              </div>
             </div>
+
+            {/* Toggle Private Button */}
+            <button
+              onClick={handleTogglePrivate}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border flex items-center gap-1.5 transition cursor-pointer ${
+                isPrivate
+                  ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20'
+                  : 'border-blue-500/30 bg-blue-500/10 text-blue-700 dark:text-blue-300 hover:bg-blue-500/20'
+              }`}
+              title={isPrivate ? 'Hacer accesible a todo el equipo' : 'Hacer privada solo para mí'}
+            >
+              {isPrivate ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+              <span>{isPrivate ? 'Hacer Pública' : 'Hacer Privada'}</span>
+            </button>
           </div>
 
           {/* Share link input */}
           <div>
-            <label className="block text-[11px] font-medium mb-1.5 text-[var(--app-text-secondary)]">
-              Enlace directo al documento
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[11px] font-medium text-[var(--app-text-secondary)]">
+                {isPublic ? '🔗 Enlace para personas externas (con token seguro)' : 'Enlace interno de la nota'}
+              </label>
+              {isPublic && (
+                <span className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-medium px-2 py-0.5 rounded-full">
+                  Acceso externo activo
+                </span>
+              )}
+            </div>
             <div className="flex gap-2">
               <input
                 type="text"
                 readOnly
-                value={shareUrl}
+                value={currentUrl}
                 className="flex-1 rounded-md px-3 py-1.5 text-xs font-mono select-all focus:outline-none border border-[var(--app-border)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)]"
               />
               <button
                 onClick={handleCopy}
-                className="px-3 py-1.5 rounded-md font-medium flex items-center gap-1.5 transition text-[var(--app-bg-primary)] bg-[var(--app-text-primary)] hover:opacity-90 shadow-xs"
+                className="px-3 py-1.5 rounded-md font-medium flex items-center gap-1.5 transition text-[var(--app-bg-primary)] bg-[var(--app-text-primary)] hover:opacity-90 shadow-xs cursor-pointer"
               >
                 {copiedLink ? (
                   <DoneIcon style={{ width: 14, height: 14 }} />
@@ -261,16 +361,16 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
                 />
                 <div>
                   <p className="font-medium text-xs text-[var(--app-text-primary)]">
-                    Publicar en la Web
+                    Compartir con alguien externo mediante enlace
                   </p>
                   <p className="text-[11px] text-[var(--app-text-secondary)]">
-                    Cualquiera con el enlace podrá acceder al documento
+                    Cualquier persona con este enlace podrá abrir este documento sin pertenecer al equipo
                   </p>
                 </div>
               </div>
               <button
-                onClick={() => setIsPublic(!isPublic)}
-                className="w-9 h-5 rounded-full p-0.5 transition-colors relative"
+                onClick={handleTogglePublic}
+                className="w-9 h-5 rounded-full p-0.5 transition-colors relative cursor-pointer"
                 style={{
                   backgroundColor: isPublic ? 'var(--app-accent)' : 'var(--app-hover)'
                 }}
@@ -285,18 +385,18 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
             </div>
 
             {isPublic && (
-              <div className="flex items-center justify-between p-2 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-secondary)]">
+              <div className="flex items-center justify-between p-2.5 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)] animate-in fade-in">
                 <div className="flex items-center gap-2 text-[var(--app-text-secondary)]">
                   <AdminIcon style={{ width: 14, height: 14 }} />
-                  <span>Nivel de permisos:</span>
+                  <span>Nivel de permisos para el visitante externo:</span>
                 </div>
                 <select
                   value={permission}
-                  onChange={(e) => setPermission(e.target.value as any)}
-                  className="rounded-md px-2 py-1 text-xs focus:outline-none border border-[var(--app-border)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)]"
+                  onChange={(e) => handleChangePermission(e.target.value as any)}
+                  className="rounded-md px-2.5 py-1 text-xs focus:outline-none border border-[var(--app-border)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] cursor-pointer font-medium"
                 >
-                  <option value="view">Solo lectura</option>
-                  <option value="edit">Permitir edición</option>
+                  <option value="view">👁️ Solo lectura</option>
+                  <option value="edit">✏️ Permitir edición</option>
                 </select>
               </div>
             )}

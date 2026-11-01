@@ -11,6 +11,7 @@ import {
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
 import { areNodePropsEqual } from './nodeUtils'
+import { AppleEmoji, renderWithAppleEmoji } from '../../ui/AppleEmoji'
 
 export const DocFrameNode = memo(({ id, data, selected }: any) => {
   const [title, setTitle] = useState(data.title || '')
@@ -72,8 +73,8 @@ export const DocFrameNode = memo(({ id, data, selected }: any) => {
 
   return (
     <div
-      className={`relative w-[340px] rounded-lg bg-[var(--app-bg-primary)] border border-[var(--app-border)] transition-[box-shadow,border-color] duration-150 select-none ${
-        selected ? 'ring-1.5 ring-[var(--app-accent)] shadow-[var(--app-shadow-card-hover)]' : 'shadow-[var(--app-shadow-card)] hover:border-[var(--app-border-strong)]'
+      className={`group relative w-[340px] rounded-xl bg-white dark:bg-[#18181b] transition-all duration-200 select-none shadow-md hover:shadow-xl ${
+        selected ? 'ring-2 ring-[var(--app-accent)] shadow-2xl' : ''
       }`}
     >
       {/* Connector Handles */}
@@ -81,25 +82,33 @@ export const DocFrameNode = memo(({ id, data, selected }: any) => {
         id="top"
         type="source"
         position={Position.Top}
-        className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800"
+        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
+          selected ? '!opacity-100' : ''
+        }`}
       />
       <Handle
         id="bottom"
         type="source"
         position={Position.Bottom}
-        className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800"
+        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
+          selected ? '!opacity-100' : ''
+        }`}
       />
       <Handle
         id="left"
         type="source"
         position={Position.Left}
-        className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800"
+        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
+          selected ? '!opacity-100' : ''
+        }`}
       />
       <Handle
         id="right"
         type="source"
         position={Position.Right}
-        className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800"
+        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
+          selected ? '!opacity-100' : ''
+        }`}
       />
 
       {/* Top Header of the Card (Authentic AFFiNE edgeless-note-header) */}
@@ -119,9 +128,13 @@ export const DocFrameNode = memo(({ id, data, selected }: any) => {
           {/* When collapsed, render emoji & title in header like AFFiNE */}
           {!isExpanded && (
             <div className="flex items-center gap-1.5 min-w-0 flex-1 pr-2">
-              <PageIcon className="w-3.5 h-3.5 text-[#1e96eb] shrink-0" />
+              {data.icon ? (
+                <AppleEmoji emoji={data.icon} size={15} className="shrink-0" />
+              ) : (
+                <PageIcon className="w-3.5 h-3.5 text-[#1e96eb] shrink-0" />
+              )}
               <span className="font-semibold text-xs text-[var(--affine-text-primary-color)] truncate">
-                {title || 'Untitled'}
+                {renderWithAppleEmoji(title || 'Untitled')}
               </span>
             </div>
           )}
@@ -176,6 +189,11 @@ export const DocFrameNode = memo(({ id, data, selected }: any) => {
       {/* Card Body - Only shown if expanded */}
       {isExpanded && (
         <div className="px-4 py-3 min-h-[90px] flex flex-col justify-start">
+          {data.icon && (
+            <div className="mb-1">
+              <AppleEmoji emoji={data.icon} size={24} />
+            </div>
+          )}
           <input
             type="text"
             value={title === 'Untitled' ? '' : title}
@@ -187,7 +205,7 @@ export const DocFrameNode = memo(({ id, data, selected }: any) => {
           {/* Preview of page text */}
           <div className="mt-2.5 text-xs text-[var(--affine-text-secondary-color)] leading-relaxed border-t border-[var(--affine-divider-color)] pt-2 max-h-36 overflow-y-auto font-sans">
             {cleanContent ? (
-              <p>{cleanContent}</p>
+              <p>{renderWithAppleEmoji(cleanContent)}</p>
             ) : (
               <p className="italic text-[var(--affine-placeholder-color)] text-[11px]">Nota vacía. Escribe arriba o abre el modo documento.</p>
             )}

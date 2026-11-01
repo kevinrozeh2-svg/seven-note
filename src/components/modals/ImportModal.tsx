@@ -8,6 +8,7 @@ import {
 import { db, DEFAULT_SPACE_ID } from '../../db'
 import { syncEngine } from '../../lib/syncEngine'
 import { importObsidianCanvas } from '../../lib/canvasExchange'
+import { getCurrentMember } from '../../lib/teamAuth'
 import { toast } from 'sonner'
 
 interface ImportModalProps {
@@ -40,6 +41,7 @@ export function ImportModal({ isOpen, onClose, onWorkspaceImported, currentSpace
       try {
         const newId = crypto.randomUUID()
         const now = Date.now()
+        const member = getCurrentMember()
         await db.workspaces.add({
           id: newId,
           parentId: null,
@@ -54,6 +56,9 @@ export function ImportModal({ isOpen, onClose, onWorkspaceImported, currentSpace
           isFavorite: false,
           isDeleted: false,
           syncStatus: 'pending',
+          ownerMember: member.id,
+          ownerName: member.name,
+          createdBy: member.name,
           tags: ['Obsidian', 'Canvas']
         })
 
@@ -81,7 +86,7 @@ export function ImportModal({ isOpen, onClose, onWorkspaceImported, currentSpace
           } else {
             setImportedContent(`<pre>${JSON.stringify(parsed, null, 2)}</pre>`)
           }
-        } catch (err) {
+        } catch {
           setError('El archivo JSON no es válido.')
         }
       } else {
@@ -117,6 +122,7 @@ export function ImportModal({ isOpen, onClose, onWorkspaceImported, currentSpace
     const newId = crypto.randomUUID()
     const now = Date.now()
 
+    const member = getCurrentMember()
     try {
       await db.workspaces.add({
         id: newId,
@@ -132,6 +138,9 @@ export function ImportModal({ isOpen, onClose, onWorkspaceImported, currentSpace
         isFavorite: false,
         isDeleted: false,
         syncStatus: 'pending',
+        ownerMember: member.id,
+        ownerName: member.name,
+        createdBy: member.name,
         tags: ['Importado']
       })
       syncEngine.scheduleSync(1000)

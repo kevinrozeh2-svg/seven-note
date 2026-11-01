@@ -3,6 +3,7 @@ import { Trash2, RotateCcw, FileText, Layout } from 'lucide-react'
 import { db, type WorkspaceItem } from '../../db'
 import { syncEngine } from '../../lib/syncEngine'
 import { toast } from 'sonner'
+import { AppleEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
 
 interface TrashPageProps {
   onSelectWorkspace: (id: string) => void
@@ -135,7 +136,7 @@ export const TrashPage: React.FC<TrashPageProps> = () => {
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className="w-9 h-9 rounded-md bg-neutral-800 flex items-center justify-center shrink-0 text-neutral-400">
                     {doc.icon ? (
-                      <span>{doc.icon}</span>
+                      <AppleEmoji emoji={doc.icon} size={18} />
                     ) : doc.viewMode === 'canvas' ? (
                       <Layout className="w-4 h-4 text-indigo-400" />
                     ) : (
@@ -144,7 +145,7 @@ export const TrashPage: React.FC<TrashPageProps> = () => {
                   </div>
                   <div className="min-w-0 flex-1">
                     <h4 className="text-sm font-medium text-neutral-200 truncate">
-                      {doc.title || 'Sin título'}
+                      {renderWithAppleEmoji(doc.title || 'Sin título')}
                     </h4>
                     <p className="text-xs text-neutral-500 mt-0.5 font-mono">
                       Eliminado {formatRelativeTime(doc.updatedAt)}

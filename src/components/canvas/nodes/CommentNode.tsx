@@ -5,6 +5,7 @@ import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
 import { toast } from 'sonner'
 import { areNodePropsEqual } from './nodeUtils'
+import { renderWithAppleEmoji } from '../../ui/AppleEmoji'
 
 export const CommentNode = memo(({ id, data, selected }: any) => {
   const [author] = useState(data.commentAuthor || 'Natali')
@@ -15,6 +16,7 @@ export const CommentNode = memo(({ id, data, selected }: any) => {
   )
   const [isReplying, setIsReplying] = useState(false)
   const [replyText, setReplyText] = useState('')
+  const [isEditingContent, setIsEditingContent] = useState(false)
 
   const save = async (updates: any) => {
     try {
@@ -59,15 +61,43 @@ export const CommentNode = memo(({ id, data, selected }: any) => {
 
   return (
     <div
-      className={`group relative w-[280px] rounded-xl bg-white dark:bg-[#282828] border border-neutral-200/90 dark:border-neutral-700/80 p-3.5 transition-[box-shadow,border-color] duration-150 ${
+      className={`group relative w-[280px] rounded-xl bg-white dark:bg-[#282828] p-3.5 transition-[box-shadow] duration-150 ${
         selected ? 'ring-2 ring-[var(--app-accent)] shadow-xl' : 'shadow-[0_2px_10px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]'
       }`}
     >
       {/* Handles */}
-      <Handle id="top" type="source" position={Position.Top} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
-      <Handle id="bottom" type="source" position={Position.Bottom} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
-      <Handle id="left" type="source" position={Position.Left} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
-      <Handle id="right" type="source" position={Position.Right} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
+      <Handle
+        id="top"
+        type="source"
+        position={Position.Top}
+        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
+          selected ? '!opacity-100' : ''
+        }`}
+      />
+      <Handle
+        id="bottom"
+        type="source"
+        position={Position.Bottom}
+        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
+          selected ? '!opacity-100' : ''
+        }`}
+      />
+      <Handle
+        id="left"
+        type="source"
+        position={Position.Left}
+        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
+          selected ? '!opacity-100' : ''
+        }`}
+      />
+      <Handle
+        id="right"
+        type="source"
+        position={Position.Right}
+        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
+          selected ? '!opacity-100' : ''
+        }`}
+      />
 
       {/* Floating delete button */}
       <button
@@ -99,15 +129,26 @@ export const CommentNode = memo(({ id, data, selected }: any) => {
 
       {/* Comment Body */}
       <div className="text-xs text-neutral-800 dark:text-neutral-200 mb-2 leading-relaxed">
-        <textarea
-          value={content}
-          onChange={(e) => {
-            setContent(e.target.value)
-            save({ commentText: e.target.value })
-          }}
-          rows={2}
-          className="w-full bg-transparent border-none outline-none resize-none text-xs text-neutral-800 dark:text-neutral-200 p-0 leading-relaxed"
-        />
+        {isEditingContent ? (
+          <textarea
+            autoFocus
+            value={content}
+            onChange={(e) => {
+              setContent(e.target.value)
+              save({ commentText: e.target.value })
+            }}
+            onBlur={() => setIsEditingContent(false)}
+            rows={2}
+            className="w-full bg-transparent border-none outline-none resize-none text-xs text-neutral-800 dark:text-neutral-200 p-0 leading-relaxed"
+          />
+        ) : (
+          <div
+            onDoubleClick={() => setIsEditingContent(true)}
+            className="cursor-text select-text whitespace-pre-wrap leading-relaxed"
+          >
+            {renderWithAppleEmoji(content)}
+          </div>
+        )}
       </div>
 
       {/* Replies list */}
@@ -116,7 +157,7 @@ export const CommentNode = memo(({ id, data, selected }: any) => {
           {replies.map((r) => (
             <div key={r.id} className="text-[11px] bg-neutral-50 dark:bg-neutral-800/60 p-1.5 rounded-md flex items-start gap-1.5">
               <span className="font-semibold text-neutral-700 dark:text-neutral-300">{r.author}:</span>
-              <span className="text-neutral-600 dark:text-neutral-400">{r.text}</span>
+              <span className="text-neutral-600 dark:text-neutral-400">{renderWithAppleEmoji(r.text)}</span>
             </div>
           ))}
         </div>

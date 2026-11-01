@@ -4,49 +4,50 @@ import { DeleteIcon, PlusIcon, HighLightLinearIcon } from '@blocksuite/icons/rc'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
 import { areNodePropsEqual } from './nodeUtils'
+import { renderWithAppleEmoji } from '../../ui/AppleEmoji'
 
-const COLOR_MAP: Record<string, { bg: string; border: string; pill: string; text: string; edge: string }> = {
+const COLOR_MAP: Record<string, { cardBorder: string; accentBar: string; dot: string; topGlow: string; edge: string }> = {
   blue: {
-    bg: 'bg-[#e0f0fd] dark:bg-[#183048]',
-    border: 'border-[#bde0fb] dark:border-[#23496e]',
-    pill: 'bg-[#2383e2] text-white',
-    text: 'text-[#11446e] dark:text-[#bae6fd]',
-    edge: '#2383e2'
+    cardBorder: '',
+    accentBar: '',
+    dot: '#71717a',
+    topGlow: '',
+    edge: '#94a3b8'
   },
   purple: {
-    bg: 'bg-[#ede7fb] dark:bg-[#2d2345]',
-    border: 'border-[#d7c9f7] dark:border-[#46346e]',
-    pill: 'bg-[#7c3aed] text-white',
-    text: 'text-[#3d2870] dark:text-[#e9d5ff]',
-    edge: '#7c3aed'
+    cardBorder: '',
+    accentBar: '',
+    dot: '#71717a',
+    topGlow: '',
+    edge: '#94a3b8'
   },
   green: {
-    bg: 'bg-[#dcf5e3] dark:bg-[#1a3424]',
-    border: 'border-[#b6e8c4] dark:border-[#285338]',
-    pill: 'bg-[#16a34a] text-white',
-    text: 'text-[#184a25] dark:text-[#bbf7d0]',
-    edge: '#16a34a'
+    cardBorder: '',
+    accentBar: '',
+    dot: '#71717a',
+    topGlow: '',
+    edge: '#94a3b8'
   },
   yellow: {
-    bg: 'bg-[#fff9db] dark:bg-[#3a341b]',
-    border: 'border-[#f5eeaf] dark:border-[#574e22]',
-    pill: 'bg-[#eab308] text-zinc-900',
-    text: 'text-[#49420d] dark:text-[#fef08a]',
-    edge: '#ca8a04'
+    cardBorder: '',
+    accentBar: '',
+    dot: '#71717a',
+    topGlow: '',
+    edge: '#94a3b8'
   },
   rose: {
-    bg: 'bg-[#ffe8d4] dark:bg-[#3d271a]',
-    border: 'border-[#fcd2af] dark:border-[#5e3820]',
-    pill: 'bg-[#f97316] text-white',
-    text: 'text-[#5c310b] dark:text-[#fed7aa]',
-    edge: '#f97316'
+    cardBorder: '',
+    accentBar: '',
+    dot: '#71717a',
+    topGlow: '',
+    edge: '#94a3b8'
   },
   slate: {
-    bg: 'bg-[#ffffff] dark:bg-[#252525]',
-    border: 'border-[#e8e7e4] dark:border-[#383838]',
-    pill: 'bg-[#787774] text-white',
-    text: 'text-[#37352f] dark:text-[#e6e6e5]',
-    edge: '#787774'
+    cardBorder: '',
+    accentBar: '',
+    dot: '#71717a',
+    topGlow: '',
+    edge: '#94a3b8'
   }
 }
 
@@ -166,31 +167,33 @@ export const MindmapNode = memo(({ id, data, selected }: any) => {
 
   return (
     <div
-      className={`relative min-w-[150px] max-w-[280px] rounded-lg px-3 py-2 border transition-[box-shadow,border-color] duration-150 group ${
-        colorScheme.bg
-      } ${colorScheme.border}`}
-      style={{
-        boxShadow: selected
-          ? '0 0 0 1.5px var(--app-accent), var(--app-shadow-card-hover)'
-          : 'var(--app-shadow-card)'
-      }}
+      className={`group relative min-w-[150px] max-w-[280px] rounded-xl px-3.5 py-2.5 bg-white dark:bg-[#18181b] transition-all duration-200 overflow-hidden ${
+        selected
+          ? 'ring-2 ring-[var(--app-accent)] shadow-xl'
+          : 'shadow-[0_4px_16px_-4px_rgba(0,0,0,0.06),0_1px_2px_rgba(0,0,0,0.04)] dark:shadow-[0_8px_24px_-6px_rgba(0,0,0,0.5),0_1px_2px_rgba(0,0,0,0.3)]'
+      } hover:shadow-lg`}
     >
+
       {/* Handles */}
       <Handle
         id="left"
         type="target"
         position={Position.Left}
-        className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800"
+        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
+          selected ? '!opacity-100' : ''
+        }`}
       />
       <Handle
         id="right"
         type="source"
         position={Position.Right}
-        className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800"
+        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
+          selected ? '!opacity-100' : ''
+        }`}
       />
 
       {/* Content */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between gap-2 relative z-10 pl-1">
         <div className="flex-1 min-w-0">
           {isEditing ? (
             <input
@@ -208,15 +211,15 @@ export const MindmapNode = memo(({ id, data, selected }: any) => {
                   save({ title })
                 }
               }}
-              className="w-full bg-transparent border-none outline-none text-xs font-semibold text-[var(--affine-text-primary-color)] font-sans"
+              className="w-full bg-transparent border-none outline-none text-xs font-semibold text-zinc-900 dark:text-zinc-100 font-sans"
             />
           ) : (
             <div
               onDoubleClick={() => setIsEditing(true)}
-              className={`text-xs font-semibold cursor-text truncate ${colorScheme.text}`}
+              className="text-xs font-semibold cursor-text truncate text-zinc-900 dark:text-zinc-100 hover:text-blue-500 transition-colors"
               title="Doble clic para editar"
             >
-              {title}
+              {renderWithAppleEmoji(title)}
             </div>
           )}
         </div>
@@ -224,7 +227,7 @@ export const MindmapNode = memo(({ id, data, selected }: any) => {
         {/* Quick branch button (+) on the right */}
         <button
           onClick={handleAddChild}
-          className="p-1 rounded-full bg-white/10 hover:bg-[#1e96eb] hover:text-white text-[var(--affine-text-secondary-color)] transition shadow-xs shrink-0"
+          className="p-1 rounded-full bg-zinc-100 dark:bg-zinc-800 hover:bg-[#1e96eb] hover:text-white text-zinc-500 dark:text-zinc-400 transition shadow-xs shrink-0"
           title="Añadir rama secundaria (+)"
         >
           <PlusIcon className="w-3.5 h-3.5" />

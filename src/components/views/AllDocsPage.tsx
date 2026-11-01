@@ -1,17 +1,18 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import {
   Search,
   Plus,
   Star,
   Trash2,
-  FileText,
-  Layout,
   MoreHorizontal,
   ChevronDown,
   LayoutGrid,
   List as ListIcon
 } from 'lucide-react'
-import { type WorkspaceItem } from '../../db'
+import { useLiveQuery } from 'dexie-react-hooks'
+import { db, type WorkspaceItem, type CanvasNodeItem } from '../../db'
+import { AppleEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
+import { DocThumbnailPreview } from '../ui/DocThumbnailPreview'
 
 interface AllDocsPageProps {
   workspaces: WorkspaceItem[]
@@ -84,6 +85,21 @@ export const AllDocsPage: React.FC<AllDocsPageProps> = ({
   const [viewLayout, setViewLayout] = useState<ViewModeLayout>('list')
   const [searchQuery, setSearchQuery] = useState('')
   const [openMenuDocId, setOpenMenuDocId] = useState<string | null>(null)
+
+  // Fetch canvas nodes for real visual thumbnails
+  const allCanvasNodes =
+    useLiveQuery(() => db.canvasNodes.filter((n) => !n.isDeleted).toArray(), []) || []
+
+  const nodesByWorkspace = useMemo(() => {
+    const map: Record<string, CanvasNodeItem[]> = {}
+    for (const node of allCanvasNodes) {
+      if (!map[node.workspaceId]) {
+        map[node.workspaceId] = []
+      }
+      map[node.workspaceId].push(node)
+    }
+    return map
+  }, [allCanvasNodes])
 
   const activeDocs = workspaces.filter(
     (w) => !w.isDeleted && (w.spaceId ? w.spaceId === currentSpaceId : true)
@@ -319,6 +335,77 @@ export const AllDocsPage: React.FC<AllDocsPageProps> = ({
                   const snippet = getSnippet(doc.docContent)
                   const isCurrent = doc.id === currentWorkspaceId
 
+                  if (viewLayout === 'grid') {
+                    return (
+                      <div
+                        key={doc.id}
+                        onClick={() => onSelectWorkspace(doc.id)}
+                        className={`group flex flex-col rounded-xl border transition cursor-pointer overflow-hidden ${
+                          isCurrent
+                            ? 'border-neutral-600 bg-neutral-900 shadow-md'
+                            : 'border-neutral-800/80 bg-neutral-900/40 hover:bg-neutral-800/60 hover:border-neutral-700'
+                        }`}
+                      >
+                        {/* Card Preview Header */}
+                        <DocThumbnailPreview
+                          doc={doc}
+                          nodes={nodesByWorkspace[doc.id]}
+                          size="lg"
+                        />
+
+                        {/* Card Details */}
+                        <div className="p-3.5 flex flex-col justify-between flex-1">
+                          <div>
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                {doc.icon && (
+                                  <span className="shrink-0 flex items-center">
+                                    <AppleEmoji emoji={doc.icon} size={14} />
+                                  </span>
+                                )}
+                                <span className="font-semibold text-xs text-neutral-100 truncate">
+                                  {renderWithAppleEmoji(doc.title || 'Sin título')}
+                                </span>
+                              </div>
+                              <button
+                                onClick={(e) => onToggleFavorite(e, doc)}
+                                className={`p-1 rounded transition hover:scale-110 ${
+                                  doc.isFavorite
+                                    ? 'text-amber-400'
+                                    : 'text-neutral-500 opacity-0 group-hover:opacity-100 hover:text-amber-400'
+                                }`}
+                                title={doc.isFavorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
+                              >
+                                <Star
+                                  className={`w-3.5 h-3.5 ${doc.isFavorite ? 'fill-amber-400' : ''}`}
+                                />
+                              </button>
+                            </div>
+
+                            {snippet ? (
+                              <p className="text-[11px] text-neutral-500 line-clamp-2 mt-1.5 leading-relaxed">
+                                {snippet}
+                              </p>
+                            ) : (
+                              <p className="text-[11px] text-neutral-600 italic mt-1.5 text-xs">
+                                {doc.viewMode === 'canvas' ? 'Lienzo infinito' : 'Página vacía'}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-neutral-800/70 text-[10px] text-neutral-500 font-mono">
+                            <span>{formatRelativeTime(doc.updatedAt)}</span>
+                            {doc.isJournal && (
+                              <span className="px-1.5 py-0.2 bg-neutral-800 text-neutral-400 rounded border border-neutral-700">
+                                Diario
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  }
+
                   return (
                     <div
                       key={doc.id}
@@ -329,24 +416,25 @@ export const AllDocsPage: React.FC<AllDocsPageProps> = ({
                           : 'border-transparent bg-neutral-900/40 hover:bg-neutral-800/60 hover:border-neutral-800'
                       }`}
                     >
-                      {/* Left: Thumbnail Icon & Title/Snippet */}
+                      {/* Left: Thumbnail Preview & Title/Snippet */}
                       <div className="flex items-center gap-3.5 min-w-0 flex-1">
-                        {/* Doc preview icon box */}
-                        <div className="w-10 h-10 rounded-md bg-neutral-800/90 border border-neutral-700/60 flex items-center justify-center shrink-0 overflow-hidden text-neutral-400">
-                          {doc.icon ? (
-                            <span className="text-lg">{doc.icon}</span>
-                          ) : doc.viewMode === 'canvas' ? (
-                            <Layout className="w-5 h-5 text-indigo-400" />
-                          ) : (
-                            <FileText className="w-5 h-5 text-blue-400" />
-                          )}
-                        </div>
+                        {/* Doc preview generated from content */}
+                        <DocThumbnailPreview
+                          doc={doc}
+                          nodes={nodesByWorkspace[doc.id]}
+                          size="sm"
+                        />
 
                         {/* Title and snippet text */}
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
+                            {doc.icon && (
+                              <span className="shrink-0 flex items-center">
+                                <AppleEmoji emoji={doc.icon} size={15} />
+                              </span>
+                            )}
                             <span className="font-semibold text-sm text-neutral-100 truncate">
-                              {doc.title || 'Sin título'}
+                              {renderWithAppleEmoji(doc.title || 'Sin título')}
                             </span>
                             {doc.isJournal && (
                               <span className="text-[10px] px-1.5 py-0.2 bg-neutral-800 text-neutral-400 rounded border border-neutral-700">

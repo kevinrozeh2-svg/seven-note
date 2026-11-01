@@ -103,8 +103,19 @@ create table if not exists public.seven_workspaces (
   updated_at bigint not null,
   is_favorite boolean not null default false,
   is_deleted boolean not null default false,
-  metadata jsonb not null default '{}'::jsonb
+  metadata jsonb not null default '{}'::jsonb,
+  is_private boolean not null default false,
+  owner_member text default 'kevin',
+  is_public_shared boolean not null default false,
+  share_token text,
+  share_permission text default 'view'
 );
+
+alter table public.seven_workspaces add column if not exists is_private boolean not null default false;
+alter table public.seven_workspaces add column if not exists owner_member text default 'kevin';
+alter table public.seven_workspaces add column if not exists is_public_shared boolean not null default false;
+alter table public.seven_workspaces add column if not exists share_token text;
+alter table public.seven_workspaces add column if not exists share_permission text default 'view';
 
 create table if not exists public.seven_canvas_nodes (
   id text primary key,
@@ -169,8 +180,33 @@ alter table public.seven_canvas_edges enable row level security;
 alter table public.seven_collections enable row level security;
 alter table public.seven_tags enable row level security;
 
+-- Espacios compartidos para el equipo
+drop policy if exists "Acceso total a seven_spaces" on public.seven_spaces;
 create policy "Acceso total a seven_spaces" on public.seven_spaces for all using (true) with check (true);
-create policy "Acceso total a seven_workspaces" on public.seven_workspaces for all using (true) with check (true);
+
+-- Workspaces: privados solo para su autor, y públicos accesibles para todo el equipo
+drop policy if exists "Lectura de workspaces" on public.seven_workspaces;
+drop policy if exists "Acceso total a seven_workspaces" on public.seven_workspaces;
+create policy "Lectura de workspaces" on public.seven_workspaces for select using (
+  is_private = false
+  or is_public_shared = true
+  or auth.uid() = user_id
+  or (auth.jwt() ->> 'email') ilike (owner_member || '%')
+);
+
+drop policy if exists "Modificacion de workspaces" on public.seven_workspaces;
+create policy "Modificacion de workspaces" on public.seven_workspaces for all using (
+  is_private = false
+  or auth.uid() = user_id
+  or (auth.jwt() ->> 'email') ilike (owner_member || '%')
+  or (is_public_shared = true and share_permission = 'edit')
+) with check (
+  is_private = false
+  or auth.uid() = user_id
+  or (auth.jwt() ->> 'email') ilike (owner_member || '%')
+  or (is_public_shared = true and share_permission = 'edit')
+);
+
 create policy "Acceso total a seven_canvas_nodes" on public.seven_canvas_nodes for all using (true) with check (true);
 create policy "Acceso total a seven_canvas_edges" on public.seven_canvas_edges for all using (true) with check (true);
 create policy "Acceso total a seven_collections" on public.seven_collections for all using (true) with check (true);
@@ -237,7 +273,7 @@ create policy "Acceso total a seven_tags" on public.seven_tags for all using (tr
           alert('¡Copia de seguridad restaurada con éxito!')
           window.location.reload()
         }
-      } catch (err) {
+      } catch {
         alert('Error al procesar el archivo JSON.')
       }
     }
@@ -246,44 +282,44 @@ create policy "Acceso total a seven_tags" on public.seven_tags for all using (tr
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-      <div className="w-full max-w-xl rounded-xl border border-[var(--app-border)] shadow-[var(--app-shadow-modal)] overflow-hidden flex flex-col max-h-[90vh] bg-[var(--app-bg-overlay)] text-[var(--app-text-primary)]">
+      <div className="w-full max-w-xl rounded-3xl border border-black/[0.08] dark:border-white/[0.1] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] bg-white/95 dark:bg-[#1a1b1e]/95 backdrop-blur-2xl text-[var(--app-text-primary)]">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--app-border)] shrink-0">
-          <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-md flex items-center justify-center bg-[var(--app-hover)] text-[var(--app-text-primary)]">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-black/[0.06] dark:border-white/[0.08] shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-full flex items-center justify-center bg-black/[0.05] dark:bg-white/[0.08] text-[var(--app-text-primary)] shadow-2xs">
               <SettingsIcon style={{ width: 16, height: 16 }} />
             </div>
             <div>
-              <h2 className="text-sm font-semibold text-[var(--app-text-primary)]">
+              <h2 className="text-sm font-bold text-[var(--app-text-primary)]">
                 Configuración y Sincronización
               </h2>
-              <p className="text-[11px] text-[var(--app-text-secondary)]">
+              <p className="text-[11px] text-neutral-400">
                 Gestión de nube Supabase y copias de seguridad locales
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-md text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition"
+            className="p-1.5 rounded-full text-neutral-400 hover:text-neutral-800 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer"
           >
             <CloseIcon style={{ width: 16, height: 16 }} />
           </button>
         </div>
 
         {/* Modal Content */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-5 text-xs">
+        <div className="flex-1 overflow-y-auto p-6 space-y-5 text-xs custom-scrollbar">
           {/* UI Scale / Zoom Section */}
-          <div className="space-y-3 p-4 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)]">
+          <div className="space-y-3 p-4 rounded-3xl border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.02]">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-xs font-semibold text-[var(--app-text-primary)]">
+                <h3 className="text-xs font-bold text-[var(--app-text-primary)]">
                   Tamaño y Escala de la Interfaz
                 </h3>
-                <p className="text-[11px] mt-0.5 text-[var(--app-text-secondary)]">
+                <p className="text-[11px] mt-0.5 text-neutral-400">
                   Ajusta el tamaño global de los botones, textos e iconos para adaptarlos a tu pantalla.
                 </p>
               </div>
-              <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-[var(--app-hover)] border border-[var(--app-border)] text-[var(--app-text-primary)]">
+              <span className="text-xs font-mono font-bold px-3 py-1 rounded-full bg-black/[0.04] dark:bg-white/[0.06] border border-black/[0.06] dark:border-white/[0.08] text-[var(--app-text-primary)]">
                 {uiScale}%
               </span>
             </div>
@@ -302,22 +338,22 @@ create policy "Acceso total a seven_tags" on public.seven_tags for all using (tr
                     key={opt.value}
                     type="button"
                     onClick={() => onUiScaleChange?.(opt.value)}
-                    className={`py-2 px-1.5 rounded-md border text-center transition flex flex-col items-center justify-center gap-0.5 ${
+                    className={`py-2 px-1.5 rounded-2xl border text-center transition flex flex-col items-center justify-center gap-0.5 cursor-pointer active:scale-95 ${
                       isSelected
-                        ? 'border-[var(--app-accent)] bg-[var(--app-accent-subtle)] text-[var(--app-accent)] font-semibold shadow-xs'
-                        : 'border-[var(--app-border)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
+                        ? 'border-transparent bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 font-bold shadow-sm'
+                        : 'border-black/[0.06] dark:border-white/[0.08] bg-white/70 dark:bg-white/[0.05] text-neutral-700 dark:text-neutral-300 hover:bg-black/5 dark:hover:bg-white/10'
                     }`}
                   >
-                    <span className="text-xs font-semibold">{opt.label}</span>
-                    <span className="text-[10px] text-[var(--app-text-secondary)]">{opt.sub}</span>
+                    <span className="text-xs font-bold">{opt.label}</span>
+                    <span className="text-[10px] opacity-70">{opt.sub}</span>
                   </button>
                 )
               })}
             </div>
 
-            <div className="flex items-center justify-between pt-1 text-[11px] text-[var(--app-text-secondary)]">
+            <div className="flex items-center justify-between pt-1 text-[11px] text-neutral-400">
               <span>Atajo de teclado:</span>
-              <span className="font-mono bg-[var(--app-bg-primary)] px-2 py-0.5 rounded border border-[var(--app-border)]">
+              <span className="font-mono bg-black/[0.04] dark:bg-white/[0.06] px-2.5 py-0.5 rounded-full border border-black/[0.04] dark:border-white/[0.06]">
                 Ctrl + / Ctrl - / Ctrl 0
               </span>
             </div>
@@ -327,10 +363,10 @@ create policy "Acceso total a seven_tags" on public.seven_tags for all using (tr
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-xs font-semibold text-[var(--app-text-primary)]">
+                <h3 className="text-xs font-bold text-[var(--app-text-primary)]">
                   Sincronización en la Nube (Supabase)
                 </h3>
-                <p className="text-[11px] text-[var(--app-text-secondary)]">
+                <p className="text-[11px] text-neutral-400">
                   Opcional. Seven Note funciona 100% offline; conecta Supabase para respaldar tus notas en la nube automáticamente.
                 </p>
               </div>
@@ -341,51 +377,54 @@ create policy "Acceso total a seven_tags" on public.seven_tags for all using (tr
                   onChange={(e) => setEnabled(e.target.checked)}
                   className="sr-only peer"
                 />
-                <div className="w-9 h-5 bg-zinc-300 dark:bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--app-accent)]"></div>
+                <div className="w-10 h-6 bg-zinc-300 dark:bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-neutral-900 dark:peer-checked:bg-white"></div>
               </label>
             </div>
 
-            <div className="space-y-3 p-4 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)]">
-              <div>
-                <label className="block text-xs font-medium mb-1 text-[var(--app-text-secondary)]">
-                  Project URL de Supabase
-                </label>
-                <input
-                  type="text"
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  placeholder="https://xyzcompany.supabase.co"
-                  className="w-full text-xs px-3 py-1.5 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] outline-none font-mono focus:border-[var(--app-accent)] transition"
-                />
-              </div>
+            <div className="space-y-3 p-4 rounded-3xl border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.02]">
+              {/* Credenciales de Supabase */}
+              <div className="space-y-2">
+                <div>
+                  <label className="block text-[11px] font-semibold text-[var(--app-text-primary)] mb-1">
+                    URL del Proyecto Supabase
+                  </label>
+                  <input
+                    type="url"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder="https://xyzcompany.supabase.co"
+                    className="w-full px-3 py-1.5 rounded-xl border border-black/[0.08] dark:border-white/[0.1] bg-white dark:bg-[#121214] text-xs outline-none focus:border-blue-500 transition"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-xs font-medium mb-1 text-[var(--app-text-secondary)]">
-                  Anon / Public Key
-                </label>
-                <input
-                  type="password"
-                  value={anonKey}
-                  onChange={(e) => setAnonKey(e.target.value)}
-                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6..."
-                  className="w-full text-xs px-3 py-1.5 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] outline-none font-mono focus:border-[var(--app-accent)] transition"
-                />
+                <div>
+                  <label className="block text-[11px] font-semibold text-[var(--app-text-primary)] mb-1">
+                    Anon Public Key
+                  </label>
+                  <input
+                    type="password"
+                    value={anonKey}
+                    onChange={(e) => setAnonKey(e.target.value)}
+                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    className="w-full px-3 py-1.5 rounded-xl border border-black/[0.08] dark:border-white/[0.1] bg-white dark:bg-[#121214] text-xs outline-none focus:border-blue-500 transition"
+                  />
+                </div>
               </div>
 
               {/* Intervalo de sincronización periódica */}
               <div className="flex items-center justify-between pt-1">
                 <div>
-                  <label className="block text-xs font-medium text-[var(--app-text-primary)]">
+                  <label className="block text-xs font-semibold text-[var(--app-text-primary)]">
                     Frecuencia de sincronización automática
                   </label>
-                  <p className="text-[11px] text-[var(--app-text-secondary)]">
+                  <p className="text-[11px] text-neutral-400">
                     Sincroniza en segundo plano cuando estés conectado
                   </p>
                 </div>
                 <select
                   value={syncInterval}
                   onChange={(e) => setSyncInterval(Number(e.target.value))}
-                  className="text-xs px-2.5 py-1 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] outline-none"
+                  className="text-xs px-3 py-1.5 rounded-full border border-black/[0.08] dark:border-white/[0.1] bg-white dark:bg-[#121214] text-[var(--app-text-primary)] outline-none cursor-pointer"
                 >
                   <option value={10}>Cada 10 segundos</option>
                   <option value={30}>Cada 30 segundos (Recomendado)</option>
@@ -396,7 +435,7 @@ create policy "Acceso total a seven_tags" on public.seven_tags for all using (tr
 
               {testResult && (
                 <div
-                  className={`flex items-center gap-2 p-2.5 rounded-md text-xs border ${
+                  className={`flex items-center gap-2 p-3 rounded-2xl text-xs border ${
                     testResult.success
                       ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
                       : 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/30'
@@ -416,13 +455,13 @@ create policy "Acceso total a seven_tags" on public.seven_tags for all using (tr
                   <button
                     onClick={handleTest}
                     disabled={testing || !url || !anonKey}
-                    className="px-3 py-1.5 rounded-md text-xs font-medium border border-[var(--app-border)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition disabled:opacity-50"
+                    className="px-3.5 py-1.5 rounded-full text-xs font-semibold border border-black/[0.08] dark:border-white/[0.1] bg-white dark:bg-[#1a1b1e] hover:bg-black/5 dark:hover:bg-white/10 text-[var(--app-text-primary)] transition disabled:opacity-50 cursor-pointer active:scale-95 shadow-2xs"
                   >
                     {testing ? 'Probando...' : 'Probar conexión'}
                   </button>
                   <button
                     onClick={copySqlSchema}
-                    className="px-3 py-1.5 rounded-md text-xs font-medium border border-[var(--app-border)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition flex items-center gap-1.5"
+                    className="px-3.5 py-1.5 rounded-full text-xs font-semibold border border-black/[0.08] dark:border-white/[0.1] bg-white dark:bg-[#1a1b1e] hover:bg-black/5 dark:hover:bg-white/10 text-[var(--app-text-primary)] transition flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs"
                     title="Copiar script SQL para crear las tablas en Supabase"
                   >
                     {copiedSql ? (
@@ -436,7 +475,7 @@ create policy "Acceso total a seven_tags" on public.seven_tags for all using (tr
 
                 <button
                   onClick={handleSave}
-                  className="px-4 py-1.5 rounded-md text-xs font-medium text-[var(--app-bg-primary)] bg-[var(--app-text-primary)] hover:opacity-90 transition shadow-xs"
+                  className="px-5 py-1.5 rounded-full text-xs font-bold text-white dark:text-neutral-900 bg-neutral-900 dark:bg-white hover:opacity-90 transition shadow-xs cursor-pointer active:scale-95"
                 >
                   Guardar
                 </button>
@@ -445,14 +484,16 @@ create policy "Acceso total a seven_tags" on public.seven_tags for all using (tr
           </div>
 
           {/* Sync Actions */}
-          <div className="p-3.5 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)] flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <CloudWorkspaceIcon style={{ width: 18, height: 18, color: 'var(--app-text-secondary)' }} />
+          <div className="p-4 rounded-3xl border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.02] flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full flex items-center justify-center bg-black/[0.04] dark:bg-white/[0.06]">
+                <CloudWorkspaceIcon style={{ width: 16, height: 16, color: 'var(--app-text-secondary)' }} />
+              </div>
               <div>
-                <div className="text-xs font-semibold text-[var(--app-text-primary)]">
+                <div className="text-xs font-bold text-[var(--app-text-primary)]">
                   Estado de sincronización
                 </div>
-                <div className="text-[11px] text-[var(--app-text-secondary)]">
+                <div className="text-[11px] text-neutral-400">
                   {syncStatus.pendingCount === 0
                     ? 'Todo sincronizado con la nube'
                     : `${syncStatus.pendingCount} cambios pendientes en IndexedDB`}
@@ -462,7 +503,7 @@ create policy "Acceso total a seven_tags" on public.seven_tags for all using (tr
             <button
               onClick={handleManualSync}
               disabled={manualSyncing || !enabled}
-              className="px-3 py-1.5 rounded-md text-xs font-medium border border-[var(--app-border)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition flex items-center gap-1.5 disabled:opacity-50"
+              className="px-3.5 py-1.5 rounded-full text-xs font-semibold border border-black/[0.08] dark:border-white/[0.1] bg-white dark:bg-[#1a1b1e] hover:bg-black/5 dark:hover:bg-white/10 text-[var(--app-text-primary)] transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer active:scale-95 shadow-2xs"
             >
               <ResetIcon
                 style={{
@@ -476,27 +517,27 @@ create policy "Acceso total a seven_tags" on public.seven_tags for all using (tr
           </div>
 
           {/* Local Backups (Offline First) */}
-          <div className="space-y-2.5">
+          <div className="space-y-3">
             <div>
-              <h3 className="text-xs font-semibold flex items-center gap-1.5 text-[var(--app-text-primary)]">
+              <h3 className="text-xs font-bold flex items-center gap-2 text-[var(--app-text-primary)]">
                 <DatabaseTableViewIcon style={{ width: 15, height: 15, color: 'var(--app-text-secondary)' }} />
                 <span>Copia de Seguridad Local (JSON)</span>
               </h3>
-              <p className="text-[11px] text-[var(--app-text-secondary)] mt-0.5">
+              <p className="text-[11px] text-neutral-400 mt-0.5">
                 Exporta o restaura todo tu espacio de trabajo localmente sin depender de ningún servidor.
               </p>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2.5">
               <button
                 onClick={exportBackupJson}
-                className="flex-1 py-1.5 px-3 rounded-md text-xs font-medium border border-[var(--app-border)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition flex items-center justify-center gap-1.5"
+                className="flex-1 py-2 px-3.5 rounded-2xl text-xs font-semibold border border-black/[0.08] dark:border-white/[0.1] bg-white dark:bg-[#1a1b1e] hover:bg-black/5 dark:hover:bg-white/10 text-[var(--app-text-primary)] transition flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-2xs"
               >
                 <DownloadIcon style={{ width: 14, height: 14 }} />
                 <span>Exportar Copia (JSON)</span>
               </button>
 
-              <label className="flex-1 py-1.5 px-3 rounded-md text-xs font-medium border border-[var(--app-border)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition flex items-center justify-center gap-1.5 cursor-pointer">
+              <label className="flex-1 py-2 px-3.5 rounded-2xl text-xs font-semibold border border-black/[0.08] dark:border-white/[0.1] bg-white dark:bg-[#1a1b1e] hover:bg-black/5 dark:hover:bg-white/10 text-[var(--app-text-primary)] transition flex items-center justify-center gap-2 cursor-pointer active:scale-95 shadow-2xs">
                 <UploadIcon style={{ width: 14, height: 14 }} />
                 <span>Restaurar Copia</span>
                 <input
@@ -511,11 +552,11 @@ create policy "Acceso total a seven_tags" on public.seven_tags for all using (tr
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-2.5 border-t border-[var(--app-border)] text-xs flex items-center justify-between shrink-0 bg-[var(--app-bg-secondary)] text-[var(--app-text-secondary)]">
-          <span>Seven Note • Milanote & Notion Canvas</span>
+        <div className="px-6 py-3 border-t border-black/[0.06] dark:border-white/[0.08] text-xs flex items-center justify-between shrink-0 bg-black/[0.02] dark:bg-white/[0.02] text-neutral-400">
+          <span className="font-medium">Seven Note • Milanote & Notion Canvas</span>
           <button
             onClick={onClose}
-            className="px-3 py-1 rounded-md text-xs font-medium border border-[var(--app-border)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition"
+            className="px-4 py-1.5 rounded-full text-xs font-bold border border-black/[0.08] dark:border-white/[0.1] bg-white dark:bg-[#1a1b1e] hover:bg-black/5 dark:hover:bg-white/10 text-[var(--app-text-primary)] transition cursor-pointer active:scale-95 shadow-2xs"
           >
             Cerrar
           </button>

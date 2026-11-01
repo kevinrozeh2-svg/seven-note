@@ -7,7 +7,8 @@ import {
   type CollectionItem,
   type TagItem
 } from '../db'
-import { getSupabaseClient, getStoredSupabaseConfig } from './supabase'
+import { getSupabaseClient, getStoredSupabaseConfig, getAuthUser } from './supabase'
+import { getCurrentMember } from './teamAuth'
 
 export type NetworkStatus = 'online' | 'offline'
 export type SyncEngineState = 'idle' | 'syncing' | 'synced' | 'error' | 'offline' | 'unconfigured'
@@ -202,6 +203,9 @@ class SyncEngine {
     this.notify()
 
     try {
+      const authUser = await getAuthUser()
+      const authUserId = authUser?.id || undefined
+
       // ==========================================
       // 1. PUSH & PULL: SPACES
       // ==========================================
@@ -214,7 +218,8 @@ class SyncEngine {
           color: s.color,
           created_at: s.createdAt,
           updated_at: s.updatedAt,
-          is_deleted: Boolean(s.isDeleted)
+          is_deleted: Boolean(s.isDeleted),
+          ...(authUserId ? { user_id: authUserId } : {})
         }))
         const { error: spError } = await supabase.from('seven_spaces').upsert(payload, { onConflict: 'id' })
         if (spError) throw spError
@@ -242,6 +247,12 @@ class SyncEngine {
           updated_at: w.updatedAt,
           is_favorite: w.isFavorite,
           is_deleted: w.isDeleted,
+          is_private: Boolean(w.isPrivate),
+          owner_member: w.ownerMember || 'kevin',
+          is_public_shared: Boolean(w.isPublicShared),
+          share_token: w.shareToken || null,
+          share_permission: w.sharePermission || 'view',
+          ...(authUserId ? { user_id: authUserId } : {}),
           metadata: {
             tags: w.tags || [],
             documentMode: w.documentMode,
@@ -257,7 +268,9 @@ class SyncEngine {
             biDirectionalLinksVisible: w.biDirectionalLinksVisible,
             propertyVisibility: w.propertyVisibility,
             activeProperties: w.activeProperties,
-            customProperties: w.customProperties
+            customProperties: w.customProperties,
+            databaseData: w.databaseData,
+            canvasGridVariant: w.canvasGridVariant
           }
         }))
 
@@ -399,6 +412,7 @@ class SyncEngine {
       }
 
       // Pull Workspaces
+      const currentMember = getCurrentMember()
       const { data: remoteWorkspaces } = await supabase
         .from('seven_workspaces')
         .select('*')
@@ -406,6 +420,12 @@ class SyncEngine {
 
       if (remoteWorkspaces && remoteWorkspaces.length > 0) {
         for (const rw of remoteWorkspaces) {
+          // Si la nota remota es privada y NO pertenece al miembro actual ni es admin, NO la guardamos localmente
+          const isOwner = rw.owner_member === currentMember.id || rw.user_id === currentMember.id
+          if (rw.is_private && !isOwner && currentMember.role !== 'admin') {
+            continue
+          }
+
           const local = await db.workspaces.get(rw.id)
           if (!local || rw.updated_at > local.updatedAt) {
             const meta = rw.metadata || {}
@@ -424,6 +444,11 @@ class SyncEngine {
               isFavorite: rw.is_favorite,
               isDeleted: rw.is_deleted,
               syncStatus: 'synced',
+              isPrivate: Boolean(rw.is_private),
+              ownerMember: rw.owner_member || 'kevin',
+              isPublicShared: Boolean(rw.is_public_shared),
+              shareToken: rw.share_token,
+              sharePermission: rw.share_permission || 'view',
               tags: meta.tags,
               documentMode: meta.documentMode,
               isJournal: meta.isJournal,
@@ -438,7 +463,9 @@ class SyncEngine {
               biDirectionalLinksVisible: meta.biDirectionalLinksVisible,
               propertyVisibility: meta.propertyVisibility,
               activeProperties: meta.activeProperties,
-              customProperties: meta.customProperties
+              customProperties: meta.customProperties,
+              databaseData: meta.databaseData,
+              canvasGridVariant: meta.canvasGridVariant
             })
           }
         }

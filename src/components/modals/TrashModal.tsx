@@ -7,6 +7,7 @@ import {
 } from '@blocksuite/icons/rc'
 import { db, type WorkspaceItem } from '../../db'
 import { syncEngine } from '../../lib/syncEngine'
+import { AppleEmoji } from '../ui/AppleEmoji'
 
 interface TrashModalProps {
   isOpen: boolean
@@ -104,7 +105,7 @@ export function TrashModal({ isOpen, onClose }: TrashModalProps) {
                 className="flex items-center justify-between p-2.5 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-xs transition"
               >
                 <div className="flex items-center gap-2.5 truncate">
-                  <span className="text-base">{ws.icon || '📄'}</span>
+                  <AppleEmoji emoji={ws.icon || '📄'} size={18} className="shrink-0" />
                   <span className="font-medium text-[var(--app-text-primary)] truncate">
                     {ws.title}
                   </span>

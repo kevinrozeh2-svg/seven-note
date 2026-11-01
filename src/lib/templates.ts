@@ -148,7 +148,7 @@ export const APP_TEMPLATES: AppTemplate[] = [
   {
     id: 'milanote-research',
     title: 'Investigación (Milanote)',
-    description: 'Tablero de investigación sobre diseño danés: citas con barra de acento, archivo Word doc, reproductor de audio, tabla de sillas y enlaces.',
+    description: 'Tablero de investigación sobre diseño danés: citas con barra de acento, tabla de sillas y enlaces.',
     icon: '🔍',
     category: 'Tableros Edgeless',
     type: 'canvas',
@@ -229,26 +229,6 @@ export const APP_TEMPLATES: AppTemplate[] = [
         }
       },
       {
-        type: 'file',
-        positionX: 350,
-        positionY: 460,
-        data: {
-          fileName: 'Historia del Diseño',
-          fileSize: '252 palabras',
-          fileType: 'txt'
-        }
-      },
-      {
-        type: 'file',
-        positionX: 470,
-        positionY: 460,
-        data: {
-          fileName: 'Día Actual.doc',
-          fileSize: '12 KB',
-          fileType: 'doc'
-        }
-      },
-      {
         type: 'link',
         positionX: 340,
         positionY: 620,
@@ -282,23 +262,9 @@ export const APP_TEMPLATES: AppTemplate[] = [
           color: 'peach',
           width: 260
         }
-      },
-      {
-        type: 'audio',
-        positionX: 860,
-        positionY: 50,
-        data: {
-          title: 'Entrevistas de diseño',
-          subtitle: '1 tarjeta, 1 archivo',
-          audioFilename: 'Entrevista a Søren Vagner.mp3',
-          fileDetails: 'Descargar • 1.0 MB',
-          imageUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=500&auto=format&fit=crop&q=80'
-        }
       }
     ],
-    edges: [
-      { sourceIndex: 4, targetIndex: 5, label: '', color: '#f97316' }
-    ]
+    edges: []
   },
   {
     id: 'milanote-project-plan',
@@ -371,9 +337,8 @@ export const APP_TEMPLATES: AppTemplate[] = [
         positionY: 70,
         data: {
           title: 'Filmación',
-          subtitle: '2 tablas, 1 archivo',
+          subtitle: '2 tablas',
           imageUrl: 'https://images.unsplash.com/photo-1564982752979-3f7bc974d29a?w=500&auto=format&fit=crop&q=80',
-          attachedFile: { name: 'Longboard_Bridge.mov', size: '47.7 MB' },
           subboards: [
             { id: 'sb-film-1', title: 'Guión gráfico', count: '20 tarjetas', icon: 'film', color: '#ec4899' }
           ]
@@ -396,8 +361,8 @@ export const APP_TEMPLATES: AppTemplate[] = [
         positionX: 770,
         positionY: 70,
         data: {
-          title: 'Skatepark_Board_Spin.mp4',
-          url: 'Descargar • 28.2 MB',
+          title: 'Skatepark Video Preview',
+          url: 'https://vimeo.com',
           imageUrl: 'https://images.unsplash.com/photo-1547447134-cd3f5c716030?w=500&auto=format&fit=crop&q=80',
           isVideo: true
         }
@@ -411,21 +376,10 @@ export const APP_TEMPLATES: AppTemplate[] = [
           commentDate: '16 Jan 2026',
           commentText: '¡Me encanta este tráiler! 💜💜'
         }
-      },
-      {
-        type: 'file',
-        positionX: 840,
-        positionY: 660,
-        data: {
-          fileName: 'Logos de película.ai',
-          fileSize: '50 KB',
-          fileType: 'ai'
-        }
       }
     ],
     edges: [
-      { sourceIndex: 0, targetIndex: 1, label: '', color: '#ec4899' },
-      { sourceIndex: 7, targetIndex: 8, label: '', color: '#ec4899' }
+      { sourceIndex: 0, targetIndex: 1, label: '', color: '#ec4899' }
     ]
   },
   {

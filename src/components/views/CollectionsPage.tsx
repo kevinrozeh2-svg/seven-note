@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Folder, Plus, Trash2, FileText, Layout } from 'lucide-react'
+import { Folder, Plus, Trash2 } from 'lucide-react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
   db,
@@ -9,6 +9,8 @@ import {
   deleteCollection
 } from '../../db'
 import { toast } from 'sonner'
+import { AppleEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
+import { DocThumbnailPreview } from '../ui/DocThumbnailPreview'
 
 interface CollectionsPageProps {
   spaceId: string
@@ -214,18 +216,17 @@ export const CollectionsPage: React.FC<CollectionsPageProps> = ({
                       className="flex items-center justify-between p-3 rounded-lg bg-neutral-900/50 border border-neutral-800 hover:border-neutral-700 transition cursor-pointer"
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-8 h-8 rounded bg-neutral-800 flex items-center justify-center text-neutral-300 shrink-0">
-                          {doc.icon ? (
-                            <span>{doc.icon}</span>
-                          ) : doc.viewMode === 'canvas' ? (
-                            <Layout className="w-4 h-4 text-indigo-400" />
-                          ) : (
-                            <FileText className="w-4 h-4 text-blue-400" />
+                        <DocThumbnailPreview doc={doc} size="sm" className="w-8 h-8 rounded-md" />
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {doc.icon && (
+                            <span className="shrink-0 flex items-center">
+                              <AppleEmoji emoji={doc.icon} size={14} />
+                            </span>
                           )}
+                          <span className="font-medium text-xs text-neutral-200 truncate">
+                            {renderWithAppleEmoji(doc.title || 'Sin título')}
+                          </span>
                         </div>
-                        <span className="font-medium text-xs text-neutral-200 truncate">
-                          {doc.title || 'Sin título'}
-                        </span>
                       </div>
                       <span className="text-xs text-neutral-500 font-mono">
                         {new Date(doc.updatedAt).toLocaleDateString('es-ES', {

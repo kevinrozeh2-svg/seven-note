@@ -9,9 +9,7 @@ import {
   DoneIcon,
   ToggleDownIcon,
   ToggleRightIcon,
-  SendIcon,
-  DeleteIcon,
-  AiIcon
+  DeleteIcon
 } from '@blocksuite/icons/rc'
 import { db, type WorkspaceItem, type CustomPropertyItem } from '../../db'
 import { syncEngine } from '../../lib/syncEngine'
@@ -26,9 +24,8 @@ interface RightSidebarProps {
   workspace: WorkspaceItem | undefined
   isOpen: boolean
   onClose: () => void
-  activeTab: 'properties' | 'outline' | 'ai' | 'history'
-  onTabChange: (tab: 'properties' | 'outline' | 'ai' | 'history') => void
-  onApplyAIContent?: (content: string) => void
+  activeTab: 'properties' | 'outline' | 'history'
+  onTabChange: (tab: 'properties' | 'outline' | 'history') => void
   onScrollToHeading?: (headingText: string) => void
 }
 
@@ -38,7 +35,6 @@ export function RightSidebar({
   onClose,
   activeTab,
   onTabChange,
-  onApplyAIContent,
   onScrollToHeading
 }: RightSidebarProps) {
   const [propertiesExpanded, setPropertiesExpanded] = useState(true)
@@ -46,9 +42,6 @@ export function RightSidebar({
   const [activeMenuPropId, setActiveMenuPropId] = useState<string | null>(null)
   const [editingPropId, setEditingPropId] = useState<string | null>(null)
   const [newTagInput, setNewTagInput] = useState('')
-  const [aiPrompt, setAiPrompt] = useState('')
-  const [isGeneratingAI, setIsGeneratingAI] = useState(false)
-  const [aiResponse, setAiResponse] = useState<string | null>(null)
 
   if (!isOpen || !workspace) return null
 
@@ -217,26 +210,6 @@ export function RightSidebar({
 
   const headings = extractHeadings()
 
-  // AI prompt generator simulation
-  const handleTriggerAI = async (promptText: string) => {
-    setIsGeneratingAI(true)
-    setAiResponse(null)
-    setTimeout(() => {
-      let result = ''
-      if (promptText.includes('resum') || promptText.includes('Resum')) {
-        result = `### 📋 Resumen Ejecutivo\n\nEste documento define las líneas estratégicas y notas del workspace "${workspace.title}".\n\n- **Objetivo central**: Centralización de información y organización eficiente.\n- **Estado actual**: En desarrollo activo con soporte offline.\n- **Siguientes pasos**: Validar enlaces bidireccionales y completar checklist.`
-      } else if (promptText.includes('tarea') || promptText.includes('checklist')) {
-        result = `### ✅ Tareas sugeridas por IA:\n\n- [ ] Revisar alcance y requerimientos del proyecto\n- [ ] Validar sincronización con Supabase y modo offline\n- [ ] Configurar propiedades personalizadas y etiquetas\n- [ ] Añadir enlaces bidireccionales con páginas relacionadas`
-      } else if (promptText.includes('esquema') || promptText.includes('estructura')) {
-        result = `## 📌 Estructura Propuesta\n\n1. **Introducción y Contexto**\n   - Antecedentes\n   - Metas prioritarias\n2. **Plan de Acción**\n   - Fases de implementación\n   - Métricas de éxito\n3. **Recursos y Referencias**\n   - Documentos vinculados\n   - Enlaces externos`
-      } else {
-        result = `### 💡 Sugerencia IA para "${workspace.title}":\n\nSe recomienda enriquecer el contenido con tablas comparativas, listas de verificación accionables y enlaces directos hacia otras notas en tu workspace para potenciar el grafo de conocimiento.`
-      }
-      setAiResponse(result)
-      setIsGeneratingAI(false)
-    }, 900)
-  }
-
   return (
     <aside className="w-72 sm:w-80 h-full bg-[var(--app-bg-secondary)] border-l border-[var(--app-border)] flex flex-col shrink-0 select-none text-[var(--app-text-primary)] text-sm z-20">
       {/* Top Header Icon Tabs (Notion Style) */}
@@ -279,19 +252,6 @@ export function RightSidebar({
             title="Propiedades del documento"
           >
             <PropertyIcon className="w-4 h-4" />
-          </button>
-
-          {/* AI Assistant Tab */}
-          <button
-            onClick={() => onTabChange('ai')}
-            className={`p-1.5 rounded-md transition ${
-              activeTab === 'ai'
-                ? 'bg-[var(--app-hover)] text-[var(--app-accent)] shadow-xs font-semibold'
-                : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
-            }`}
-            title="Asistente de IA"
-          >
-            <AiIcon className="w-4 h-4" />
           </button>
         </div>
 
@@ -371,55 +331,61 @@ export function RightSidebar({
 
                       {/* Property Options Dropdown Menu */}
                       {activeMenuPropId === propId && (
-                        <div
-                          className="absolute right-2 top-8 z-30 w-48 bg-[var(--affine-background-overlay-panel-color)] border border-[var(--affine-border-color)] rounded-xl shadow-[var(--affine-popover-shadow)] py-1 text-xs text-[var(--affine-text-primary-color)] backdrop-blur-md"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="px-3 py-1 text-[10px] uppercase font-semibold text-[var(--affine-text-secondary-color)] tracking-wider">
-                            Visibilidad
+                        <>
+                          <div
+                            className="fixed inset-0 z-20"
+                            onClick={() => setActiveMenuPropId(null)}
+                          />
+                          <div
+                            className="absolute right-2 top-8 z-30 w-48 bg-[var(--affine-background-overlay-panel-color)] border border-[var(--affine-border-color)] rounded-xl shadow-[var(--affine-popover-shadow)] py-1 text-xs text-[var(--affine-text-primary-color)] backdrop-blur-md"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="px-3 py-1 text-[10px] uppercase font-semibold text-[var(--affine-text-secondary-color)] tracking-wider">
+                              Visibilidad
+                            </div>
+                            <button
+                              onClick={() => handleSetVisibility(propId, 'always_show')}
+                              className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] flex items-center justify-between transition"
+                            >
+                              <span>Siempre mostrar</span>
+                              {visibility === 'always_show' && <DoneIcon className="w-3.5 h-3.5 text-[#1e96eb]" />}
+                            </button>
+                            <button
+                              onClick={() => handleSetVisibility(propId, 'always_hide')}
+                              className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] flex items-center justify-between transition"
+                            >
+                              <span>Siempre ocultar</span>
+                              {visibility === 'always_hide' && <DoneIcon className="w-3.5 h-3.5 text-[#1e96eb]" />}
+                            </button>
+                            <button
+                              onClick={() => handleSetVisibility(propId, 'hide_empty')}
+                              className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] flex items-center justify-between transition"
+                            >
+                              <span>Ocultar cuando esté vacío</span>
+                              {visibility === 'hide_empty' && <DoneIcon className="w-3.5 h-3.5 text-[#1e96eb]" />}
+                            </button>
+
+                            <div className="border-t border-[var(--affine-divider-color)] my-1" />
+
+                            <button
+                              onClick={() => {
+                                setEditingPropId(editingPropId === propId ? null : propId)
+                                setActiveMenuPropId(null)
+                              }}
+                              className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] transition"
+                            >
+                              Editar valor
+                            </button>
+
+                            <button
+                              onClick={() => handleRemoveProperty(propId)}
+                              className="w-full text-left px-3 py-1.5 hover:bg-rose-500/10 text-rose-500 flex items-center gap-1.5 transition"
+                            >
+                              <DeleteIcon className="w-3.5 h-3.5" />
+                              <span>Eliminar propiedad</span>
+                            </button>
                           </div>
-                          <button
-                            onClick={() => handleSetVisibility(propId, 'always_show')}
-                            className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] flex items-center justify-between transition"
-                          >
-                            <span>Siempre mostrar</span>
-                            {visibility === 'always_show' && <DoneIcon className="w-3.5 h-3.5 text-[#1e96eb]" />}
-                          </button>
-                          <button
-                            onClick={() => handleSetVisibility(propId, 'always_hide')}
-                            className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] flex items-center justify-between transition"
-                          >
-                            <span>Siempre ocultar</span>
-                            {visibility === 'always_hide' && <DoneIcon className="w-3.5 h-3.5 text-[#1e96eb]" />}
-                          </button>
-                          <button
-                            onClick={() => handleSetVisibility(propId, 'hide_empty')}
-                            className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] flex items-center justify-between transition"
-                          >
-                            <span>Ocultar cuando esté vacío</span>
-                            {visibility === 'hide_empty' && <DoneIcon className="w-3.5 h-3.5 text-[#1e96eb]" />}
-                          </button>
-
-                          <div className="border-t border-[var(--affine-divider-color)] my-1" />
-
-                          <button
-                            onClick={() => {
-                              setEditingPropId(editingPropId === propId ? null : propId)
-                              setActiveMenuPropId(null)
-                            }}
-                            className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] transition"
-                          >
-                            Editar valor
-                          </button>
-
-                          <button
-                            onClick={() => handleRemoveProperty(propId)}
-                            className="w-full text-left px-3 py-1.5 hover:bg-rose-500/10 text-rose-500 flex items-center gap-1.5 transition"
-                          >
-                            <DeleteIcon className="w-3.5 h-3.5" />
-                            <span>Eliminar propiedad</span>
-                          </button>
-                        </div>
+                        </>
                       )}
                     </div>
                   )
@@ -633,100 +599,7 @@ export function RightSidebar({
         </div>
       )}
 
-      {/* Tab 3: AI Assistant */}
-      {activeTab === 'ai' && (
-        <div className="flex-1 flex flex-col p-3 overflow-hidden">
-          <div className="flex items-center gap-2 mb-3">
-            <AiIcon className="w-4 h-4 text-[#1e96eb]" />
-            <span className="font-semibold text-[var(--affine-text-primary-color)] text-xs">Asistente de IA (AFFiNE AI)</span>
-          </div>
-
-          <div className="space-y-1.5 mb-3">
-            <span className="text-[11px] text-[var(--affine-text-secondary-color)]">Acciones rápidas:</span>
-            <div className="grid grid-cols-1 gap-1">
-              <button
-                onClick={() => handleTriggerAI('Resumir')}
-                className="text-left px-2.5 py-1.5 rounded-lg bg-[var(--affine-background-primary-color)] hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] text-xs transition border border-[var(--affine-border-color)]"
-              >
-                📋 Resumir página
-              </button>
-              <button
-                onClick={() => handleTriggerAI('Generar checklist y tareas')}
-                className="text-left px-2.5 py-1.5 rounded-lg bg-[var(--affine-background-primary-color)] hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] text-xs transition border border-[var(--affine-border-color)]"
-              >
-                ✅ Generar checklist de tareas
-              </button>
-              <button
-                onClick={() => handleTriggerAI('Proponer estructura y esquema')}
-                className="text-left px-2.5 py-1.5 rounded-lg bg-[var(--affine-background-primary-color)] hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] text-xs transition border border-[var(--affine-border-color)]"
-              >
-                📑 Sugerir esquema y temas
-              </button>
-            </div>
-          </div>
-
-          {/* AI Result Area */}
-          <div className="flex-1 overflow-y-auto bg-[var(--affine-background-primary-color)] rounded-xl p-3 border border-[var(--affine-border-color)] mb-3 text-xs leading-relaxed text-[var(--affine-text-primary-color)]">
-            {isGeneratingAI ? (
-              <div className="flex items-center justify-center h-full gap-2 text-[var(--affine-text-secondary-color)]">
-                <span className="animate-spin text-[#1e96eb]">⟳</span>
-                <span>Analizando documento...</span>
-              </div>
-            ) : aiResponse ? (
-              <div>
-                <pre className="whitespace-pre-wrap font-sans text-xs text-[var(--affine-text-primary-color)]">
-                  {aiResponse}
-                </pre>
-                {onApplyAIContent && (
-                  <button
-                    onClick={() => {
-                      onApplyAIContent(aiResponse)
-                      setAiResponse(null)
-                    }}
-                    className="mt-3 w-full py-1.5 bg-[#1e96eb] hover:bg-[#1a85d1] text-white rounded-lg font-medium text-xs transition shadow-xs"
-                  >
-                    Insertar en la nota
-                  </button>
-                )}
-              </div>
-            ) : (
-              <span className="text-[var(--affine-text-secondary-color)] text-center block pt-6">
-                Escribe una instrucción o selecciona una acción rápida para redactar ideas con IA.
-              </span>
-            )}
-          </div>
-
-          {/* Prompt input */}
-          <div className="flex gap-1.5 shrink-0">
-            <input
-              type="text"
-              value={aiPrompt}
-              onChange={(e) => setAiPrompt(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && aiPrompt.trim()) {
-                  handleTriggerAI(aiPrompt)
-                  setAiPrompt('')
-                }
-              }}
-              placeholder="Pregunta o pide redactar algo..."
-              className="flex-1 bg-[var(--affine-background-primary-color)] border border-[var(--affine-border-color)] rounded-lg px-2.5 py-1.5 text-xs text-[var(--affine-text-primary-color)] placeholder:text-[var(--affine-placeholder-color)] focus:outline-none focus:border-[#1e96eb]"
-            />
-            <button
-              onClick={() => {
-                if (aiPrompt.trim()) {
-                  handleTriggerAI(aiPrompt)
-                  setAiPrompt('')
-                }
-              }}
-              className="p-2 bg-[#1e96eb] hover:bg-[#1a85d1] text-white rounded-lg transition"
-            >
-              <SendIcon className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Tab 4: History / Journal */}
+      {/* Tab 3: History / Journal */}
       {activeTab === 'history' && (
         <div className="flex-1 overflow-y-auto p-4 space-y-3">
           <span className="font-semibold text-[var(--affine-text-primary-color)] text-xs">Registro de Actividad</span>

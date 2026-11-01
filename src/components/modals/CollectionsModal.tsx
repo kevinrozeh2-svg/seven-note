@@ -16,6 +16,7 @@ import {
   toggleDocInCollection
 } from '../../db'
 import { toast } from 'sonner'
+import { AppleEmoji } from '../ui/AppleEmoji'
 
 interface CollectionsModalProps {
   isOpen: boolean
@@ -146,7 +147,7 @@ export function CollectionsModal({
                     }`}
                   >
                     <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <span className="text-sm shrink-0">{col.icon || '📁'}</span>
+                      <AppleEmoji emoji={col.icon || '📁'} size={16} className="shrink-0" />
                       <span className="truncate flex-1">{col.name}</span>
                       <span className="text-[10px] opacity-60 font-mono shrink-0">
                         {col.docIds.length}
@@ -254,7 +255,7 @@ export function CollectionsModal({
               <>
                 <div className="flex items-center justify-between pb-3 border-b border-[var(--affine-border-color)] mb-4">
                   <div className="flex items-center gap-2.5">
-                    <span className="text-2xl">{activeCollection.icon || '📁'}</span>
+                    <AppleEmoji emoji={activeCollection.icon || '📁'} size={28} className="shrink-0" />
                     <div>
                       <h3 className="text-base font-bold">{activeCollection.name}</h3>
                       <p className="text-xs text-[var(--affine-text-secondary-color)]">
@@ -293,7 +294,7 @@ export function CollectionsModal({
                             className="flex items-center justify-between p-2.5 rounded-xl hover:bg-[var(--affine-hover-color)] cursor-pointer text-xs transition border border-transparent hover:border-[var(--affine-border-color)]"
                           >
                             <div className="flex items-center gap-2 truncate">
-                              <span className="text-sm">{doc.icon || '📄'}</span>
+                              <AppleEmoji emoji={doc.icon || '📄'} size={16} className="shrink-0" />
                               <span className="font-medium truncate">{doc.title || 'Untitled'}</span>
                             </div>
                             <div
@@ -333,7 +334,7 @@ export function CollectionsModal({
                           className="flex items-center justify-between p-3 rounded-xl bg-[var(--affine-background-primary-color)] hover:bg-[var(--affine-hover-color)] cursor-pointer text-xs border border-[var(--affine-border-color)] transition group shadow-2xs"
                         >
                           <div className="flex items-center gap-2.5 truncate">
-                            <span className="text-base shrink-0">{doc.icon || '📄'}</span>
+                            <AppleEmoji emoji={doc.icon || '📄'} size={18} className="shrink-0" />
                             <div className="truncate">
                               <div className="font-semibold truncate">{doc.title || 'Untitled'}</div>
                               <div className="text-[10px] text-[var(--affine-text-secondary-color)] flex items-center gap-2">

@@ -50,9 +50,9 @@ export const FrameNode = memo(({ id, data, selected }: any) => {
   const [width, setWidth] = useState(data.width || 640)
   const [height, setHeight] = useState(data.height || 420)
   const [isResizing, setIsResizing] = useState(false)
-  const [frameBgStyle, setFrameBgStyle] = useState<'default' | 'dark' | 'gradient' | 'dots' | 'glass'>(
-    data.frameBgStyle || 'default'
-  )
+  const [frameBgStyle, setFrameBgStyle] = useState<
+    'default' | 'dark' | 'gradient' | 'dots' | 'glass' | 'grid' | 'plain'
+  >(data.frameBgStyle || 'default')
   const [speakerNotes, setSpeakerNotes] = useState(data.speakerNotes || '')
   const [showNotesPopover, setShowNotesPopover] = useState(false)
   const [showOptionsPopover, setShowOptionsPopover] = useState(false)
@@ -275,20 +275,30 @@ export const FrameNode = memo(({ id, data, selected }: any) => {
                 Fondo en Presentación
               </div>
               <div className="grid grid-cols-3 gap-1 text-[10px]">
-                {(['default', 'dark', 'gradient', 'dots', 'glass'] as const).map((bg) => (
+                {(
+                  [
+                    { id: 'default', label: 'Lienzo' },
+                    { id: 'dots', label: 'Puntos' },
+                    { id: 'grid', label: 'Cuadrícula' },
+                    { id: 'plain', label: 'Liso' },
+                    { id: 'dark', label: 'Oscuro' },
+                    { id: 'gradient', label: 'Gradiente' },
+                    { id: 'glass', label: 'Vidrio' }
+                  ] as const
+                ).map((item) => (
                   <button
-                    key={bg}
+                    key={item.id}
                     onClick={() => {
-                      setFrameBgStyle(bg)
-                      save({ frameBgStyle: bg })
+                      setFrameBgStyle(item.id)
+                      save({ frameBgStyle: item.id })
                     }}
                     className={`px-2 py-1 rounded border text-center capitalize ${
-                      frameBgStyle === bg
+                      frameBgStyle === item.id
                         ? 'bg-indigo-600/30 border-indigo-500 text-white font-semibold'
                         : 'bg-zinc-800/80 border-zinc-700 text-zinc-300 hover:bg-zinc-700'
                     }`}
                   >
-                    {bg === 'default' ? 'Lienzo' : bg}
+                    {item.label}
                   </button>
                 ))}
               </div>

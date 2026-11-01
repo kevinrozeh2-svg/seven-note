@@ -1,10 +1,11 @@
 import { memo, useState } from 'react'
 import { Handle, Position } from '@xyflow/react'
-import { Folder, Trash2, Sparkles, FileText, Film, Skull, Download, ChevronRight } from 'lucide-react'
+import { Folder, Trash2, Sparkles, FileText, Film, Skull, ChevronRight } from 'lucide-react'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
 import { toast } from 'sonner'
 import { areNodePropsEqual } from './nodeUtils'
+import { renderWithAppleEmoji } from '../../ui/AppleEmoji'
 
 export interface SubboardItem {
   id: string
@@ -26,7 +27,7 @@ export const SubboardNode = memo(({ id, data, selected }: any) => {
     return [
       { id: '1', title: 'Ideas', count: '17 tarjetas', icon: 'idea', color: '#0284c7' },
       { id: '2', title: 'Tablero de inspiración', count: '12 tarjetas', icon: 'sparkle', color: '#10b981' },
-      { id: '3', title: 'Guión', count: '335 palabras', icon: 'doc', color: '#06b6d4' }
+      { id: '3', title: 'Guión', count: '8 tarjetas', icon: 'doc', color: '#06b6d4' }
     ]
   })
 
@@ -113,10 +114,10 @@ export const SubboardNode = memo(({ id, data, selected }: any) => {
 
         {/* Title and Card count */}
         <span className="mt-2 text-xs font-bold text-neutral-900 dark:text-neutral-100 text-center leading-tight">
-          {title}
+          {renderWithAppleEmoji(title)}
         </span>
         <span className="text-[10px] text-neutral-500 dark:text-neutral-400">
-          {subtitle}
+          {renderWithAppleEmoji(subtitle)}
         </span>
       </div>
     )
@@ -125,7 +126,7 @@ export const SubboardNode = memo(({ id, data, selected }: any) => {
   // Full Container Board Card (matches Screenshot 3: Ideas & Filmación)
   return (
     <div
-      className={`group relative w-[280px] rounded-xl bg-white dark:bg-[#252525] border border-neutral-200/90 dark:border-neutral-700/80 transition-[box-shadow,border-color] duration-150 overflow-hidden ${
+      className={`group relative w-[280px] rounded-xl bg-white dark:bg-[#252525] transition-[box-shadow] duration-150 overflow-hidden ${
         selected ? 'ring-2 ring-[var(--app-accent)] shadow-xl' : 'shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]'
       }`}
     >
@@ -175,27 +176,6 @@ export const SubboardNode = memo(({ id, data, selected }: any) => {
         </div>
       )}
 
-      {/* Optional File row (like Longboard_Bridge.mov in Filmación) */}
-      {data.attachedFile && (
-        <div
-          onClick={() => toast.success(`Descargando ${data.attachedFile.name}`)}
-          className="px-3 py-2 border-b border-neutral-100 dark:border-neutral-800 flex items-center gap-2 hover:bg-neutral-50 dark:hover:bg-neutral-800/40 cursor-pointer transition"
-        >
-          <div className="w-6 h-6 rounded bg-neutral-800 text-sky-400 flex items-center justify-center shrink-0">
-            <Film className="w-3.5 h-3.5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-neutral-800 dark:text-neutral-200 truncate">
-              {data.attachedFile.name}
-            </p>
-            <p className="text-[10px] text-neutral-400">
-              Descargar • {data.attachedFile.size}
-            </p>
-          </div>
-          <Download className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
-        </div>
-      )}
-
       {/* Child Sub-boards list */}
       <div className="p-2 space-y-1.5">
         {subboards.map((b) => (
@@ -207,7 +187,7 @@ export const SubboardNode = memo(({ id, data, selected }: any) => {
             {renderIconBadge(b.icon, b.color)}
             <div className="flex-1 min-w-0">
               <span className="text-xs font-bold text-neutral-800 dark:text-neutral-200 block truncate group-hover/item:text-blue-500 transition-colors">
-                {b.title}
+                {renderWithAppleEmoji(b.title)}
               </span>
               <span className="text-[10px] text-neutral-400 block -mt-0.5">
                 {b.count}

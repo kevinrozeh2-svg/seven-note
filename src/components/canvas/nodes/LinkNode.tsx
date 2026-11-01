@@ -41,7 +41,7 @@ export const LinkNode = memo(({ id, data, selected }: any) => {
 
   return (
     <div
-      className={`group relative rounded-xl bg-white dark:bg-[#252525] border border-neutral-200/90 dark:border-neutral-700/80 transition-[box-shadow,border-color] duration-150 overflow-hidden ${
+      className={`group relative rounded-xl bg-white dark:bg-[#252525] transition-[box-shadow] duration-150 overflow-hidden ${
         selected ? 'ring-2 ring-[var(--app-accent)] shadow-xl' : 'shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]'
       }`}
       style={{ width: data.width || 280 }}

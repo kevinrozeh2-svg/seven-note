@@ -15,10 +15,36 @@ import {
   useStore,
   ReactFlowProvider,
   ConnectionMode,
-  MarkerType
+  MarkerType,
+  ViewportPortal
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useLiveQuery } from 'dexie-react-hooks'
+import {
+  DotsThree,
+  MagnifyingGlassPlus,
+  MagnifyingGlassMinus,
+  ArrowsOutSimple,
+  MapTrifold,
+  GridFour,
+  AlignLeft,
+  AlignCenterHorizontal,
+  AlignRight,
+  Columns,
+  AlignTop,
+  AlignCenterVertical,
+  AlignBottom,
+  Rows,
+  TreeStructure,
+  Copy,
+  Palette,
+  DownloadSimple,
+  Image as PhosphorImage,
+  Trash,
+  CaretRight,
+  X,
+  Kanban
+} from '@phosphor-icons/react'
 import {
   SelectIcon,
   HandIcon,
@@ -27,31 +53,12 @@ import {
   LinkIcon,
   PageIcon,
   ImageIcon,
-  DatabaseKanbanViewIcon,
   SquareIcon,
   EllipseIcon,
   DiamondIcon,
   TriangleIcon,
   StarIcon,
-  RoundedRectangleIcon,
-  ZoomDownIcon,
-  ZoomUpIcon,
-  ExpandFullIcon,
-  MapPanelIcon,
-  MoreHorizontalIcon,
-  AlignLeftIcon,
-  AlignHorizontalCenterIcon,
-  AlignRightIcon,
-  DistributeHorizontalIcon,
-  AlignTopIcon,
-  AlignVerticalCenterIcon,
-  AlignBottomIcon,
-  DistributeVerticalIcon,
-  CopyIcon,
-  DownloadIcon,
-  DeleteIcon,
-  CloseIcon,
-  GridIcon
+  RoundedRectangleIcon
 } from '@blocksuite/icons/rc'
 import { db, type CanvasNodeType, type WorkspaceItem } from '../../db'
 import { syncEngine } from '../../lib/syncEngine'
@@ -80,9 +87,6 @@ import { toPng } from 'html-to-image'
 import { FrameNode } from './nodes/FrameNode'
 import { MindmapNode } from './nodes/MindmapNode'
 import { ColorPaletteNode } from './nodes/ColorPaletteNode'
-import { VoiceNoteNode } from './nodes/VoiceNoteNode'
-import { FileNode } from './nodes/FileNode'
-import { AudioPlayerNode } from './nodes/AudioPlayerNode'
 import { TableNode } from './nodes/TableNode'
 import { CommentNode } from './nodes/CommentNode'
 import { MilanoteToolbar } from './dock/MilanoteToolbar'
@@ -129,9 +133,6 @@ const NODE_TYPES = {
   frame: FrameNode,
   mindmap: MindmapNode,
   colorPalette: ColorPaletteNode,
-  voiceNote: VoiceNoteNode,
-  file: FileNode,
-  audio: AudioPlayerNode,
   table: TableNode,
   comment: CommentNode
 }
@@ -148,18 +149,18 @@ const CanvasZoomBar = memo(function CanvasZoomBar({ showMiniMap, onToggleMiniMap
 
   return (
     <Panel position="bottom-right" className="mr-4 mb-4 z-20">
-      <div className="flex items-center gap-1 p-1 rounded-lg bg-[var(--app-bg-overlay)] border border-[var(--app-border)] shadow-[var(--app-shadow-popover)] text-[var(--app-text-primary)]">
+      <div className="flex items-center gap-1 px-2 py-1.5 rounded-full bg-white/85 dark:bg-[#1a1b1e]/85 backdrop-blur-xl border border-black/[0.08] dark:border-white/[0.1] shadow-2xl text-[var(--app-text-primary)]">
         <button
           onClick={() => reactFlowInstance.zoomOut()}
-          className="p-1.5 rounded-md hover:bg-[var(--app-hover)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] transition-colors"
+          className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-neutral-600 dark:text-neutral-300 transition-all active:scale-95 cursor-pointer"
           title="Alejar (-)"
         >
-          <ZoomDownIcon className="w-4 h-4" />
+          <MagnifyingGlassMinus size={16} weight="duotone" />
         </button>
 
         <button
           onClick={() => reactFlowInstance.zoomTo(1, { duration: 300 })}
-          className="px-2 py-0.5 text-xs font-medium hover:bg-[var(--app-hover)] rounded-md text-[var(--app-text-primary)] transition-colors font-mono min-w-[50px] text-center"
+          className="px-2.5 py-1 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/10 rounded-full text-neutral-700 dark:text-neutral-200 transition-all font-mono min-w-[50px] text-center active:scale-95 cursor-pointer"
           title="Restablecer zoom al 100%"
         >
           {Math.round((zoom || 1) * 100)}%
@@ -167,37 +168,60 @@ const CanvasZoomBar = memo(function CanvasZoomBar({ showMiniMap, onToggleMiniMap
 
         <button
           onClick={() => reactFlowInstance.zoomIn()}
-          className="p-1.5 rounded-md hover:bg-[var(--app-hover)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] transition-colors"
+          className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-neutral-600 dark:text-neutral-300 transition-all active:scale-95 cursor-pointer"
           title="Acercar (+)"
         >
-          <ZoomUpIcon className="w-4 h-4" />
+          <MagnifyingGlassPlus size={16} weight="duotone" />
         </button>
 
-        <div className="w-[1px] h-4 bg-[var(--app-divider)] mx-0.5" />
+        <div className="w-[1px] h-4 bg-black/[0.08] dark:border-white/[0.1] mx-0.5" />
 
         <button
           onClick={() => reactFlowInstance.fitView({ padding: 0.25, duration: 400 })}
-          className="p-1.5 rounded-md hover:bg-[var(--app-hover)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] transition-colors"
+          className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-neutral-600 dark:text-neutral-300 transition-all active:scale-95 cursor-pointer"
           title="Ajustar a la pantalla"
         >
-          <ExpandFullIcon className="w-4 h-4" />
+          <ArrowsOutSimple size={16} weight="duotone" />
         </button>
 
         <button
           onClick={onToggleMiniMap}
-          className={`p-1.5 rounded-md transition-colors ${
+          className={`p-1.5 rounded-full transition-all active:scale-95 cursor-pointer ${
             showMiniMap
-              ? 'bg-[var(--app-hover)] text-[var(--app-accent)] font-semibold'
-              : 'hover:bg-[var(--app-hover)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)]'
+              ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold'
+              : 'hover:bg-black/5 dark:hover:bg-white/10 text-neutral-600 dark:text-neutral-300'
           }`}
           title={showMiniMap ? 'Ocultar minimapa' : 'Mostrar minimapa'}
         >
-          <MapPanelIcon className="w-4 h-4" />
+          <MapTrifold size={16} weight="duotone" />
         </button>
       </div>
     </Panel>
   )
 })
+
+// Helper to convert flow-coordinate points into a smooth SVG path
+function getSvgPathFromPoints(points: { x: number; y: number }[]): string {
+  if (!points || points.length === 0) return ''
+  if (points.length === 1) {
+    return `M ${points[0].x} ${points[0].y} L ${points[0].x + 0.1} ${points[0].y + 0.1}`
+  }
+  if (points.length === 2) {
+    return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`
+  }
+
+  let d = `M ${points[0].x} ${points[0].y}`
+  for (let i = 1; i < points.length - 1; i++) {
+    const p0 = points[i]
+    const p1 = points[i + 1]
+    const midX = (p0.x + p1.x) / 2
+    const midY = (p0.y + p1.y) / 2
+    d += ` Q ${p0.x} ${p0.y}, ${midX} ${midY}`
+  }
+  const last = points[points.length - 1]
+  d += ` L ${last.x} ${last.y}`
+  return d
+}
 
 function CanvasBoardInner({
   workspaceId,
@@ -208,11 +232,26 @@ function CanvasBoardInner({
 }: CanvasBoardProps) {
   const reactFlowInstance = useReactFlow()
 
-  // Query nodes and edges reactively from Dexie
+  // Query nodes and edges reactively from Dexie (excluding legacy simulated file/audio nodes)
   const dbNodes = useLiveQuery(
-    () => db.canvasNodes.where('workspaceId').equals(workspaceId).and((n) => !n.isDeleted).toArray(),
+    () =>
+      db.canvasNodes
+        .where('workspaceId')
+        .equals(workspaceId)
+        .and((n) => !n.isDeleted && (n as any).type !== 'file' && (n as any).type !== 'audio' && (n as any).type !== 'voiceNote')
+        .toArray(),
     [workspaceId]
   )
+
+  // Auto-cleanup any legacy simulated file, audio or voice nodes from Dexie DB
+  useEffect(() => {
+    db.canvasNodes
+      .where('workspaceId')
+      .equals(workspaceId)
+      .and((n) => (n as any).type === 'file' || (n as any).type === 'audio' || (n as any).type === 'voiceNote')
+      .delete()
+      .catch(() => {})
+  }, [workspaceId])
 
   const dbEdges = useLiveQuery(
     () => db.canvasEdges.where('workspaceId').equals(workspaceId).and((e) => !e.isDeleted).toArray(),
@@ -230,19 +269,100 @@ function CanvasBoardInner({
   const [isTemplatesOpen, setTemplatesOpen] = useState(false)
   const [penColor, setPenColor] = useState('#3b82f6')
   const [penWidth, setPenWidth] = useState(3)
-  const [gridVariant, setGridVariant] = useState<BackgroundVariant | 'none'>(BackgroundVariant.Dots)
+  const [gridVariant, setGridVariant] = useState<BackgroundVariant | 'none'>(() => {
+    const saved =
+      currentWorkspace?.canvasGridVariant ||
+      (workspaceId && localStorage.getItem(`seven-note-canvas-grid-${workspaceId}`)) ||
+      localStorage.getItem('seven-note-canvas-grid')
+    if (saved === 'lines') return BackgroundVariant.Lines
+    if (saved === 'none') return 'none'
+    return BackgroundVariant.Dots
+  })
+
+  useEffect(() => {
+    if (currentWorkspace?.canvasGridVariant) {
+      if (currentWorkspace.canvasGridVariant === 'lines') setGridVariant(BackgroundVariant.Lines)
+      else if (currentWorkspace.canvasGridVariant === 'none') setGridVariant('none')
+      else setGridVariant(BackgroundVariant.Dots)
+    }
+  }, [currentWorkspace?.canvasGridVariant])
+
+  const handleSetGridVariant = async (variant: BackgroundVariant | 'none') => {
+    setGridVariant(variant)
+    const val: 'dots' | 'lines' | 'none' =
+      variant === BackgroundVariant.Lines ? 'lines' : variant === 'none' ? 'none' : 'dots'
+    if (workspaceId) {
+      localStorage.setItem(`seven-note-canvas-grid-${workspaceId}`, val)
+    }
+    localStorage.setItem('seven-note-canvas-grid', val)
+    window.dispatchEvent(
+      new CustomEvent('seven-note-grid-changed', {
+        detail: { grid: val, workspaceId }
+      })
+    )
+    if (workspaceId) {
+      try {
+        await db.workspaces.update(workspaceId, {
+          canvasGridVariant: val,
+          updatedAt: Date.now(),
+          syncStatus: 'pending'
+        })
+        syncEngine.scheduleSync(1200)
+      } catch (err) {
+        console.error('Error saving grid variant', err)
+      }
+    }
+  }
 
   // Connector customization state
   const [connectorRouting, setConnectorRouting] = useState<'default' | 'smoothstep' | 'straight'>('default')
   const [connectorHasArrow, setConnectorHasArrow] = useState(true)
   const [connectorColor, setConnectorColor] = useState('#3b82f6')
 
-  // Freehand drawing canvas state
-  const drawingCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  // Freehand drawing state (vectorial inside React Flow ViewportPortal)
   const imageFileInputRef = useRef<HTMLInputElement | null>(null)
   const isDrawingRef = useRef(false)
-  const [drawings, setDrawings] = useState<Array<{ color: string; width: number; isHighlighter?: boolean; points: { x: number; y: number }[] }>>([])
-  const currentStrokeRef = useRef<{ color: string; width: number; isHighlighter?: boolean; points: { x: number; y: number }[] } | null>(null)
+  const isErasingRef = useRef(false)
+  const activePathRef = useRef<SVGPathElement | null>(null)
+  const laserCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const [drawings, setDrawings] = useState<
+    Array<{ color: string; width: number; isHighlighter?: boolean; points: { x: number; y: number }[] }>
+  >(() => {
+    if (!workspaceId) return []
+    try {
+      const saved = localStorage.getItem(`seven-note-canvas-drawings-${workspaceId}`)
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
+  const currentStrokeRef = useRef<{
+    color: string
+    width: number
+    isHighlighter?: boolean
+    points: { x: number; y: number }[]
+  } | null>(null)
+
+  // Synchronize drawings with current workspaceId
+  useEffect(() => {
+    if (!workspaceId) return
+    try {
+      const saved = localStorage.getItem(`seven-note-canvas-drawings-${workspaceId}`)
+      setDrawings(saved ? JSON.parse(saved) : [])
+    } catch {
+      setDrawings([])
+    }
+  }, [workspaceId])
+
+  // Persist drawings to localStorage
+  useEffect(() => {
+    if (!workspaceId) return
+    try {
+      localStorage.setItem(`seven-note-canvas-drawings-${workspaceId}`, JSON.stringify(drawings))
+    } catch (e) {
+      console.error('Error saving canvas drawings', e)
+    }
+  }, [drawings, workspaceId])
 
   // Laser pointer animation ref
   const laserPointsRef = useRef<Array<{ x: number; y: number; time: number }>>([])
@@ -601,21 +721,6 @@ function CanvasBoardInner({
         color: customData.color || 'slate',
         ...customData
       }
-    } else if (type === 'file') {
-      initialData = {
-        fileName: customData.fileName || 'Día Actual.doc',
-        fileSize: customData.fileSize || '12 KB',
-        fileType: customData.fileType || 'doc',
-        ...customData
-      }
-    } else if (type === 'audio') {
-      initialData = {
-        title: customData.title || 'Entrevistas de diseño',
-        subtitle: customData.subtitle || '1 tarjeta, 1 archivo',
-        audioFilename: customData.audioFilename || 'Entrevista a Søren Vagner.mp3',
-        fileDetails: customData.fileDetails || 'Descargar • 1.0 MB',
-        ...customData
-      }
     } else if (type === 'table') {
       initialData = {
         title: customData.title || 'Diseños de sillas famosas',
@@ -700,11 +805,6 @@ function CanvasBoardInner({
       initialData = {
         title: 'Paleta de Color',
         paletteColors: ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#3b82f6']
-      }
-    } else if (type === 'voiceNote') {
-      initialData = {
-        title: 'Nota de Voz',
-        audioDuration: 0
       }
     }
 
@@ -1146,6 +1246,9 @@ function CanvasBoardInner({
       } else if (e.key === 'Escape') {
         setActiveTool('select')
         setConnectSourceNodeId(null)
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        // Undo last freehand drawing stroke if any
+        setDrawings((prev) => (prev.length > 0 ? prev.slice(0, -1) : prev))
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
         e.preventDefault()
         duplicateSelectedNodes()
@@ -1386,6 +1489,24 @@ function CanvasBoardInner({
       ctx.restore()
     })
 
+    // Render freehand drawings into fallback export canvas
+    drawings.forEach((stroke) => {
+      if (stroke.points.length < 2) return
+      ctx.save()
+      ctx.strokeStyle = stroke.color
+      ctx.lineWidth = stroke.width
+      if (stroke.isHighlighter) ctx.globalAlpha = 0.4
+      ctx.lineCap = 'round'
+      ctx.lineJoin = 'round'
+      ctx.beginPath()
+      ctx.moveTo(stroke.points[0].x + offsetX, stroke.points[0].y + offsetY)
+      for (let i = 1; i < stroke.points.length; i++) {
+        ctx.lineTo(stroke.points[i].x + offsetX, stroke.points[i].y + offsetY)
+      }
+      ctx.stroke()
+      ctx.restore()
+    })
+
     // Download PNG
     const link = document.createElement('a')
     link.download = `${currentWorkspace?.title || 'lienzo'}_edgeless.png`
@@ -1394,127 +1515,89 @@ function CanvasBoardInner({
     setShowCanvasMenu(false)
   }
 
-  // Freehand drawing canvas handlers
-  const redrawCanvas = useCallback(() => {
-    const canvas = drawingCanvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
+  // Freehand drawing pointer handlers (recording in Flow World Coordinates)
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (activeTool !== 'pencil' && activeTool !== 'highlighter' && activeTool !== 'eraser' && activeTool !== 'laser') return
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-    ctx.lineCap = 'round'
-    ctx.lineJoin = 'round'
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {}
 
-    for (const stroke of drawings) {
-      if (stroke.points.length < 2) continue
-      ctx.save()
-      ctx.strokeStyle = stroke.color
-      ctx.lineWidth = stroke.width
-      if (stroke.isHighlighter) {
-        ctx.globalAlpha = 0.4
-      }
-      ctx.beginPath()
-      ctx.moveTo(stroke.points[0].x, stroke.points[0].y)
-      for (let i = 1; i < stroke.points.length; i++) {
-        ctx.lineTo(stroke.points[i].x, stroke.points[i].y)
-      }
-      ctx.stroke()
-      ctx.restore()
-    }
-  }, [drawings])
+    const flowPos = reactFlowInstance.screenToFlowPosition({ x: e.clientX, y: e.clientY })
 
-  useEffect(() => {
-    redrawCanvas()
-  }, [redrawCanvas])
-
-  const isErasingRef = useRef(false)
-
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (activeTool !== 'pencil' && activeTool !== 'highlighter' && activeTool !== 'eraser') return
-    const canvas = drawingCanvasRef.current
-    if (!canvas) return
-    const rect = canvas.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
-
-    if (activeTool === 'pencil') {
+    if (activeTool === 'pencil' || activeTool === 'highlighter') {
+      const isHighlighter = activeTool === 'highlighter'
+      const width = isHighlighter ? 16 : penWidth
       isDrawingRef.current = true
       currentStrokeRef.current = {
         color: penColor,
-        width: penWidth,
-        isHighlighter: false,
-        points: [{ x, y }]
+        width,
+        isHighlighter,
+        points: [flowPos]
       }
-    } else if (activeTool === 'highlighter') {
-      isDrawingRef.current = true
-      currentStrokeRef.current = {
-        color: penColor,
-        width: 14,
-        isHighlighter: true,
-        points: [{ x, y }]
+
+      if (activePathRef.current) {
+        activePathRef.current.setAttribute('stroke', penColor)
+        activePathRef.current.setAttribute('stroke-width', width.toString())
+        activePathRef.current.setAttribute('opacity', isHighlighter ? '0.4' : '1')
+        activePathRef.current.setAttribute('d', getSvgPathFromPoints([flowPos]))
       }
     } else if (activeTool === 'eraser') {
       isErasingRef.current = true
+      const { zoom } = reactFlowInstance.getViewport()
+      const radius = 24 / (zoom || 1)
       setDrawings((prev) =>
         prev.filter((stroke) => {
-          return !stroke.points.some((p) => Math.hypot(p.x - x, p.y - y) < 24)
+          return !stroke.points.some((p) => Math.hypot(p.x - flowPos.x, p.y - flowPos.y) < radius)
         })
       )
     }
   }
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (activeTool === 'laser') {
-      const canvas = drawingCanvasRef.current
-      if (!canvas) return
-      const rect = canvas.getBoundingClientRect()
-      const x = e.clientX - rect.left
-      const y = e.clientY - rect.top
-      laserPointsRef.current.push({ x, y, time: Date.now() })
+      laserPointsRef.current.push({ x: e.clientX, y: e.clientY, time: Date.now() })
       return
     }
 
     if (activeTool === 'eraser' && isErasingRef.current) {
-      const canvas = drawingCanvasRef.current
-      if (!canvas) return
-      const rect = canvas.getBoundingClientRect()
-      const x = e.clientX - rect.left
-      const y = e.clientY - rect.top
+      const flowPos = reactFlowInstance.screenToFlowPosition({ x: e.clientX, y: e.clientY })
+      const { zoom } = reactFlowInstance.getViewport()
+      const radius = 24 / (zoom || 1)
       setDrawings((prev) =>
         prev.filter((stroke) => {
-          return !stroke.points.some((p) => Math.hypot(p.x - x, p.y - y) < 24)
+          return !stroke.points.some((p) => Math.hypot(p.x - flowPos.x, p.y - flowPos.y) < radius)
         })
       )
       return
     }
 
     if (!isDrawingRef.current || !currentStrokeRef.current) return
-    const canvas = drawingCanvasRef.current
-    if (!canvas) return
-    const rect = canvas.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
 
-    currentStrokeRef.current.points.push({ x, y })
+    const flowPos = reactFlowInstance.screenToFlowPosition({ x: e.clientX, y: e.clientY })
+    currentStrokeRef.current.points.push(flowPos)
 
-    const ctx = canvas.getContext('2d')
-    if (ctx) {
-      ctx.save()
-      ctx.strokeStyle = currentStrokeRef.current.color
-      ctx.lineWidth = currentStrokeRef.current.width
-      ctx.lineCap = 'round'
-      ctx.lineJoin = 'round'
-      if (currentStrokeRef.current.isHighlighter) {
-        ctx.globalAlpha = 0.4
+    if (activePathRef.current) {
+      activePathRef.current.setAttribute('d', getSvgPathFromPoints(currentStrokeRef.current.points))
+    }
+  }
+
+  const handlePointerUp = (e?: React.PointerEvent<HTMLDivElement>) => {
+    if (e) {
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId)
+      } catch {}
+    }
+    isErasingRef.current = false
+    if (isDrawingRef.current && currentStrokeRef.current) {
+      isDrawingRef.current = false
+      if (currentStrokeRef.current.points.length > 0) {
+        setDrawings((prev) => [...prev, currentStrokeRef.current!])
       }
-      const pts = currentStrokeRef.current.points
-      if (pts.length > 1) {
-        ctx.beginPath()
-        ctx.moveTo(pts[pts.length - 2].x, pts[pts.length - 2].y)
-        ctx.lineTo(pts[pts.length - 1].x, pts[pts.length - 1].y)
-        ctx.stroke()
+      currentStrokeRef.current = null
+      if (activePathRef.current) {
+        activePathRef.current.setAttribute('d', '')
       }
-      ctx.restore()
     }
   }
 
@@ -1523,20 +1606,24 @@ function CanvasBoardInner({
     if (activeTool !== 'laser') {
       if (laserAnimFrameRef.current) cancelAnimationFrame(laserAnimFrameRef.current)
       laserPointsRef.current = []
-      redrawCanvas()
       return
     }
 
     const renderLaser = () => {
-      const canvas = drawingCanvasRef.current
+      const canvas = laserCanvasRef.current
       if (!canvas) return
       const ctx = canvas.getContext('2d')
       if (!ctx) return
 
+      const rect = canvas.getBoundingClientRect()
+      if (canvas.width !== rect.width || canvas.height !== rect.height) {
+        canvas.width = rect.width
+        canvas.height = rect.height
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
       const now = Date.now()
       laserPointsRef.current = laserPointsRef.current.filter((pt) => now - pt.time < 900)
-
-      redrawCanvas()
 
       const points = laserPointsRef.current
       if (points.length > 1) {
@@ -1546,6 +1633,11 @@ function CanvasBoardInner({
           const age = now - p2.time
           const alpha = Math.max(0, 1 - age / 900)
 
+          const p1x = p1.x - rect.left
+          const p1y = p1.y - rect.top
+          const p2x = p2.x - rect.left
+          const p2y = p2.y - rect.top
+
           ctx.save()
           ctx.strokeStyle = `rgba(244, 63, 94, ${alpha})`
           ctx.lineWidth = 5 * alpha + 1.5
@@ -1553,23 +1645,25 @@ function CanvasBoardInner({
           ctx.shadowBlur = 12
           ctx.shadowColor = `rgba(244, 63, 94, ${alpha})`
           ctx.beginPath()
-          ctx.moveTo(p1.x, p1.y)
-          ctx.lineTo(p2.x, p2.y)
+          ctx.moveTo(p1x, p1y)
+          ctx.lineTo(p2x, p2y)
           ctx.stroke()
           ctx.restore()
         }
 
         const head = points[points.length - 1]
+        const headX = head.x - rect.left
+        const headY = head.y - rect.top
         ctx.save()
         ctx.fillStyle = '#f43f5e'
         ctx.shadowBlur = 16
         ctx.shadowColor = '#f43f5e'
         ctx.beginPath()
-        ctx.arc(head.x, head.y, 6, 0, Math.PI * 2)
+        ctx.arc(headX, headY, 6, 0, Math.PI * 2)
         ctx.fill()
         ctx.fillStyle = '#ffffff'
         ctx.beginPath()
-        ctx.arc(head.x, head.y, 2.5, 0, Math.PI * 2)
+        ctx.arc(headX, headY, 2.5, 0, Math.PI * 2)
         ctx.fill()
         ctx.restore()
       }
@@ -1582,29 +1676,25 @@ function CanvasBoardInner({
     return () => {
       if (laserAnimFrameRef.current) cancelAnimationFrame(laserAnimFrameRef.current)
     }
-  }, [activeTool, redrawCanvas])
+  }, [activeTool])
 
-  const handleMouseUp = () => {
-    isErasingRef.current = false
-    if (isDrawingRef.current && currentStrokeRef.current) {
-      isDrawingRef.current = false
-      setDrawings((prev) => [...prev, currentStrokeRef.current!])
-      currentStrokeRef.current = null
-    }
-  }
-
-  // Global window mouseup listener so dragging off-canvas or over a panel releases drawing/erasing cleanly
+  // Global window pointerup listener so dragging off-canvas or over a panel releases drawing/erasing cleanly
   useEffect(() => {
-    const handleGlobalMouseUp = () => {
+    const handleGlobalPointerUp = () => {
       isErasingRef.current = false
       if (isDrawingRef.current && currentStrokeRef.current) {
         isDrawingRef.current = false
-        setDrawings((prev) => [...prev, currentStrokeRef.current!])
+        if (currentStrokeRef.current.points.length > 0) {
+          setDrawings((prev) => [...prev, currentStrokeRef.current!])
+        }
         currentStrokeRef.current = null
+        if (activePathRef.current) {
+          activePathRef.current.setAttribute('d', '')
+        }
       }
     }
-    window.addEventListener('mouseup', handleGlobalMouseUp)
-    return () => window.removeEventListener('mouseup', handleGlobalMouseUp)
+    window.addEventListener('pointerup', handleGlobalPointerUp)
+    return () => window.removeEventListener('pointerup', handleGlobalPointerUp)
   }, [])
 
   const isDrawingTool = activeTool === 'pencil' || activeTool === 'highlighter' || activeTool === 'eraser'
@@ -1673,26 +1763,65 @@ function CanvasBoardInner({
           />
         )}
 
-        {/* Freehand Drawing Overlay */}
-        {(drawings.length > 0 || isDrawingTool || activeTool === 'laser') && (
-          <canvas
-            ref={drawingCanvasRef}
-            width={window.innerWidth}
-            height={window.innerHeight}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            className={`absolute inset-0 z-10 ${
+        {/* Freehand Vector Drawings inside React Flow Viewport (persists & transforms with zoom & pan) */}
+        <ViewportPortal>
+          <svg
+            className="absolute top-0 left-0 overflow-visible pointer-events-none select-none z-10"
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              overflow: 'visible',
+              pointerEvents: 'none'
+            }}
+          >
+            {drawings.map((stroke, idx) => (
+              <path
+                key={idx}
+                d={getSvgPathFromPoints(stroke.points)}
+                stroke={stroke.color}
+                strokeWidth={stroke.width}
+                fill="none"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                opacity={stroke.isHighlighter ? 0.4 : 1}
+              />
+            ))}
+            <path
+              ref={activePathRef}
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d=""
+            />
+          </svg>
+        </ViewportPortal>
+
+        {/* Freehand Drawing Capture Layer (only captures pointer while in drawing/laser modes) */}
+        {(isDrawingTool || activeTool === 'laser') && (
+          <div
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+            className={`absolute inset-0 z-20 touch-none select-none ${
               activeTool === 'pencil' || activeTool === 'highlighter' || activeTool === 'laser'
-                ? 'cursor-crosshair pointer-events-auto'
-                : activeTool === 'eraser'
-                ? 'cursor-pointer pointer-events-auto'
-                : 'pointer-events-none'
+                ? 'cursor-crosshair'
+                : 'cursor-pointer'
             }`}
-          />
+          >
+            {activeTool === 'laser' && (
+              <canvas
+                ref={laserCanvasRef}
+                className="w-full h-full pointer-events-none"
+              />
+            )}
+          </div>
         )}
 
-        {/* Milanote Left Tool Palette (Iconic Draggable Dock) */}
+        {/* Milanote Left Tool Palette (Phosphor Icons Dock) */}
         <Panel position="top-left" className="ml-3 mt-3 z-30">
           <MilanoteToolbar
             onAddNode={addNewNode}
@@ -1708,19 +1837,19 @@ function CanvasBoardInner({
           <div className="relative">
             <button
               onClick={() => setShowCanvasMenu(!showCanvasMenu)}
-              className="p-2.5 rounded-xl bg-[var(--affine-background-overlay-panel-color)] hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] border border-[var(--affine-border-color)] shadow-[var(--affine-toolbar-shadow)] transition flex items-center justify-center backdrop-blur-md"
+              className="p-2.5 rounded-full bg-white/85 dark:bg-[#1a1b1e]/85 hover:bg-white dark:hover:bg-[#25262b] text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white border border-black/[0.08] dark:border-white/[0.1] shadow-xl transition flex items-center justify-center backdrop-blur-xl active:scale-95 cursor-pointer"
               title="Opciones del lienzo edgeless"
             >
-              <MoreHorizontalIcon className="w-5 h-5" />
+              <DotsThree size={20} weight="bold" />
             </button>
 
             {/* Canvas Menu Popover */}
             {showCanvasMenu && (
               <div
-                className="absolute left-0 bottom-12 z-30 w-56 bg-[var(--affine-background-overlay-panel-color)] border border-[var(--affine-border-color)] rounded-xl shadow-[var(--affine-popover-shadow)] py-1.5 text-xs text-[var(--affine-text-primary-color)] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
+                className="absolute left-0 bottom-14 z-30 w-64 bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] rounded-3xl shadow-2xl p-2.5 text-xs text-neutral-800 dark:text-neutral-200 backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-100 space-y-0.5"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="px-3 py-1 text-[11px] font-semibold text-[var(--affine-text-secondary-color)]">
+                <div className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
                   Herramientas de Lienzo
                 </div>
 
@@ -1729,9 +1858,9 @@ function CanvasBoardInner({
                     reactFlowInstance.zoomIn()
                     setShowCanvasMenu(false)
                   }}
-                  className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] flex items-center gap-2 transition"
+                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
                 >
-                  <ZoomUpIcon className="w-4 h-4 text-[var(--affine-text-secondary-color)]" />
+                  <MagnifyingGlassPlus size={16} weight="duotone" className="text-neutral-600 dark:text-neutral-400" />
                   <span>Acercar (+)</span>
                 </button>
 
@@ -1740,9 +1869,9 @@ function CanvasBoardInner({
                     reactFlowInstance.zoomOut()
                     setShowCanvasMenu(false)
                   }}
-                  className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] flex items-center gap-2 transition"
+                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
                 >
-                  <ZoomDownIcon className="w-4 h-4 text-[var(--affine-text-secondary-color)]" />
+                  <MagnifyingGlassMinus size={16} weight="duotone" className="text-neutral-600 dark:text-neutral-400" />
                   <span>Alejar (-)</span>
                 </button>
 
@@ -1751,9 +1880,9 @@ function CanvasBoardInner({
                     reactFlowInstance.fitView({ padding: 0.3, duration: 400 })
                     setShowCanvasMenu(false)
                   }}
-                  className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] flex items-center gap-2 transition"
+                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
                 >
-                  <ExpandFullIcon className="w-4 h-4 text-[var(--affine-text-secondary-color)]" />
+                  <ArrowsOutSimple size={16} weight="duotone" className="text-neutral-600 dark:text-neutral-400" />
                   <span>Ajustar a la vista</span>
                 </button>
 
@@ -1762,131 +1891,131 @@ function CanvasBoardInner({
                     setShowMiniMap(!showMiniMap)
                     setShowCanvasMenu(false)
                   }}
-                  className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] flex items-center gap-2 transition"
+                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
                 >
-                  <MapPanelIcon className="w-4 h-4 text-[var(--affine-text-secondary-color)]" />
+                  <MapTrifold size={16} weight="duotone" className="text-neutral-600 dark:text-neutral-400" />
                   <span>{showMiniMap ? 'Ocultar minimapa' : 'Mostrar minimapa'}</span>
                 </button>
 
-                <div className="border-t border-[var(--affine-divider-color)] my-1" />
+                <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-1" />
 
                 {/* Grid variant switcher */}
-                <div className="px-3 py-1 text-[11px] font-semibold text-[var(--affine-text-secondary-color)] flex items-center gap-1.5">
-                  <GridIcon className="w-3.5 h-3.5" />
+                <div className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 flex items-center gap-1.5">
+                  <GridFour size={14} weight="duotone" />
                   <span>Estilo de Cuadrícula</span>
                 </div>
-                <div className="flex px-3 py-1 gap-1">
+                <div className="flex p-1 rounded-full bg-black/[0.04] dark:bg-white/[0.06] gap-1">
                   <button
-                    onClick={() => setGridVariant(BackgroundVariant.Dots)}
-                    className={`flex-1 py-1 rounded text-[11px] font-medium transition ${
+                    onClick={() => handleSetGridVariant(BackgroundVariant.Dots)}
+                    className={`flex-1 py-1 rounded-full text-[11px] font-semibold transition text-center cursor-pointer ${
                       gridVariant === BackgroundVariant.Dots
-                        ? 'bg-[#1e96eb] text-white'
-                        : 'bg-[var(--affine-hover-color)] text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)]'
+                        ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs'
+                        : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
                     }`}
                   >
                     Puntos
                   </button>
                   <button
-                    onClick={() => setGridVariant(BackgroundVariant.Lines)}
-                    className={`flex-1 py-1 rounded text-[11px] font-medium transition ${
+                    onClick={() => handleSetGridVariant(BackgroundVariant.Lines)}
+                    className={`flex-1 py-1 rounded-full text-[11px] font-semibold transition text-center cursor-pointer ${
                       gridVariant === BackgroundVariant.Lines
-                        ? 'bg-[#1e96eb] text-white'
-                        : 'bg-[var(--affine-hover-color)] text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)]'
+                        ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs'
+                        : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
                     }`}
                   >
                     Líneas
                   </button>
                   <button
-                    onClick={() => setGridVariant('none')}
-                    className={`flex-1 py-1 rounded text-[11px] font-medium transition ${
+                    onClick={() => handleSetGridVariant('none')}
+                    className={`flex-1 py-1 rounded-full text-[11px] font-semibold transition text-center cursor-pointer ${
                       gridVariant === 'none'
-                        ? 'bg-[#1e96eb] text-white'
-                        : 'bg-[var(--affine-hover-color)] text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)]'
+                        ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs'
+                        : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
                     }`}
                   >
                     Liso
                   </button>
                 </div>
 
-                <div className="border-t border-[var(--affine-divider-color)] my-1" />
+                <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-1" />
 
                 {/* Alignment actions */}
                 <button
                   onClick={() => setShowAlignMenu(!showAlignMenu)}
-                  className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] flex items-center justify-between transition"
+                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center justify-between font-medium transition active:scale-[0.98] cursor-pointer"
                 >
-                  <div className="flex items-center gap-2">
-                    <AlignLeftIcon className="w-4 h-4 text-[var(--affine-text-secondary-color)]" />
+                  <div className="flex items-center gap-2.5">
+                    <AlignLeft size={16} weight="duotone" className="text-neutral-600 dark:text-neutral-400" />
                     <span>Alinear seleccionados</span>
                   </div>
-                  <span className="text-[10px] text-[var(--affine-text-secondary-color)]">▶</span>
+                  <CaretRight size={12} weight="bold" className={`text-neutral-400 transition-transform ${showAlignMenu ? 'rotate-90' : ''}`} />
                 </button>
 
                 {showAlignMenu && (
-                  <div className="px-3 py-2 bg-[var(--affine-background-secondary-color)] space-y-2 border-y border-[var(--affine-divider-color)]">
+                  <div className="p-2.5 rounded-2xl bg-black/[0.03] dark:bg-white/[0.05] space-y-2 border border-black/[0.04] dark:border-white/[0.06]">
                     <div>
-                      <span className="text-[10px] text-[var(--affine-text-secondary-color)] uppercase font-semibold block mb-1">Horizontal</span>
+                      <span className="text-[10px] text-neutral-400 uppercase font-bold block mb-1">Horizontal</span>
                       <div className="flex gap-1">
                         <button
                           onClick={() => alignSelectedNodes('left')}
-                          className="flex-1 p-1 rounded bg-[var(--affine-background-primary-color)] hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] text-[10px] flex items-center justify-center border border-[var(--affine-border-color)]"
+                          className="flex-1 p-1.5 rounded-xl bg-white dark:bg-[#25262b] hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-200 text-[10px] flex items-center justify-center border border-black/[0.06] dark:border-white/[0.08] shadow-2xs active:scale-95 cursor-pointer"
                           title="Alinear a la izquierda"
                         >
-                          <AlignLeftIcon className="w-3.5 h-3.5" />
+                          <AlignLeft size={14} weight="duotone" />
                         </button>
                         <button
                           onClick={() => alignSelectedNodes('center')}
-                          className="flex-1 p-1 rounded bg-[var(--affine-background-primary-color)] hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] text-[10px] flex items-center justify-center border border-[var(--affine-border-color)]"
+                          className="flex-1 p-1.5 rounded-xl bg-white dark:bg-[#25262b] hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-200 text-[10px] flex items-center justify-center border border-black/[0.06] dark:border-white/[0.08] shadow-2xs active:scale-95 cursor-pointer"
                           title="Alinear al centro"
                         >
-                          <AlignHorizontalCenterIcon className="w-3.5 h-3.5" />
+                          <AlignCenterHorizontal size={14} weight="duotone" />
                         </button>
                         <button
                           onClick={() => alignSelectedNodes('right')}
-                          className="flex-1 p-1 rounded bg-[var(--affine-background-primary-color)] hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] text-[10px] flex items-center justify-center border border-[var(--affine-border-color)]"
+                          className="flex-1 p-1.5 rounded-xl bg-white dark:bg-[#25262b] hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-200 text-[10px] flex items-center justify-center border border-black/[0.06] dark:border-white/[0.08] shadow-2xs active:scale-95 cursor-pointer"
                           title="Alinear a la derecha"
                         >
-                          <AlignRightIcon className="w-3.5 h-3.5" />
+                          <AlignRight size={14} weight="duotone" />
                         </button>
                         <button
                           onClick={() => alignSelectedNodes('distribute-h')}
-                          className="flex-1 p-1 rounded bg-[var(--affine-background-primary-color)] hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] text-[10px] flex items-center justify-center border border-[var(--affine-border-color)]"
+                          className="flex-1 p-1.5 rounded-xl bg-white dark:bg-[#25262b] hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-200 text-[10px] flex items-center justify-center border border-black/[0.06] dark:border-white/[0.08] shadow-2xs active:scale-95 cursor-pointer"
                           title="Distribuir horizontalmente"
                         >
-                          <DistributeHorizontalIcon className="w-3.5 h-3.5" />
+                          <Columns size={14} weight="duotone" />
                         </button>
                       </div>
                     </div>
                     <div>
-                      <span className="text-[10px] text-[var(--affine-text-secondary-color)] uppercase font-semibold block mb-1">Vertical</span>
+                      <span className="text-[10px] text-neutral-400 uppercase font-bold block mb-1">Vertical</span>
                       <div className="flex gap-1">
                         <button
                           onClick={() => alignSelectedNodes('top')}
-                          className="flex-1 p-1 rounded bg-[var(--affine-background-primary-color)] hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] text-[10px] flex items-center justify-center border border-[var(--affine-border-color)]"
+                          className="flex-1 p-1.5 rounded-xl bg-white dark:bg-[#25262b] hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-200 text-[10px] flex items-center justify-center border border-black/[0.06] dark:border-white/[0.08] shadow-2xs active:scale-95 cursor-pointer"
                           title="Alinear arriba"
                         >
-                          <AlignTopIcon className="w-3.5 h-3.5" />
+                          <AlignTop size={14} weight="duotone" />
                         </button>
                         <button
                           onClick={() => alignSelectedNodes('middle')}
-                          className="flex-1 p-1 rounded bg-[var(--affine-background-primary-color)] hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] text-[10px] flex items-center justify-center border border-[var(--affine-border-color)]"
+                          className="flex-1 p-1.5 rounded-xl bg-white dark:bg-[#25262b] hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-200 text-[10px] flex items-center justify-center border border-black/[0.06] dark:border-white/[0.08] shadow-2xs active:scale-95 cursor-pointer"
                           title="Alinear al medio"
                         >
-                          <AlignVerticalCenterIcon className="w-3.5 h-3.5" />
+                          <AlignCenterVertical size={14} weight="duotone" />
                         </button>
                         <button
                           onClick={() => alignSelectedNodes('bottom')}
-                          className="flex-1 p-1 rounded bg-[var(--affine-background-primary-color)] hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] text-[10px] flex items-center justify-center border border-[var(--affine-border-color)]"
+                          className="flex-1 p-1.5 rounded-xl bg-white dark:bg-[#25262b] hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-200 text-[10px] flex items-center justify-center border border-black/[0.06] dark:border-white/[0.08] shadow-2xs active:scale-95 cursor-pointer"
                           title="Alinear abajo"
                         >
-                          <AlignBottomIcon className="w-3.5 h-3.5" />
+                          <AlignBottom size={14} weight="duotone" />
                         </button>
                         <button
                           onClick={() => alignSelectedNodes('distribute-v')}
-                          className="flex-1 p-1 rounded bg-[var(--affine-background-primary-color)] hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] text-[10px] flex items-center justify-center border border-[var(--affine-border-color)]"
+                          className="flex-1 p-1.5 rounded-xl bg-white dark:bg-[#25262b] hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-200 text-[10px] flex items-center justify-center border border-black/[0.06] dark:border-white/[0.08] shadow-2xs active:scale-95 cursor-pointer"
                           title="Distribuir verticalmente"
                         >
-                          <DistributeVerticalIcon className="w-3.5 h-3.5" />
+                          <Rows size={14} weight="duotone" />
                         </button>
                       </div>
                     </div>
@@ -1896,68 +2025,61 @@ function CanvasBoardInner({
                 {/* Auto layout mindmap / tree */}
                 <button
                   onClick={handleAutoLayoutNodes}
-                  className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] flex items-center justify-between transition"
+                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center justify-between font-medium transition active:scale-[0.98] cursor-pointer"
                 >
-                  <div className="flex items-center gap-2">
-                    <DatabaseKanbanViewIcon className="w-4 h-4 text-[#1e96eb]" />
+                  <div className="flex items-center gap-2.5">
+                    <TreeStructure size={16} weight="duotone" className="text-neutral-600 dark:text-neutral-400" />
                     <span>Auto-organizar diagrama</span>
                   </div>
-                  <span className="text-[10px] text-emerald-500 font-semibold">Árbol</span>
+                  <span className="text-[10px] text-emerald-500 font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10">Árbol</span>
                 </button>
 
                 {/* Duplicate selected */}
                 <button
                   onClick={duplicateSelectedNodes}
-                  className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] flex items-center justify-between transition"
+                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center justify-between font-medium transition active:scale-[0.98] cursor-pointer"
                 >
-                  <div className="flex items-center gap-2">
-                    <CopyIcon className="w-4 h-4 text-[var(--affine-text-secondary-color)]" />
+                  <div className="flex items-center gap-2.5">
+                    <Copy size={16} weight="duotone" className="text-neutral-600 dark:text-neutral-400" />
                     <span>Duplicar elemento</span>
                   </div>
-                  <span className="text-[10px] text-[var(--affine-text-secondary-color)] font-mono">Ctrl+D</span>
+                  <span className="text-[10px] text-neutral-400 font-mono">Ctrl+D</span>
                 </button>
 
                 {/* Milanote special cards */}
                 <button
                   onClick={() => addNewNode('colorPalette')}
-                  className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] flex items-center gap-2 text-indigo-500 transition"
+                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
                 >
-                  <span>🎨</span>
-                  <span>Añadir Paleta de Color (Milanote)</span>
-                </button>
-                <button
-                  onClick={() => addNewNode('voiceNote')}
-                  className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] flex items-center gap-2 text-rose-500 transition"
-                >
-                  <span>🎙️</span>
-                  <span>Añadir Nota de Voz Offline</span>
+                  <Palette size={16} weight="duotone" className="text-neutral-600 dark:text-neutral-400" />
+                  <span>Añadir Paleta de Color</span>
                 </button>
 
                 {/* Obsidian Canvas Import / Export */}
                 <button
                   onClick={() => exportToObsidianCanvas(workspaceId, currentWorkspace?.title || 'canvas')}
-                  className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] flex items-center gap-2 text-purple-400 transition"
+                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
                 >
-                  <DownloadIcon className="w-4 h-4" />
+                  <DownloadSimple size={16} weight="duotone" className="text-neutral-600 dark:text-neutral-400" />
                   <span>Exportar Obsidian .canvas</span>
                 </button>
 
                 {/* Export Canvas as PNG */}
                 <button
                   onClick={handleExportCanvasPNG}
-                  className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] flex items-center gap-2 text-[#1e96eb] transition"
+                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
                 >
-                  <DownloadIcon className="w-4 h-4" />
+                  <PhosphorImage size={16} weight="duotone" className="text-neutral-600 dark:text-neutral-400" />
                   <span>Exportar lienzo como PNG</span>
                 </button>
 
-                <div className="border-t border-[var(--affine-divider-color)] my-1" />
+                <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-1" />
 
                 <button
                   onClick={handleClearBoard}
-                  className="w-full text-left px-3 py-1.5 hover:bg-rose-500/10 text-rose-500 flex items-center gap-2 transition"
+                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-rose-500/10 text-rose-500 flex items-center gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
                 >
-                  <DeleteIcon className="w-4 h-4" />
+                  <Trash size={16} weight="duotone" className="text-rose-500" />
                   <span>Vaciar lienzo</span>
                 </button>
               </div>
@@ -1973,9 +2095,9 @@ function CanvasBoardInner({
 
         {/* Bottom Center Floating Edgeless Tool Dock (Milanote Physical Palette) */}
         <Panel position="bottom-center" className="mb-4 z-20">
-          <div className="flex items-center p-1 rounded-xl bg-[var(--app-bg-overlay)] border border-[var(--app-border)] shadow-[var(--app-shadow-dock)] text-[var(--app-text-primary)] h-14 select-none">
+          <div className="flex items-center px-2 py-1 rounded-full bg-white/85 dark:bg-[#1a1b1e]/85 border border-black/[0.08] dark:border-white/[0.1] shadow-2xl shadow-black/10 dark:shadow-black/40 text-[var(--app-text-primary)] h-14 backdrop-blur-2xl select-none">
             {/* Quick Tools (Left Section: 32px buttons) */}
-            <div className="flex items-center gap-0.5 pr-1">
+            <div className="flex items-center gap-1 pr-1">
               {/* Tool 1: Pointer / Select */}
               <button
                 onClick={() => {
@@ -1983,10 +2105,10 @@ function CanvasBoardInner({
                   setShapePaletteOpen(false)
                   setNoteMenuOpen(false)
                 }}
-                className={`p-2 rounded-lg transition ${
+                className={`p-2.5 rounded-full transition active:scale-95 cursor-pointer ${
                   activeTool === 'select'
-                    ? 'bg-[var(--app-accent)] text-white shadow-xs'
-                    : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
+                    ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-sm'
+                    : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
                 }`}
                 title="Puntero de selección (V)"
               >
@@ -2000,10 +2122,10 @@ function CanvasBoardInner({
                   setShapePaletteOpen(false)
                   setNoteMenuOpen(false)
                 }}
-                className={`p-2 rounded-lg transition ${
+                className={`p-2.5 rounded-full transition active:scale-95 cursor-pointer ${
                   activeTool === 'pan'
-                    ? 'bg-[var(--app-accent)] text-white shadow-xs'
-                    : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
+                    ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-sm'
+                    : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
                 }`}
                 title="Mano de desplazamiento (Pan / H)"
               >
@@ -2017,14 +2139,14 @@ function CanvasBoardInner({
                   setShapePaletteOpen(false)
                   setNoteMenuOpen(false)
                 }}
-                className={`p-2 rounded-xl transition ${
+                className={`p-2.5 rounded-full transition active:scale-95 cursor-pointer ${
                   activeTool === 'frame'
-                    ? 'bg-[#1e96eb] text-white shadow-xs'
-                    : 'text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] hover:bg-[var(--affine-hover-color)]'
+                    ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-sm'
+                    : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
                 }`}
                 title="Añadir marco de presentación (Frame / #)"
               >
-                <FrameIcon className="w-5 h-5" />
+                <FrameIcon className="w-4.5 h-4.5" />
               </button>
 
               {/* Tool 4: Connector line / Arrow */}
@@ -2034,14 +2156,14 @@ function CanvasBoardInner({
                   setShapePaletteOpen(false)
                   setNoteMenuOpen(false)
                 }}
-                className={`p-2 rounded-xl transition ${
+                className={`p-2.5 rounded-full transition active:scale-95 cursor-pointer ${
                   activeTool === 'connector'
-                    ? 'bg-[#1e96eb] text-white shadow-xs'
-                    : 'text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] hover:bg-[var(--affine-hover-color)]'
+                    ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-sm'
+                    : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
                 }`}
                 title="Conector de tarjetas / flecha (C)"
               >
-                <StraightLineIcon className="w-5 h-5" />
+                <StraightLineIcon className="w-4.5 h-4.5" />
               </button>
 
               {/* Tool 5: Link tool */}
@@ -2051,19 +2173,19 @@ function CanvasBoardInner({
                   setShapePaletteOpen(false)
                   setNoteMenuOpen(false)
                 }}
-                className={`p-2 rounded-xl transition ${
+                className={`p-2.5 rounded-full transition active:scale-95 cursor-pointer ${
                   activeTool === 'link'
-                    ? 'bg-[#1e96eb] text-white shadow-xs'
-                    : 'text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] hover:bg-[var(--affine-hover-color)]'
+                    ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-sm'
+                    : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
                 }`}
                 title="Insertar enlace web (Link)"
               >
-                <LinkIcon className="w-5 h-5" />
+                <LinkIcon className="w-4.5 h-4.5" />
               </button>
             </div>
 
             {/* Vertical Divider */}
-            <div className="w-[1px] h-8 bg-[var(--affine-divider-color)] mx-1" />
+            <div className="w-[1px] h-6 bg-black/[0.08] dark:bg-white/[0.1] mx-1.5" />
 
             {/* Senior Tools (Right Section: Illustrated 3D Widgets with Hover Animations) */}
             <div className="flex items-center gap-1.5 pl-1 relative">
@@ -2074,7 +2196,7 @@ function CanvasBoardInner({
                     setNoteMenuOpen(!noteMenuOpen)
                     setShapePaletteOpen(false)
                   }}
-                  className="rounded-xl transition flex items-center justify-center"
+                  className="rounded-2xl transition-transform hover:scale-105 active:scale-95 flex items-center justify-center cursor-pointer"
                   title="Notas adhesivas y tarjetas (N)"
                 >
                   <NoteSeniorWidget isActive={noteMenuOpen} />
@@ -2083,14 +2205,14 @@ function CanvasBoardInner({
                 {/* Note Options Popover */}
                 {noteMenuOpen && (
                   <div
-                    className="absolute bottom-16 left-1/2 -translate-x-1/2 z-40 bg-[var(--affine-background-overlay-panel-color)] border border-[var(--affine-border-color)] rounded-2xl shadow-[var(--affine-popover-shadow)] p-3 flex flex-col gap-3 min-w-[240px] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
+                    className="absolute bottom-16 left-1/2 -translate-x-1/2 z-40 bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] rounded-3xl shadow-2xl p-4 flex flex-col gap-3 min-w-[270px] backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-100"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div>
-                      <span className="text-[11px] font-semibold text-[var(--affine-text-secondary-color)] block mb-1.5">
-                        Nota Adhesiva (AFFiNE)
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 block mb-2">
+                        Nota Adhesiva
                       </span>
-                      <div className="flex gap-2 justify-center">
+                      <div className="flex gap-2.5 justify-center">
                         {[
                           { name: 'yellow', bg: 'bg-[#ffeb7a] hover:ring-2 ring-amber-400', label: 'Amarillo' },
                           { name: 'blue', bg: 'bg-[#91d5ff] hover:ring-2 ring-blue-400', label: 'Azul' },
@@ -2104,14 +2226,14 @@ function CanvasBoardInner({
                               addNewNode('note', { color: col.name })
                               setNoteMenuOpen(false)
                             }}
-                            className={`w-7 h-7 rounded-lg transition transform hover:scale-110 shadow-sm ${col.bg}`}
+                            className={`w-7 h-7 rounded-full transition transform hover:scale-120 active:scale-95 shadow-xs cursor-pointer ${col.bg}`}
                             title={`Nota ${col.label}`}
                           />
                         ))}
                       </div>
                     </div>
 
-                    <div className="border-t border-[var(--affine-divider-color)]" />
+                    <div className="border-t border-black/[0.06] dark:border-white/[0.08]" />
 
                     <div className="flex flex-col gap-1">
                       <button
@@ -2119,9 +2241,9 @@ function CanvasBoardInner({
                           addNewNode('docframe')
                           setNoteMenuOpen(false)
                         }}
-                        className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-[var(--affine-hover-color)] text-xs text-left text-[var(--affine-text-primary-color)] transition"
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] text-xs font-medium text-left text-neutral-700 dark:text-neutral-200 transition active:scale-[0.98] cursor-pointer"
                       >
-                        <PageIcon className="w-4 h-4 text-[#1e96eb]" />
+                        <PageIcon className="w-4 h-4 text-blue-500" />
                         <span>Tarjeta de Documento / Página</span>
                       </button>
 
@@ -2130,9 +2252,9 @@ function CanvasBoardInner({
                           addNewNode('todo')
                           setNoteMenuOpen(false)
                         }}
-                        className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-[var(--affine-hover-color)] text-xs text-left text-[var(--affine-text-primary-color)] transition"
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] text-xs font-medium text-left text-neutral-700 dark:text-neutral-200 transition active:scale-[0.98] cursor-pointer"
                       >
-                        <DatabaseKanbanViewIcon className="w-4 h-4 text-emerald-500" />
+                        <Kanban size={16} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
                         <span>Tablero de Tareas / Kanban</span>
                       </button>
 
@@ -2141,7 +2263,7 @@ function CanvasBoardInner({
                           imageFileInputRef.current?.click()
                           setNoteMenuOpen(false)
                         }}
-                        className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-[var(--affine-hover-color)] text-xs text-left text-[var(--affine-text-primary-color)] transition"
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] text-xs font-medium text-left text-neutral-700 dark:text-neutral-200 transition active:scale-[0.98] cursor-pointer"
                       >
                         <ImageIcon className="w-4 h-4 text-purple-500" />
                         <span>Subir Imagen o Foto</span>
@@ -2152,21 +2274,10 @@ function CanvasBoardInner({
                           addNewNode('colorPalette')
                           setNoteMenuOpen(false)
                         }}
-                        className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-[var(--affine-hover-color)] text-xs text-left text-[var(--affine-text-primary-color)] transition"
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] text-xs font-medium text-left text-neutral-700 dark:text-neutral-200 transition active:scale-[0.98] cursor-pointer"
                       >
                         <span className="text-sm">🎨</span>
-                        <span>Paleta de Color (Milanote)</span>
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          addNewNode('voiceNote')
-                          setNoteMenuOpen(false)
-                        }}
-                        className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg hover:bg-[var(--affine-hover-color)] text-xs text-left text-[var(--affine-text-primary-color)] transition"
-                      >
-                        <span className="text-sm">🎙️</span>
-                        <span>Nota de Voz Offline</span>
+                        <span>Paleta de Color</span>
                       </button>
                     </div>
                   </div>
@@ -2180,7 +2291,7 @@ function CanvasBoardInner({
                   setShapePaletteOpen(false)
                   setNoteMenuOpen(false)
                 }}
-                className="rounded-xl transition flex items-center justify-center"
+                className="rounded-2xl transition-transform hover:scale-105 active:scale-95 flex items-center justify-center cursor-pointer"
                 title="Lápiz de dibujo libre (Pencil / D)"
               >
                 <PencilSeniorWidget isActive={activeTool === 'pencil'} />
@@ -2193,7 +2304,7 @@ function CanvasBoardInner({
                   setShapePaletteOpen(false)
                   setNoteMenuOpen(false)
                 }}
-                className="rounded-xl transition flex items-center justify-center"
+                className="rounded-2xl transition-transform hover:scale-105 active:scale-95 flex items-center justify-center cursor-pointer"
                 title="Borrador de trazos (Eraser / E)"
               >
                 <EraserSeniorWidget isActive={activeTool === 'eraser'} />
@@ -2206,7 +2317,7 @@ function CanvasBoardInner({
                     setShapePaletteOpen(!shapePaletteOpen)
                     setNoteMenuOpen(false)
                   }}
-                  className="rounded-xl transition flex items-center justify-center"
+                  className="rounded-2xl transition-transform hover:scale-105 active:scale-95 flex items-center justify-center cursor-pointer"
                   title="Formas geométricas (Shapes / S)"
                 >
                   <ShapeSeniorWidget isActive={shapePaletteOpen} />
@@ -2215,22 +2326,22 @@ function CanvasBoardInner({
                 {/* Shape Selector Popover */}
                 {shapePaletteOpen && (
                   <div
-                    className="absolute bottom-16 left-1/2 -translate-x-1/2 z-40 bg-[var(--affine-background-overlay-panel-color)] border border-[var(--affine-border-color)] rounded-2xl shadow-[var(--affine-popover-shadow)] p-3 flex flex-col gap-3 min-w-[230px] backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
+                    className="absolute bottom-16 left-1/2 -translate-x-1/2 z-40 bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] rounded-3xl shadow-2xl p-4 flex flex-col gap-3 min-w-[260px] backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-100"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div>
-                      <span className="text-[11px] font-semibold text-[var(--affine-text-secondary-color)] block mb-1.5">
-                        Formas Geométricas (AFFiNE)
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 block mb-2">
+                        Formas Geométricas
                       </span>
-                      <div className="grid grid-cols-3 gap-1.5">
+                      <div className="grid grid-cols-3 gap-2">
                         <button
                           onClick={() => {
                             addNewNode('shape', { shapeType: 'rect', color: 'blue' })
                             setShapePaletteOpen(false)
                           }}
-                          className="flex flex-col items-center justify-center p-2 rounded-lg bg-[var(--affine-hover-color)] hover:bg-[var(--affine-background-tertiary-color)] text-[var(--affine-text-primary-color)] transition gap-1"
+                          className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-black/[0.03] dark:bg-white/[0.05] hover:bg-black/[0.07] dark:hover:bg-white/[0.1] text-neutral-800 dark:text-neutral-200 transition gap-1.5 active:scale-95 font-medium cursor-pointer"
                         >
-                          <SquareIcon className="w-4 h-4 text-[#1e96eb]" />
+                          <SquareIcon className="w-4 h-4 text-blue-500" />
                           <span className="text-[10px]">Rect</span>
                         </button>
 
@@ -2239,7 +2350,7 @@ function CanvasBoardInner({
                             addNewNode('shape', { shapeType: 'ellipse', color: 'green' })
                             setShapePaletteOpen(false)
                           }}
-                          className="flex flex-col items-center justify-center p-2 rounded-lg bg-[var(--affine-hover-color)] hover:bg-[var(--affine-background-tertiary-color)] text-[var(--affine-text-primary-color)] transition gap-1"
+                          className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-black/[0.03] dark:bg-white/[0.05] hover:bg-black/[0.07] dark:hover:bg-white/[0.1] text-neutral-800 dark:text-neutral-200 transition gap-1.5 active:scale-95 font-medium cursor-pointer"
                         >
                           <EllipseIcon className="w-4 h-4 text-emerald-500" />
                           <span className="text-[10px]">Círculo</span>
@@ -2250,7 +2361,7 @@ function CanvasBoardInner({
                             addNewNode('shape', { shapeType: 'diamond', color: 'yellow' })
                             setShapePaletteOpen(false)
                           }}
-                          className="flex flex-col items-center justify-center p-2 rounded-lg bg-[var(--affine-hover-color)] hover:bg-[var(--affine-background-tertiary-color)] text-[var(--affine-text-primary-color)] transition gap-1"
+                          className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-black/[0.03] dark:bg-white/[0.05] hover:bg-black/[0.07] dark:hover:bg-white/[0.1] text-neutral-800 dark:text-neutral-200 transition gap-1.5 active:scale-95 font-medium cursor-pointer"
                         >
                           <DiamondIcon className="w-4 h-4 text-amber-500" />
                           <span className="text-[10px]">Rombo</span>
@@ -2261,7 +2372,7 @@ function CanvasBoardInner({
                             addNewNode('shape', { shapeType: 'triangle', color: 'purple' })
                             setShapePaletteOpen(false)
                           }}
-                          className="flex flex-col items-center justify-center p-2 rounded-lg bg-[var(--affine-hover-color)] hover:bg-[var(--affine-background-tertiary-color)] text-[var(--affine-text-primary-color)] transition gap-1"
+                          className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-black/[0.03] dark:bg-white/[0.05] hover:bg-black/[0.07] dark:hover:bg-white/[0.1] text-neutral-800 dark:text-neutral-200 transition gap-1.5 active:scale-95 font-medium cursor-pointer"
                         >
                           <TriangleIcon className="w-4 h-4 text-purple-500" />
                           <span className="text-[10px]">Triángulo</span>
@@ -2272,7 +2383,7 @@ function CanvasBoardInner({
                             addNewNode('shape', { shapeType: 'star', color: 'yellow' })
                             setShapePaletteOpen(false)
                           }}
-                          className="flex flex-col items-center justify-center p-2 rounded-lg bg-[var(--affine-hover-color)] hover:bg-[var(--affine-background-tertiary-color)] text-[var(--affine-text-primary-color)] transition gap-1"
+                          className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-black/[0.03] dark:bg-white/[0.05] hover:bg-black/[0.07] dark:hover:bg-white/[0.1] text-neutral-800 dark:text-neutral-200 transition gap-1.5 active:scale-95 font-medium cursor-pointer"
                         >
                           <StarIcon className="w-4 h-4 text-yellow-500" />
                           <span className="text-[10px]">Estrella</span>
@@ -2283,7 +2394,7 @@ function CanvasBoardInner({
                             addNewNode('shape', { shapeType: 'roundedRect', color: 'rose' })
                             setShapePaletteOpen(false)
                           }}
-                          className="flex flex-col items-center justify-center p-2 rounded-lg bg-[var(--affine-hover-color)] hover:bg-[var(--affine-background-tertiary-color)] text-[var(--affine-text-primary-color)] transition gap-1"
+                          className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-black/[0.03] dark:bg-white/[0.05] hover:bg-black/[0.07] dark:hover:bg-white/[0.1] text-neutral-800 dark:text-neutral-200 transition gap-1.5 active:scale-95 font-medium cursor-pointer"
                         >
                           <RoundedRectangleIcon className="w-4 h-4 text-rose-500" />
                           <span className="text-[10px]">Redondo</span>
@@ -2294,9 +2405,9 @@ function CanvasBoardInner({
                             addNewNode('shape', { shapeType: 'cylinder', color: 'blue' })
                             setShapePaletteOpen(false)
                           }}
-                          className="flex flex-col items-center justify-center p-2 rounded-lg bg-[var(--affine-hover-color)] hover:bg-[var(--affine-background-tertiary-color)] text-[var(--affine-text-primary-color)] transition gap-1"
+                          className="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-black/[0.03] dark:bg-white/[0.05] hover:bg-black/[0.07] dark:hover:bg-white/[0.1] text-neutral-800 dark:text-neutral-200 transition gap-1.5 active:scale-95 font-medium cursor-pointer"
                         >
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1e96eb" strokeWidth="2">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2">
                             <path d="M4 6c0 1.66 3.58 3 8 3s8-1.34 8-3" />
                             <ellipse cx="12" cy="6" rx="8" ry="3" />
                             <path d="M4 6v12c0 1.66 3.58 3 8 3s8-1.34 8-3V6" />
@@ -2316,7 +2427,7 @@ function CanvasBoardInner({
                   setShapePaletteOpen(false)
                   setNoteMenuOpen(false)
                 }}
-                className="rounded-xl transition flex items-center justify-center"
+                className="rounded-2xl transition-transform hover:scale-105 active:scale-95 flex items-center justify-center cursor-pointer"
                 title="Insertar texto flotante en el lienzo (Text / T)"
               >
                 <TextSeniorWidget isActive={activeTool === 'text'} />
@@ -2329,7 +2440,7 @@ function CanvasBoardInner({
                   setShapePaletteOpen(false)
                   setNoteMenuOpen(false)
                 }}
-                className="rounded-xl transition flex items-center justify-center"
+                className="rounded-2xl transition-transform hover:scale-105 active:scale-95 flex items-center justify-center cursor-pointer"
                 title="Mapa mental / Mindmap interactivo (M)"
               >
                 <MindmapSeniorWidget isActive={activeTool === 'mindmap'} />
@@ -2342,7 +2453,7 @@ function CanvasBoardInner({
                   setShapePaletteOpen(false)
                   setNoteMenuOpen(false)
                 }}
-                className="rounded-xl transition flex items-center justify-center"
+                className="rounded-2xl transition-transform hover:scale-105 active:scale-95 flex items-center justify-center cursor-pointer"
                 title="Puntero láser de presentación (L)"
               >
                 <LaserSeniorWidget isActive={activeTool === 'laser'} />
@@ -2355,7 +2466,7 @@ function CanvasBoardInner({
                   setShapePaletteOpen(false)
                   setNoteMenuOpen(false)
                 }}
-                className="rounded-xl transition flex items-center justify-center"
+                className="rounded-2xl transition-transform hover:scale-105 active:scale-95 flex items-center justify-center cursor-pointer"
                 title="Galería de plantillas edgeless (Templates)"
               >
                 <TemplateSeniorWidget isActive={isTemplatesOpen} />
@@ -2387,71 +2498,71 @@ function CanvasBoardInner({
         {/* Floating Multi-Selection Alignment Toolbar */}
         {nodes.filter((n) => n.selected).length >= 2 && (
           <Panel position="top-center" className="mt-3 z-30">
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--affine-background-overlay-panel-color)] border border-[var(--affine-border-color)] rounded-2xl shadow-[var(--affine-toolbar-shadow)] text-xs backdrop-blur-md text-[var(--affine-text-primary-color)] animate-in fade-in zoom-in-95 duration-100">
-              <span className="text-[11px] font-semibold text-[var(--affine-text-secondary-color)] mr-1">
+            <div className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white/90 dark:bg-[#1a1b1e]/90 border border-black/[0.08] dark:border-white/[0.1] rounded-full shadow-2xl text-xs backdrop-blur-2xl text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 duration-100">
+              <span className="text-[11px] font-bold text-neutral-400 dark:text-neutral-500 mr-1">
                 {nodes.filter((n) => n.selected).length} seleccionados:
               </span>
 
               {/* Horizontal alignments */}
               <button
                 onClick={() => alignSelectedNodes('left')}
-                className="p-1 rounded hover:bg-[var(--affine-hover-color)] transition text-[var(--affine-text-secondary-color)] hover:text-[#1e96eb]"
+                className="p-1.5 rounded-full hover:bg-black/[0.06] dark:hover:bg-white/[0.1] transition text-neutral-600 dark:text-neutral-300 active:scale-95 cursor-pointer"
                 title="Alinear a la izquierda"
               >
-                <AlignLeftIcon className="w-4 h-4" />
+                <AlignLeft size={16} weight="duotone" />
               </button>
               <button
                 onClick={() => alignSelectedNodes('center')}
-                className="p-1 rounded hover:bg-[var(--affine-hover-color)] transition text-[var(--affine-text-secondary-color)] hover:text-[#1e96eb]"
+                className="p-1.5 rounded-full hover:bg-black/[0.06] dark:hover:bg-white/[0.1] transition text-neutral-600 dark:text-neutral-300 active:scale-95 cursor-pointer"
                 title="Centrar horizontalmente"
               >
-                <AlignHorizontalCenterIcon className="w-4 h-4" />
+                <AlignCenterHorizontal size={16} weight="duotone" />
               </button>
               <button
                 onClick={() => alignSelectedNodes('right')}
-                className="p-1 rounded hover:bg-[var(--affine-hover-color)] transition text-[var(--affine-text-secondary-color)] hover:text-[#1e96eb]"
+                className="p-1.5 rounded-full hover:bg-black/[0.06] dark:hover:bg-white/[0.1] transition text-neutral-600 dark:text-neutral-300 active:scale-95 cursor-pointer"
                 title="Alinear a la derecha"
               >
-                <AlignRightIcon className="w-4 h-4" />
+                <AlignRight size={16} weight="duotone" />
               </button>
               <button
                 onClick={() => alignSelectedNodes('distribute-h')}
-                className="p-1 rounded hover:bg-[var(--affine-hover-color)] transition text-[var(--affine-text-secondary-color)] hover:text-[#1e96eb]"
+                className="p-1.5 rounded-full hover:bg-black/[0.06] dark:hover:bg-white/[0.1] transition text-neutral-600 dark:text-neutral-300 active:scale-95 cursor-pointer"
                 title="Distribuir horizontalmente"
               >
-                <DistributeHorizontalIcon className="w-4 h-4" />
+                <Columns size={16} weight="duotone" />
               </button>
 
-              <div className="w-[1px] h-3.5 bg-[var(--affine-divider-color)] mx-0.5" />
+              <div className="w-[1px] h-3.5 bg-black/[0.08] dark:bg-white/[0.1] mx-0.5" />
 
               {/* Vertical alignments */}
               <button
                 onClick={() => alignSelectedNodes('top')}
-                className="p-1 rounded hover:bg-[var(--affine-hover-color)] transition text-[var(--affine-text-secondary-color)] hover:text-[#1e96eb]"
+                className="p-1.5 rounded-full hover:bg-black/[0.06] dark:hover:bg-white/[0.1] transition text-neutral-600 dark:text-neutral-300 active:scale-95 cursor-pointer"
                 title="Alinear arriba"
               >
-                <AlignTopIcon className="w-4 h-4" />
+                <AlignTop size={16} weight="duotone" />
               </button>
               <button
                 onClick={() => alignSelectedNodes('middle')}
-                className="p-1 rounded hover:bg-[var(--affine-hover-color)] transition text-[var(--affine-text-secondary-color)] hover:text-[#1e96eb]"
+                className="p-1.5 rounded-full hover:bg-black/[0.06] dark:hover:bg-white/[0.1] transition text-neutral-600 dark:text-neutral-300 active:scale-95 cursor-pointer"
                 title="Centrar verticalmente"
               >
-                <AlignVerticalCenterIcon className="w-4 h-4" />
+                <AlignCenterVertical size={16} weight="duotone" />
               </button>
               <button
                 onClick={() => alignSelectedNodes('bottom')}
-                className="p-1 rounded hover:bg-[var(--affine-hover-color)] transition text-[var(--affine-text-secondary-color)] hover:text-[#1e96eb]"
+                className="p-1.5 rounded-full hover:bg-black/[0.06] dark:hover:bg-white/[0.1] transition text-neutral-600 dark:text-neutral-300 active:scale-95 cursor-pointer"
                 title="Alinear abajo"
               >
-                <AlignBottomIcon className="w-4 h-4" />
+                <AlignBottom size={16} weight="duotone" />
               </button>
               <button
                 onClick={() => alignSelectedNodes('distribute-v')}
-                className="p-1 rounded hover:bg-[var(--affine-hover-color)] transition text-[var(--affine-text-secondary-color)] hover:text-[#1e96eb]"
+                className="p-1.5 rounded-full hover:bg-black/[0.06] dark:hover:bg-white/[0.1] transition text-neutral-600 dark:text-neutral-300 active:scale-95 cursor-pointer"
                 title="Distribuir verticalmente"
               >
-                <DistributeVerticalIcon className="w-4 h-4" />
+                <Rows size={16} weight="duotone" />
               </button>
             </div>
           </Panel>
@@ -2460,22 +2571,22 @@ function CanvasBoardInner({
         {/* Floating Active Connector Tool Banner */}
         {activeTool === 'connector' && (
           <Panel position="top-center" className="mt-3 z-30">
-            <div className="flex items-center gap-2.5 px-3.5 py-1.5 bg-[var(--affine-background-overlay-panel-color)] border border-[#1e96eb]/50 rounded-2xl shadow-[var(--affine-toolbar-shadow)] text-xs backdrop-blur-md text-[var(--affine-text-primary-color)]">
-              <StraightLineIcon className="w-4 h-4 text-[#1e96eb]" />
-              <span>
+            <div className="flex items-center gap-2.5 px-4 py-2 bg-white/90 dark:bg-[#1a1b1e]/90 border border-black/[0.08] dark:border-white/[0.1] rounded-full shadow-2xl text-xs backdrop-blur-2xl text-[var(--app-text-primary)]">
+              <StraightLineIcon className="w-4 h-4 text-blue-500" />
+              <span className="font-medium">
                 {connectSourceNodeId
                   ? 'Haz clic en la tarjeta destino'
                   : 'Haz clic en origen o arrastra desde un conector'}
               </span>
 
-              <div className="w-[1px] h-3.5 bg-[var(--affine-divider-color)] mx-0.5" />
+              <div className="w-[1px] h-3.5 bg-black/[0.08] dark:bg-white/[0.1] mx-0.5" />
 
               {/* Connector routing toggle */}
-              <div className="flex items-center gap-1 bg-[var(--affine-background-secondary-color)] p-0.5 rounded-lg border border-[var(--affine-border-color)]">
+              <div className="flex items-center gap-0.5 bg-black/[0.04] dark:bg-white/[0.06] p-0.5 rounded-full border border-black/[0.04] dark:border-white/[0.06]">
                 <button
                   onClick={() => setConnectorRouting('default')}
-                  className={`px-2 py-0.5 rounded text-[10px] font-medium transition ${
-                    connectorRouting === 'default' ? 'bg-[#1e96eb] text-white' : 'text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)]'
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition cursor-pointer ${
+                    connectorRouting === 'default' ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs' : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
                   }`}
                   title="Línea curva Bézier"
                 >
@@ -2483,8 +2594,8 @@ function CanvasBoardInner({
                 </button>
                 <button
                   onClick={() => setConnectorRouting('smoothstep')}
-                  className={`px-2 py-0.5 rounded text-[10px] font-medium transition ${
-                    connectorRouting === 'smoothstep' ? 'bg-[#1e96eb] text-white' : 'text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)]'
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition cursor-pointer ${
+                    connectorRouting === 'smoothstep' ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs' : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
                   }`}
                   title="Línea ortogonal escalonada"
                 >
@@ -2492,8 +2603,8 @@ function CanvasBoardInner({
                 </button>
                 <button
                   onClick={() => setConnectorRouting('straight')}
-                  className={`px-2 py-0.5 rounded text-[10px] font-medium transition ${
-                    connectorRouting === 'straight' ? 'bg-[#1e96eb] text-white' : 'text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)]'
+                  className={`px-2.5 py-1 rounded-full text-[10px] font-semibold transition cursor-pointer ${
+                    connectorRouting === 'straight' ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs' : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
                   }`}
                   title="Línea recta"
                 >
@@ -2504,10 +2615,10 @@ function CanvasBoardInner({
               {/* Arrow toggle */}
               <button
                 onClick={() => setConnectorHasArrow(!connectorHasArrow)}
-                className={`px-2 py-0.5 rounded text-[10px] font-medium border transition ${
+                className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border transition cursor-pointer ${
                   connectorHasArrow
-                    ? 'bg-[#1e96eb]/10 border-[#1e96eb] text-[#1e96eb]'
-                    : 'border-[var(--affine-border-color)] text-[var(--affine-text-secondary-color)]'
+                    ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 border-transparent shadow-xs'
+                    : 'border-black/[0.08] dark:border-white/[0.1] text-neutral-500 hover:bg-black/5 dark:hover:bg-white/10'
                 }`}
                 title="Alternar punta de flecha"
               >
@@ -2515,12 +2626,12 @@ function CanvasBoardInner({
               </button>
 
               {/* Connector color */}
-              <div className="flex gap-1 items-center">
+              <div className="flex gap-1.5 items-center">
                 {['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#ffffff'].map((c) => (
                   <button
                     key={c}
                     onClick={() => setConnectorColor(c)}
-                    className={`w-3.5 h-3.5 rounded-full ${connectorColor === c ? 'ring-2 ring-[#1e96eb]' : ''}`}
+                    className={`w-4 h-4 rounded-full transition-transform hover:scale-125 cursor-pointer ${connectorColor === c ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`}
                     style={{ backgroundColor: c }}
                   />
                 ))}
@@ -2531,10 +2642,10 @@ function CanvasBoardInner({
                   setActiveTool('select')
                   setConnectSourceNodeId(null)
                 }}
-                className="p-1 text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] ml-1 rounded hover:bg-[var(--affine-hover-color)] transition"
+                className="p-1 rounded-full text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-black/5 dark:hover:bg-white/10 transition active:scale-95 cursor-pointer ml-0.5"
                 title="Cancelar conector"
               >
-                <CloseIcon className="w-3.5 h-3.5" />
+                <X size={14} weight="bold" />
               </button>
             </div>
           </Panel>
@@ -2543,18 +2654,18 @@ function CanvasBoardInner({
         {/* Floating Active Laser Pointer Banner */}
         {activeTool === 'laser' && (
           <Panel position="top-center" className="mt-3 z-30">
-            <div className="flex items-center gap-2 px-3.5 py-1.5 bg-rose-950/40 border border-rose-500/60 rounded-2xl shadow-[var(--affine-toolbar-shadow)] text-xs backdrop-blur-md text-rose-200 animate-in fade-in duration-100">
+            <div className="flex items-center gap-2.5 px-4 py-2 bg-neutral-950/85 border border-rose-500/30 rounded-full shadow-2xl text-xs backdrop-blur-2xl text-rose-200 animate-in fade-in duration-100">
               <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping mr-1" />
               <span className="font-semibold text-white">Puntero Láser Activo</span>
               <span className="text-[11px] text-rose-200/80">
-                — Arrastra o mueve el cursor para trazar halos luminosos que desaparecen solos
+                — Mueve el cursor para trazar halos que desaparecen solos
               </span>
               <button
                 onClick={() => setActiveTool('select')}
-                className="p-1 text-rose-300 hover:text-white ml-2 rounded hover:bg-rose-500/20 transition"
+                className="p-1 text-rose-300 hover:text-white ml-2 rounded-full hover:bg-rose-500/20 transition active:scale-95 cursor-pointer"
                 title="Salir del modo láser"
               >
-                <CloseIcon className="w-3.5 h-3.5" />
+                <X size={14} weight="bold" />
               </button>
             </div>
           </Panel>
@@ -2563,18 +2674,18 @@ function CanvasBoardInner({
         {/* Floating Active Drawing Tool Controls Banner */}
         {isDrawingTool && (
           <Panel position="top-center" className="mt-3 z-30">
-            <div className="flex items-center gap-2.5 px-3.5 py-1.5 bg-[var(--affine-background-overlay-panel-color)] border border-[var(--affine-border-color)] rounded-2xl shadow-[var(--affine-toolbar-shadow)] text-xs backdrop-blur-md text-[var(--affine-text-primary-color)]">
+            <div className="flex items-center gap-2.5 px-4 py-2 bg-white/90 dark:bg-[#1a1b1e]/90 border border-black/[0.08] dark:border-white/[0.1] rounded-full shadow-2xl text-xs backdrop-blur-2xl text-[var(--app-text-primary)]">
               {activeTool === 'eraser' ? (
                 <>
                   <span className="text-base leading-none">🧹</span>
                   <span className="font-semibold text-amber-500">Borrador Activo</span>
-                  <span className="text-[11px] text-[var(--affine-text-secondary-color)]">
+                  <span className="text-[11px] text-neutral-500">
                     — Haz clic o arrastra sobre los trazos para eliminarlos
                   </span>
                 </>
               ) : (
                 <>
-                  <span className="font-medium text-[var(--affine-text-secondary-color)]">
+                  <span className="font-medium text-neutral-500">
                     {activeTool === 'highlighter' ? 'Subrayador:' : 'Lápiz:'}
                   </span>
                   <div className="flex gap-1.5 items-center">
@@ -2582,15 +2693,15 @@ function CanvasBoardInner({
                       <button
                         key={color}
                         onClick={() => setPenColor(color)}
-                        className={`w-4 h-4 rounded-full transition transform hover:scale-125 ${
-                          penColor === color ? 'ring-2 ring-[#1e96eb] ring-offset-1 ring-offset-[var(--affine-background-primary-color)]' : ''
+                        className={`w-4 h-4 rounded-full transition-transform hover:scale-125 cursor-pointer ${
+                          penColor === color ? 'ring-2 ring-blue-500 ring-offset-1' : ''
                         }`}
                         style={{ backgroundColor: color }}
                       />
                     ))}
                   </div>
 
-                  <div className="w-[1px] h-4 bg-[var(--affine-divider-color)] mx-1" />
+                  <div className="w-[1px] h-4 bg-black/[0.08] dark:bg-white/[0.1] mx-1" />
 
                   {/* Stroke width */}
                   <div className="flex items-center gap-1">
@@ -2598,10 +2709,10 @@ function CanvasBoardInner({
                       <button
                         key={w}
                         onClick={() => setPenWidth(w)}
-                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition ${
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold transition cursor-pointer ${
                           penWidth === w
-                            ? 'bg-[#1e96eb] text-white'
-                            : 'text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] hover:bg-[var(--affine-hover-color)]'
+                            ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs'
+                            : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-black/5 dark:hover:bg-white/10'
                         }`}
                       >
                         {w}px
@@ -2613,13 +2724,13 @@ function CanvasBoardInner({
 
               <button
                 onClick={() => setDrawings([])}
-                className="ml-2 text-[var(--affine-text-secondary-color)] hover:text-rose-500 text-[11px] font-medium transition"
+                className="ml-2 text-neutral-500 hover:text-rose-500 text-[11px] font-semibold transition cursor-pointer"
               >
                 Limpiar todo
               </button>
               <button
                 onClick={() => setActiveTool('select')}
-                className="flex items-center gap-1 px-2 py-0.5 text-xs rounded-lg bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] hover:bg-rose-500 hover:text-white transition ml-1 font-medium"
+                className="flex items-center gap-1 px-3 py-1 text-xs rounded-full bg-black/[0.05] dark:bg-white/[0.08] text-neutral-700 dark:text-neutral-200 hover:bg-rose-500 hover:text-white transition ml-1 font-semibold cursor-pointer active:scale-95"
                 title="Salir del modo (Esc)"
               >
                 <span>Salir</span>

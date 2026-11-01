@@ -1,22 +1,25 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
-  PageIcon,
-  EdgelessIcon,
-  SidebarIcon,
-  SplitViewIcon,
-  FavoriteIcon,
-  FavoritedIcon,
-  InfoIcon,
-  MoreHorizontalIcon,
-  PresentationIcon,
-  ShareIcon,
-  CopyIcon,
-  KeyboardIcon,
-  DeleteIcon,
-  SearchIcon,
-  DownloadIcon
-} from '@blocksuite/icons/rc'
+  FileText,
+  Kanban,
+  SidebarSimple,
+  Columns,
+  Star,
+  Info,
+  DotsThree,
+  Presentation,
+  ShareNetwork,
+  Copy,
+  Keyboard,
+  Trash,
+  MagnifyingGlass,
+  DownloadSimple,
+  FileHtml,
+  FileCode,
+  Graph,
+  PencilSimpleLine
+} from '@phosphor-icons/react'
 import {
   db,
   seedInitialData,
@@ -37,7 +40,6 @@ import { SettingsModal } from './components/modals/SettingsModal'
 import { TrashModal } from './components/modals/TrashModal'
 import { ShareModal } from './components/modals/ShareModal'
 import { TemplatesModal } from './components/modals/TemplatesModal'
-import { AIModal } from './components/modals/AIModal'
 import { AllDocsModal } from './components/modals/AllDocsModal'
 import { ImportModal } from './components/modals/ImportModal'
 import { ShortcutsModal } from './components/modals/ShortcutsModal'
@@ -45,6 +47,9 @@ import { CreateWorkspaceModal } from './components/modals/CreateWorkspaceModal'
 import { CollectionsModal } from './components/modals/CollectionsModal'
 import { TagsModal } from './components/modals/TagsModal'
 import { KnowledgeGraphModal } from './components/modals/KnowledgeGraphModal'
+import { AuthModal, type AuthMode } from './components/modals/AuthModal'
+import { UserProfileModal } from './components/modals/UserProfileModal'
+import { UserManagementModal } from './components/modals/UserManagementModal'
 import { FindInPage } from './components/search/FindInPage'
 import { WorkbenchTabs, type WorkbenchTab } from './components/tabs/WorkbenchTabs'
 import { PresentationViewer } from './components/presentation/PresentationViewer'
@@ -54,7 +59,10 @@ import { TrashPage } from './components/views/TrashPage'
 import { TemplatesPage } from './components/views/TemplatesPage'
 import { CollectionsPage } from './components/views/CollectionsPage'
 import { TagsPage } from './components/views/TagsPage'
+import { ExternalShareView } from './components/views/ExternalShareView'
 import { type AppTemplate } from './lib/templates'
+import { getCurrentMember, setCurrentMember, subscribeToMemberChanges, mapSupabaseUserToMember, type TeamMember } from './lib/teamAuth'
+import { getAuthUser, onAuthChange, signOutUser, fetchUserProfile } from './lib/supabase'
 import {
   exportDocumentAsMarkdown,
   exportDocumentAsHtml,
@@ -64,10 +72,96 @@ import {
 import { Toaster, toast } from 'sonner'
 
 export default function App() {
-  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string>('untitled-workspace')
-  const [sidebarOpen, setSidebarOpen] = useState(false)
+  // 1. Detectar si la página se está abriendo mediante enlace compartido externo: ?share=<id>&token=<token>
+  const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
+  const externalShareId = urlParams?.get('share')
+  const externalToken = urlParams?.get('token')
+
+  if (externalShareId && externalToken) {
+    return <ExternalShareView workspaceId={externalShareId} token={externalToken} />
+  }
+
+  // Miembro activo del equipo
+  const [currentMember, setCurrentMemberState] = useState<TeamMember>(() => getCurrentMember())
+  const [authUser, setAuthUser] = useState<any>(null)
+  const [authLoading, setAuthLoading] = useState(true)
+  const [guestMode, setGuestMode] = useState(() => {
+    return typeof window !== 'undefined' && localStorage.getItem('seven_note_guest_mode') === 'true'
+  })
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
+  const [authModalMode, setAuthModalMode] = useState<AuthMode>('login')
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
+  const [isUserManagementModalOpen, setIsUserManagementModalOpen] = useState(false)
+
+  // Sincronizar sesión activa de Supabase Auth
+  useEffect(() => {
+    // Detectar si el usuario llega con un token de recuperación de contraseña (#type=recovery)
+    if (typeof window !== 'undefined' && window.location.hash.includes('type=recovery')) {
+      setAuthModalMode('reset')
+      setIsAuthModalOpen(true)
+    }
+
+    // 1. Comprobar usuario ya autenticado
+    getAuthUser().then(async (user) => {
+      if (user) {
+        setAuthUser(user)
+        const profile = await fetchUserProfile(user.id)
+        const mapped = mapSupabaseUserToMember(user, profile)
+        setCurrentMember(mapped)
+        setCurrentMemberState(mapped)
+      }
+      setAuthLoading(false)
+    }).catch(() => {
+      setAuthLoading(false)
+    })
+
+    // 2. Suscribirse a cambios de sesión (Login, Logout, Token refresh, Recovery)
+    const unsubAuth = onAuthChange(async (event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setAuthModalMode('reset')
+        setIsAuthModalOpen(true)
+      }
+
+      const user = session?.user || null
+      setAuthUser(user)
+      if (user) {
+        const profile = await fetchUserProfile(user.id)
+        const mapped = mapSupabaseUserToMember(user, profile)
+        setCurrentMember(mapped)
+        setCurrentMemberState(mapped)
+      }
+      setAuthLoading(false)
+    })
+
+    // 3. Suscribirse a cambios de miembro local
+    const unsubMember = subscribeToMemberChanges((m) => {
+      setCurrentMemberState(m)
+    })
+
+    return () => {
+      unsubAuth()
+      unsubMember()
+    }
+  }, [])
+
+  const handleSelectMember = (memberId: string) => {
+    const m = setCurrentMember(memberId)
+    setCurrentMemberState(m)
+    toast.info(`Perfil activo: ${m.name}`)
+  }
+
+  const handleSignOut = async () => {
+    await signOutUser()
+    setAuthUser(null)
+    setGuestMode(false)
+    localStorage.removeItem('seven_note_guest_mode')
+    toast.info('Sesión cerrada correctamente')
+  }
+
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string>('ws-feature-priorities')
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const [rightSidebarOpen, setRightSidebarOpen] = useState(false)
-  const [rightSidebarTab, setRightSidebarTab] = useState<'properties' | 'outline' | 'ai' | 'history'>('properties')
+  const [rightSidebarTab, setRightSidebarTab] = useState<'properties' | 'outline' | 'history'>('properties')
   const [isPresentationMode, setIsPresentationMode] = useState(false)
   const [presentationFrameId, setPresentationFrameId] = useState<string | undefined>(undefined)
   const [darkMode, setDarkMode] = useState(() => {
@@ -97,6 +191,7 @@ export default function App() {
 
   // Workspaces (Spaces) management
   const spaces = useLiveQuery(() => db.spaces.toArray()) ?? []
+  const workspaces = useLiveQuery(() => db.workspaces.toArray()) ?? []
   const [currentSpaceId, setCurrentSpaceId] = useState<string>(() => {
     return localStorage.getItem('seven_note_active_space_id') || DEFAULT_SPACE_ID
   })
@@ -108,7 +203,6 @@ export default function App() {
   const [isTrashOpen, setIsTrashOpen] = useState(false)
   const [isShareOpen, setIsShareOpen] = useState(false)
   const [isTemplatesOpen, setIsTemplatesOpen] = useState(false)
-  const [isAIOpen, setIsAIOpen] = useState(false)
   const [isAllDocsOpen, setIsAllDocsOpen] = useState(false)
   const [isImportOpen, setIsImportOpen] = useState(false)
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false)
@@ -120,27 +214,124 @@ export default function App() {
   const [activeDropdown, setActiveDropdown] = useState<'info' | 'more' | 'export' | null>(null)
   const [focusMode, setFocusMode] = useState(false)
 
-  // Workbench tabs state
+  // Workbench tabs state (Browser-grade tab management)
   const [tabs, setTabs] = useState<WorkbenchTab[]>(() => {
     try {
       const saved = localStorage.getItem('seven_note_workbench_tabs')
       if (saved) {
         const parsed = JSON.parse(saved)
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Deduplicate on initial parse
+          const seen = new Set<string>()
+          const cleaned: WorkbenchTab[] = []
+          for (const t of parsed) {
+            const key = t.viewType && t.viewType !== 'doc' 
+              ? `view:${t.viewType}` 
+              : (t.workspaceId ? `ws:${t.workspaceId}` : `title:${t.title || 'untitled'}`)
+            if (!seen.has(key)) {
+              seen.add(key)
+              cleaned.push(t)
+            }
+          }
+          if (cleaned.length > 0) return cleaned
+        }
       }
     } catch (e) {
       // fallback
     }
-    return [{ id: 'tab-initial', workspaceId: 'untitled-workspace', pinned: false }]
+    return [{ id: 'tab-initial', workspaceId: 'ws-feature-priorities', title: 'Plan de Producto', icon: '🎯', pinned: false }]
   })
-  const [activeTabId, setActiveTabId] = useState<string>('tab-initial')
 
+  const [activeTabId, setActiveTabId] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('seven_note_workbench_active_tab')
+      if (saved) return saved
+    } catch (e) {}
+    return 'tab-initial'
+  })
+
+  // History of closed tabs for Reopening (Ctrl+Shift+T)
+  const [closedTabsHistory, setClosedTabsHistory] = useState<WorkbenchTab[]>([])
+
+  // Keep refs for event listeners so they don't capture stale closures
+  const tabsRef = useRef(tabs)
+  tabsRef.current = tabs
+  const activeTabIdRef = useRef(activeTabId)
+  activeTabIdRef.current = activeTabId
+  const closedTabsHistoryRef = useRef(closedTabsHistory)
+  closedTabsHistoryRef.current = closedTabsHistory
+
+  // Persist tabs and active tab
   useEffect(() => {
     localStorage.setItem('seven_note_workbench_tabs', JSON.stringify(tabs))
   }, [tabs])
 
+  useEffect(() => {
+    localStorage.setItem('seven_note_workbench_active_tab', activeTabId)
+  }, [activeTabId])
+
+  // Synchronize and deduplicate tabs whenever workspaces are loaded or changed
+  useEffect(() => {
+    if (workspaces.length === 0) return
+
+    setTabs((prev) => {
+      let changed = false
+      const seen = new Set<string>()
+      const sanitized: WorkbenchTab[] = []
+
+      for (const t of prev) {
+        const key = t.viewType && t.viewType !== 'doc'
+          ? `view:${t.viewType}`
+          : (t.workspaceId ? `ws:${t.workspaceId}` : `title:${t.title || 'untitled'}`)
+
+        // Eliminate duplicates
+        if (seen.has(key)) {
+          changed = true
+          continue
+        }
+        seen.add(key)
+
+        // For workspace items, resolve and sync real title, icon, and spaceId from database
+        if (t.workspaceId && (!t.viewType || t.viewType === 'doc')) {
+          const ws = workspaces.find((w) => w.id === t.workspaceId && !w.isDeleted)
+          if (!ws) {
+            changed = true
+            continue
+          }
+          const currentTitle = t.title || ''
+          const realTitle = ws.title || 'Documento sin título'
+          const realIcon = ws.icon || (ws.viewMode === 'canvas' ? '🎨' : '📄')
+          if (currentTitle !== realTitle || t.icon !== realIcon || t.spaceId !== ws.spaceId) {
+            changed = true
+            sanitized.push({
+              ...t,
+              title: realTitle,
+              icon: realIcon,
+              spaceId: ws.spaceId || t.spaceId
+            })
+            continue
+          }
+        }
+        sanitized.push(t)
+      }
+
+      // If activeTabId is not in the sanitized list, switch to the first tab
+      if (sanitized.length > 0 && !sanitized.some((t) => t.id === activeTabId)) {
+        setActiveTabId(sanitized[0].id)
+      }
+
+      return changed ? sanitized : prev
+    })
+  }, [workspaces])
+
   const selectWorkspaceWithTab = (wsId: string) => {
+    const ws = workspaces.find((w) => w.id === wsId)
+    if (ws?.spaceId && ws.spaceId !== currentSpaceId) {
+      setCurrentSpaceId(ws.spaceId)
+    }
     setCurrentWorkspaceId(wsId)
+    setViewMode(ws?.viewMode || 'doc')
+
     setTabs((prev) => {
       const existing = prev.find((t) => t.workspaceId === wsId && (!t.viewType || t.viewType === 'doc'))
       if (existing) {
@@ -151,6 +342,9 @@ export default function App() {
         id: `tab-${crypto.randomUUID()}`,
         workspaceId: wsId,
         viewType: 'doc',
+        title: ws?.title || 'Documento sin título',
+        icon: ws?.icon || (ws?.viewMode === 'canvas' ? '🎨' : '📄'),
+        spaceId: ws?.spaceId || currentSpaceId,
         pinned: false
       }
       setActiveTabId(newTab.id)
@@ -170,7 +364,7 @@ export default function App() {
       }
       const newTab: WorkbenchTab = {
         id: `tab-${viewType}`,
-        workspaceId: currentWorkspaceId || '',
+        workspaceId: '',
         viewType,
         title,
         pinned: false
@@ -184,57 +378,45 @@ export default function App() {
     const tab = tabs.find((t) => t.id === tabId)
     if (tab) {
       setActiveTabId(tabId)
-      setCurrentWorkspaceId(tab.workspaceId)
+      // 1. Special views (all-docs, knowledge-graph, trash, templates, collections, tags)
+      if (tab.viewType && tab.viewType !== 'doc') {
+        return
+      }
+
+      // 2. Regular document / canvas
+      if (tab.workspaceId) {
+        const ws = workspaces.find((w) => w.id === tab.workspaceId)
+        if (ws) {
+          if (ws.spaceId && ws.spaceId !== currentSpaceId) {
+            setCurrentSpaceId(ws.spaceId)
+          }
+          setCurrentWorkspaceId(ws.id)
+          setViewMode(ws.viewMode || 'doc')
+        } else {
+          setCurrentWorkspaceId(tab.workspaceId)
+        }
+      }
     }
   }
 
   const handleCloseTab = (tabId: string) => {
     const tabIndex = tabs.findIndex((t) => t.id === tabId)
     if (tabIndex === -1) return
+    const closingTab = tabs[tabIndex]
+
+    // Save to closed tabs history (max 20)
+    setClosedTabsHistory((prev) => [closingTab, ...prev].slice(0, 20))
 
     const remaining = tabs.filter((t) => t.id !== tabId)
     if (remaining.length === 0) {
-      const newId = crypto.randomUUID()
-      const now = Date.now()
-      db.workspaces.add({
-        id: newId,
-        parentId: null,
-        spaceId: currentSpaceId,
-        title: 'Untitled',
-        icon: '',
-        color: '#1e96eb',
-        viewMode: 'doc',
-        docContent: '<p></p>',
-        createdAt: now,
-        updatedAt: now,
-        isFavorite: false,
-        isDeleted: false,
-        syncStatus: 'pending'
-      })
-      const fallbackTab: WorkbenchTab = {
-        id: `tab-${crypto.randomUUID()}`,
-        workspaceId: newId,
-        pinned: false
-      }
-      setTabs([fallbackTab])
-      setActiveTabId(fallbackTab.id)
-      setCurrentWorkspaceId(newId)
+      handleNewTab()
     } else {
       setTabs(remaining)
       if (activeTabId === tabId) {
         const nextActive = remaining[Math.min(tabIndex, remaining.length - 1)]
-        setActiveTabId(nextActive.id)
-        setCurrentWorkspaceId(nextActive.workspaceId)
+        handleSelectTab(nextActive.id)
       }
     }
-  }
-
-  const handleCloseOtherTabs = (tabId: string) => {
-    const keep = tabs.filter((t) => t.id === tabId || t.pinned)
-    setTabs(keep)
-    setActiveTabId(tabId)
-    const activeWs = tabs.find((t) => t.id === tabId)
-    if (activeWs) setCurrentWorkspaceId(activeWs.workspaceId)
   }
 
   const handleNewTab = async () => {
@@ -245,7 +427,7 @@ export default function App() {
       parentId: null,
       spaceId: currentSpaceId,
       title: 'Untitled',
-      icon: '',
+      icon: '📄',
       color: '#1e96eb',
       viewMode: 'doc',
       docContent: '<p></p>',
@@ -253,16 +435,24 @@ export default function App() {
       updatedAt: now,
       isFavorite: false,
       isDeleted: false,
-      syncStatus: 'pending'
+      syncStatus: 'pending',
+      ownerMember: currentMember.id,
+      ownerName: currentMember.name,
+      createdBy: currentMember.name
     })
     const newTab: WorkbenchTab = {
       id: `tab-${crypto.randomUUID()}`,
       workspaceId: newId,
+      viewType: 'doc',
+      title: 'Untitled',
+      icon: '📄',
+      spaceId: currentSpaceId,
       pinned: false
     }
     setTabs((prev) => [...prev, newTab])
     setActiveTabId(newTab.id)
     setCurrentWorkspaceId(newId)
+    setViewMode('doc')
   }
 
   const handleTogglePinTab = (tabId: string) => {
@@ -271,36 +461,81 @@ export default function App() {
     )
   }
 
-  const handleDuplicateTab = async (tabId: string) => {
-    const sourceTab = tabs.find((t) => t.id === tabId)
-    if (!sourceTab) return
-    const sourceWs = await db.workspaces.get(sourceTab.workspaceId)
-    if (!sourceWs) return
-
-    const newId = crypto.randomUUID()
-    const now = Date.now()
-    await db.workspaces.add({
-      ...sourceWs,
-      id: newId,
-      title: `${sourceWs.title} (Copia)`,
-      createdAt: now,
-      updatedAt: now,
-      syncStatus: 'pending'
-    })
-
+  const handleDuplicateTab = (tabId: string) => {
+    const tab = tabs.find((t) => t.id === tabId)
+    if (!tab) return
     const newTab: WorkbenchTab = {
+      ...tab,
       id: `tab-${crypto.randomUUID()}`,
-      workspaceId: newId,
       pinned: false
     }
     setTabs((prev) => [...prev, newTab])
     setActiveTabId(newTab.id)
-    setCurrentWorkspaceId(newId)
-    toast.success('Pestaña duplicada')
+  }
+
+  const handleCloseOtherTabs = (tabId: string) => {
+    const closed = tabs.filter((t) => t.id !== tabId && !t.pinned)
+    if (closed.length > 0) {
+      setClosedTabsHistory((prev) => [...closed, ...prev].slice(0, 20))
+    }
+    setTabs((prev) => prev.filter((t) => t.id === tabId || t.pinned))
+    setActiveTabId(tabId)
+  }
+
+  const handleCloseTabsToRight = (tabId: string) => {
+    const tabIndex = tabs.findIndex((t) => t.id === tabId)
+    if (tabIndex === -1) return
+    const kept = tabs.filter((t, i) => i <= tabIndex || t.pinned)
+    const closed = tabs.filter((t, i) => i > tabIndex && !t.pinned)
+    if (closed.length > 0) {
+      setClosedTabsHistory((prev) => [...closed, ...prev].slice(0, 20))
+    }
+    setTabs(kept)
+    if (!kept.some((t) => t.id === activeTabId)) {
+      handleSelectTab(tabId)
+    }
+  }
+
+  const handleReopenClosedTab = () => {
+    if (closedTabsHistory.length === 0) return
+    const [tabToReopen, ...rest] = closedTabsHistory
+    setClosedTabsHistory(rest)
+    setTabs((prev) => {
+      if (prev.some((t) => t.id === tabToReopen.id || (tabToReopen.workspaceId && t.workspaceId === tabToReopen.workspaceId))) {
+        return prev
+      }
+      return [...prev, tabToReopen]
+    })
+    handleSelectTab(tabToReopen.id)
+    toast.info(`Pestaña "${tabToReopen.title || 'Documento'}" reabierta`)
+  }
+
+  const handleReorderTabs = (fromIndex: number, toIndex: number) => {
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return
+    setTabs((prev) => {
+      const next = [...prev]
+      const [moved] = next.splice(fromIndex, 1)
+      next.splice(toIndex, 0, moved)
+      return next
+    })
   }
 
   const [copiedLink, setCopiedLink] = useState(false)
-  const [isEditingHeaderTitle, setIsEditingHeaderTitle] = useState(false)
+  const [isEditingBoardTitle, setIsEditingBoardTitle] = useState(false)
+  const [boardTitleInput, setBoardTitleInput] = useState('')
+
+  const startEditingBoardTitle = () => {
+    setBoardTitleInput(currentWorkspace?.title === 'Untitled' ? '' : (currentWorkspace?.title || ''))
+    setIsEditingBoardTitle(true)
+  }
+
+  const commitBoardTitle = async () => {
+    setIsEditingBoardTitle(false)
+    const trimmed = boardTitleInput.trim() || 'Untitled'
+    if (trimmed !== currentWorkspace?.title) {
+      await handleTitleChange(trimmed)
+    }
+  }
 
   // Close menus on outside click
   useEffect(() => {
@@ -311,9 +546,6 @@ export default function App() {
 
   // Sync engine status
   const [syncStatus, setSyncStatus] = useState<SyncEngineStatus>(syncEngine.getStatus())
-
-  // Reactive DB queries
-  const workspaces = useLiveQuery(() => db.workspaces.toArray()) ?? []
 
   // Initialize DB and subscribe to sync
   useEffect(() => {
@@ -439,9 +671,11 @@ export default function App() {
     }
   }, [spaces, currentSpaceId])
 
-  // Select active workspace items belonging to current space
+  // Select active workspace items belonging to current space and visible to currentMember
   const currentSpaceWorkspaces = workspaces.filter(
-    (w) => (w.spaceId || DEFAULT_SPACE_ID) === currentSpaceId
+    (w) =>
+      (w.spaceId || DEFAULT_SPACE_ID) === currentSpaceId &&
+      (!w.isPrivate || w.ownerMember === currentMember.id)
   )
   const activeWorkspaces = currentSpaceWorkspaces.filter((w) => !w.isDeleted)
   const currentWorkspace: WorkspaceItem | undefined =
@@ -475,7 +709,10 @@ export default function App() {
         updatedAt: now,
         isFavorite: false,
         isDeleted: false,
-        syncStatus: 'pending'
+        syncStatus: 'pending',
+        ownerMember: currentMember.id,
+        ownerName: currentMember.name,
+        createdBy: currentMember.name
       })
       setCurrentWorkspaceId(newPageId)
     }
@@ -533,6 +770,19 @@ export default function App() {
         updatedAt: Date.now(),
         syncStatus: 'pending'
       })
+      const docFrame = await db.canvasNodes.get(`docframe-${currentWorkspace.id}`)
+      if (docFrame) {
+        await db.canvasNodes.update(`docframe-${currentWorkspace.id}`, {
+          data: { ...docFrame.data, title: newTitle },
+          updatedAt: Date.now(),
+          syncStatus: 'pending'
+        })
+      }
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.workspaceId === currentWorkspace.id ? { ...t, title: newTitle } : t
+        )
+      )
       syncEngine.scheduleSync(1500)
     } catch (e) {
       console.error('Error changing title', e)
@@ -552,77 +802,6 @@ export default function App() {
     } catch (e) {
       console.error('Error toggling favorite', e)
     }
-  }
-
-  // Handle Daily Journal creation or navigation
-  const handleOpenDailyJournal = async () => {
-    const todayStr = new Date().toLocaleDateString('es-ES', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    })
-    const journalTitle = `Diario: ${todayStr}`
-
-    // Check if journal for today exists in current space
-    const existing = activeWorkspaces.find(
-      (w) => w.isJournal && (w.title === journalTitle || w.journalDate === todayStr)
-    )
-
-    if (existing) {
-      setCurrentWorkspaceId(existing.id)
-      return
-    }
-
-    // Create new daily journal note
-    const newId = crypto.randomUUID()
-    const now = Date.now()
-    const journalDoc = `
-      <h1>📅 Diario: ${todayStr}</h1>
-      <p><em>"Cada día es una nueva oportunidad para avanzar y aprender."</em></p>
-      
-      <h3>🎯 Enfoque Principal</h3>
-      <ul data-type="taskList">
-        <li data-checked="false"><label><input type="checkbox"><span></span></label><div>Meta prioritaria del día: </div></li>
-        <li data-checked="false"><label><input type="checkbox"><span></span></label><div>Reuniones o entregas pendientes: </div></li>
-      </ul>
-
-      <h3>💡 Notas & Reflexiones</h3>
-      <p>Anota ideas clave, bloqueos o soluciones encontradas hoy...</p>
-    `
-
-    await db.workspaces.add({
-      id: newId,
-      parentId: null,
-      spaceId: currentSpaceId,
-      folder: 'First Folder',
-      title: journalTitle,
-      icon: '📅',
-      color: '#0ea5e9',
-      viewMode: 'canvas',
-      docContent: journalDoc,
-      createdAt: now,
-      updatedAt: now,
-      isFavorite: false,
-      isDeleted: false,
-      syncStatus: 'pending',
-      isJournal: true,
-      journalDate: todayStr,
-      activeProperties: ['tags', 'isJournal', 'createdAt', 'updatedAt']
-    })
-    syncEngine.scheduleSync(1000)
-    setCurrentWorkspaceId(newId)
-  }
-
-  // Insert AI generated content
-  const handleInsertAIContent = async (aiContent: string) => {
-    if (!currentWorkspace) return
-    const appended = `${currentWorkspace.docContent}<br/>${aiContent}`
-    await db.workspaces.update(currentWorkspace.id, {
-      docContent: appended,
-      updatedAt: Date.now(),
-      syncStatus: 'pending'
-    })
-    syncEngine.scheduleSync(1000)
   }
 
   // Apply template (Supports both Edgeless Canvas and Document templates)
@@ -728,78 +907,64 @@ export default function App() {
     return { words, chars, time }
   }
 
-  // Handle Calendar Date Jump or Creation for Daily Journal
-  const handleSelectJournalDate = async (date: Date) => {
-    const dateStr = date.toLocaleDateString('es-ES', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric'
-    })
-    const journalTitle = `Diario: ${dateStr}`
-
-    const existing = workspaces.find(
-      (w) =>
-        !w.isDeleted &&
-        (w.spaceId || DEFAULT_SPACE_ID) === currentSpaceId &&
-        (w.title === journalTitle || w.journalDate === dateStr)
-    )
-
-    if (existing) {
-      selectWorkspaceWithTab(existing.id)
-      return
-    }
-
-    const newId = crypto.randomUUID()
-    const now = Date.now()
-    const journalDoc = `
-      <h1>📅 Diario: ${dateStr}</h1>
-      <p><em>"Cada día es una nueva oportunidad para avanzar y aprender."</em></p>
-      
-      <h3>🎯 Enfoque Principal</h3>
-      <ul data-type="taskList">
-        <li data-checked="false"><label><input type="checkbox"><span></span></label><div>Meta prioritaria del día: </div></li>
-        <li data-checked="false"><label><input type="checkbox"><span></span></label><div>Reuniones o notas clave: </div></li>
-      </ul>
-
-      <h3>💡 Notas & Reflexiones</h3>
-      <p>Anota ideas, descubrimientos o reflexiones del día...</p>
-    `
-
-    await db.workspaces.add({
-      id: newId,
-      parentId: null,
-      spaceId: currentSpaceId,
-      folder: 'First Folder',
-      title: journalTitle,
-      icon: '📅',
-      color: '#0ea5e9',
-      viewMode: 'doc',
-      docContent: journalDoc,
-      createdAt: now,
-      updatedAt: now,
-      isFavorite: false,
-      isDeleted: false,
-      syncStatus: 'pending',
-      isJournal: true,
-      journalDate: dateStr,
-      activeProperties: ['tags', 'isJournal', 'createdAt', 'updatedAt']
-    })
-
-    selectWorkspaceWithTab(newId)
-    toast.success(`Diario para ${dateStr} abierto`)
-  }
-
   const stats = getStats()
   const activeTab = tabs.find((t) => t.id === activeTabId)
-  const activeViewMode: ViewMode = currentWorkspace?.viewMode || 'canvas'
+  const activeViewMode: ViewMode = currentWorkspace?.viewMode || 'doc'
+
+  // Pantalla de carga mientras se verifica la sesión
+  if (authLoading) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-[#fbfbfa] dark:bg-[#121214] text-neutral-900 dark:text-neutral-100 font-sans">
+        <div className="flex flex-col items-center gap-3 animate-in fade-in duration-200">
+          <div className="w-12 h-12 rounded-2xl bg-neutral-900 dark:bg-white flex items-center justify-center text-white dark:text-neutral-900 font-black text-xl shadow-lg">
+            7
+          </div>
+          <div className="text-xs text-neutral-400 font-medium">Cargando Seven Note...</div>
+        </div>
+      </div>
+    )
+  }
+
+  // Auth Gate: Bloqueo total de la web si no hay sesión iniciada
+  if (!authUser && !guestMode) {
+    return (
+      <div className="relative flex h-screen w-screen items-center justify-center bg-[#f8f9fa] dark:bg-[#121214] text-neutral-900 dark:text-neutral-100 font-sans select-none overflow-hidden">
+        <Toaster position="top-right" richColors closeButton />
+        <AuthModal
+          isOpen={true}
+          canDismiss={false}
+          initialMode={authModalMode}
+          onClose={() => {}}
+          onAuthSuccess={(member) => {
+            setCurrentMemberState(member)
+          }}
+          onContinueAsGuest={() => {
+            setGuestMode(true)
+            localStorage.setItem('seven_note_guest_mode', 'true')
+            toast.info('Accediendo en modo local / sin conexión')
+          }}
+        />
+      </div>
+    )
+  }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] font-sans">
+    <div className="relative flex h-screen w-screen overflow-hidden bg-[#fbfbfa] dark:bg-[#121214] text-[var(--app-text-primary)] font-sans select-none">
       {/* 1. Left Sidebar Navigation */}
       {sidebarOpen && !isPresentationMode && !focusMode && (
         <Sidebar
           spaces={spaces}
           currentSpaceId={currentSpaceId}
+          currentMember={currentMember}
+          onSelectMember={handleSelectMember}
+          authUser={authUser}
+          onOpenAuthModal={() => {
+            setAuthModalMode('login')
+            setIsAuthModalOpen(true)
+          }}
+          onOpenProfileModal={() => setIsProfileModalOpen(true)}
+          onOpenUserManagementModal={() => setIsUserManagementModalOpen(true)}
+          onSignOut={handleSignOut}
           onSelectSpace={handleSelectSpace}
           onOpenCreateSpace={() => setIsCreateWorkspaceOpen(true)}
           onRenameSpace={handleRenameSpace}
@@ -811,8 +976,6 @@ export default function App() {
           onOpenSettings={() => setIsSettingsOpen(true)}
           onOpenSearch={() => setIsSearchOpen(true)}
           onOpenAllDocs={() => openSpecialViewTab('all-docs', 'Todos los documentos')}
-          onOpenDailyJournal={handleOpenDailyJournal}
-          onSelectJournalDate={handleSelectJournalDate}
           onOpenTrash={() => openSpecialViewTab('trash', 'Papelera')}
           onOpenImport={() => setIsImportOpen(true)}
           onOpenTemplates={() => openSpecialViewTab('templates', 'Plantillas')}
@@ -830,7 +993,7 @@ export default function App() {
       )}
 
       {/* 2. Main Content Center Column */}
-      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-[var(--affine-background-primary-color)]">
+      <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-transparent">
         {/* Top Workbench Tabs Header */}
         {!isPresentationMode && !focusMode && (
           <WorkbenchTabs
@@ -839,99 +1002,74 @@ export default function App() {
             workspaces={activeWorkspaces}
             onSelectTab={handleSelectTab}
             onCloseTab={handleCloseTab}
-            onCloseOtherTabs={handleCloseOtherTabs}
             onNewTab={handleNewTab}
             onTogglePinTab={handleTogglePinTab}
             onDuplicateTab={handleDuplicateTab}
+            onCloseOtherTabs={handleCloseOtherTabs}
+            onCloseTabsToRight={handleCloseTabsToRight}
+            onReopenClosedTab={handleReopenClosedTab}
+            onReorderTabs={handleReorderTabs}
           />
         )}
-        {/* Top Header Bar (Notion & Milanote Clean Human-Crafted Aesthetic) */}
-        {!isPresentationMode && !focusMode && (!activeTab || !activeTab.viewType || activeTab.viewType === 'doc') && (
-          <header className="relative h-11 border-b border-[var(--app-border)] bg-[var(--app-bg-primary)] px-3 flex items-center justify-between shrink-0 z-[60] select-none text-sm transition-colors duration-150">
+
+        {/* Secondary Header for Document/Split Mode: Notion & Milanote Clean Human-Crafted Tactile Aesthetic */}
+        {!isPresentationMode && !focusMode && (!activeTab || !activeTab.viewType || activeTab.viewType === 'doc') && currentWorkspace && (
+          <header className="relative h-11 border-b border-black/[0.04] dark:border-white/[0.06] bg-[#fbfbfa]/80 dark:bg-[#161619]/80 backdrop-blur-md px-4 flex items-center justify-between shrink-0 z-15 select-none text-xs transition-colors duration-150">
             {/* Left section: Sidebar toggle, Mode Switcher [ Page | Edgeless ], Title, Favorite, Info, More */}
             <div className="flex items-center gap-2 min-w-0">
-              {/* Sidebar Toggle */}
-              <button
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="p-1.5 rounded-md text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition"
-                title={sidebarOpen ? 'Ocultar barra lateral (Ctrl+\\)' : 'Mostrar barra lateral (Ctrl+\\)'}
-              >
-                <SidebarIcon className="w-4.5 h-4.5" />
-              </button>
+              {/* Sidebar Toggle (if collapsed) */}
+              {!sidebarOpen && (
+                <button
+                  onClick={() => setSidebarOpen(true)}
+                  className="w-7 h-7 rounded-full bg-white/70 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 border border-black/5 dark:border-white/10 flex items-center justify-center text-neutral-600 dark:text-neutral-300 transition shadow-2xs cursor-pointer active:scale-95"
+                  title="Mostrar barra lateral (Ctrl+\)"
+                >
+                  <SidebarSimple size={15} weight="duotone" />
+                </button>
+              )}
 
               {/* Notion Segmented Mode Switcher */}
-              <div className="inline-flex items-center bg-[var(--app-hover)] p-0.5 rounded-md border border-[var(--app-border)]">
+              <div className="inline-flex items-center bg-white/60 dark:bg-white/10 backdrop-blur-md p-0.5 rounded-full border border-black/5 dark:border-white/10 shadow-2xs">
                 <button
                   onClick={() => setViewMode('doc')}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] text-xs transition ${
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs transition active:scale-95 cursor-pointer ${
                     activeViewMode === 'doc'
-                      ? 'bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] shadow-xs font-semibold'
-                      : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)]'
+                      ? 'bg-white dark:bg-[#28292d] text-neutral-900 dark:text-white shadow-2xs font-semibold'
+                      : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
                   }`}
                   title="Modo Página / Documento (Alt+S)"
                 >
-                  <PageIcon className="w-3.5 h-3.5" />
+                  <FileText size={14} weight="duotone" />
                   <span className="hidden sm:inline font-medium">Página</span>
                 </button>
                 <button
                   onClick={() => setViewMode('canvas')}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-[5px] text-xs transition ${
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs transition active:scale-95 cursor-pointer ${
                     activeViewMode === 'canvas'
-                      ? 'bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] shadow-xs font-semibold'
-                      : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)]'
+                      ? 'bg-white dark:bg-[#28292d] text-neutral-900 dark:text-white shadow-2xs font-semibold'
+                      : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
                   }`}
                   title="Modo Tablero de Tarjetas (Milanote)"
                 >
-                  <EdgelessIcon className="w-3.5 h-3.5" />
+                  <Kanban size={14} weight="duotone" />
                   <span className="hidden sm:inline font-medium">Tablero</span>
                 </button>
-              </div>
-
-              {/* Document Icon & Title synced (Inline editable like Notion) */}
-              <div className="flex items-center gap-1.5 min-w-0 max-w-[180px] sm:max-w-[300px]">
-                {currentWorkspace?.icon ? (
-                  <span className="text-sm shrink-0">{currentWorkspace.icon}</span>
-                ) : (
-                  <span className="text-[var(--app-text-secondary)] shrink-0">
-                    {activeViewMode === 'canvas' ? (
-                      <EdgelessIcon className="w-4 h-4" />
-                    ) : (
-                      <PageIcon className="w-4 h-4" />
-                    )}
-                  </span>
-                )}
-                {isEditingHeaderTitle ? (
-                  <input
-                    type="text"
-                    value={currentWorkspace?.title === 'Untitled' ? '' : (currentWorkspace?.title || '')}
-                    onChange={(e) => handleTitleChange(e.target.value || 'Untitled')}
-                    onBlur={() => setIsEditingHeaderTitle(false)}
-                    onKeyDown={(e) => e.key === 'Enter' && setIsEditingHeaderTitle(false)}
-                    autoFocus
-                    placeholder="Untitled"
-                    className="font-medium text-xs text-[var(--app-text-primary)] bg-[var(--app-bg-primary)] px-1.5 py-0.5 rounded border border-[var(--app-accent)] outline-none w-full"
-                  />
-                ) : (
-                  <span
-                    onClick={() => setIsEditingHeaderTitle(true)}
-                    className="font-medium text-xs text-[var(--app-text-primary)] truncate cursor-pointer hover:bg-[var(--app-hover)] px-1.5 py-0.5 rounded transition"
-                    title="Haz clic para renombrar documento"
-                  >
-                    {currentWorkspace?.title || 'Untitled'}
-                  </span>
-                )}
               </div>
 
               {/* Star Favorite Button */}
               <button
                 onClick={handleToggleFavorite}
-                className="p-1.5 rounded-md hover:bg-[var(--app-hover)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] transition"
+                className={`w-7 h-7 rounded-full bg-white/70 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 border border-black/5 dark:border-white/10 flex items-center justify-center transition shadow-2xs cursor-pointer active:scale-95 ${
+                  currentWorkspace?.isFavorite
+                    ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-xs'
+                    : 'text-neutral-600 dark:text-neutral-300'
+                }`}
                 title={currentWorkspace?.isFavorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
               >
                 {currentWorkspace?.isFavorite ? (
-                  <FavoritedIcon className="w-4.5 h-4.5 text-amber-500" />
+                  <Star size={15} weight="fill" className="text-amber-500" />
                 ) : (
-                  <FavoriteIcon className="w-4.5 h-4.5" />
+                  <Star size={15} weight="duotone" />
                 )}
               </button>
 
@@ -942,37 +1080,39 @@ export default function App() {
                     e.stopPropagation()
                     setActiveDropdown(activeDropdown === 'info' ? null : 'info')
                   }}
-                  className="p-1.5 rounded-md hover:bg-[var(--app-hover)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] transition"
+                  className={`w-7 h-7 rounded-full bg-white/70 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 border border-black/5 dark:border-white/10 flex items-center justify-center text-neutral-600 dark:text-neutral-300 transition shadow-2xs cursor-pointer active:scale-95 ${
+                    activeDropdown === 'info' ? 'bg-white dark:bg-[#28292d] shadow-xs' : ''
+                  }`}
                   title="Información del documento"
                 >
-                  <InfoIcon className="w-4.5 h-4.5" />
+                  <Info size={15} weight="duotone" />
                 </button>
 
                 {activeDropdown === 'info' && (
                   <div
-                    className="absolute left-0 top-9 z-50 w-72 bg-[var(--app-bg-overlay)] border border-[var(--app-border)] rounded-lg shadow-[var(--app-shadow-popover)] p-3 text-xs text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 duration-100"
+                    className="absolute left-0 top-10 z-50 w-72 bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] rounded-3xl shadow-2xl backdrop-blur-2xl p-4 text-xs text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 duration-100"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <div className="font-semibold pb-2 border-b border-[var(--app-divider)] mb-2 flex items-center justify-between">
+                    <div className="font-bold pb-2.5 border-b border-black/[0.06] dark:border-white/[0.08] mb-2.5 flex items-center justify-between">
                       <span className="text-xs font-semibold">Estadísticas de la página</span>
-                      <span className="text-[10px] text-[var(--app-text-muted)] uppercase font-mono">Info</span>
+                      <span className="text-[10px] text-neutral-400 uppercase font-mono px-2 py-0.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06]">Info</span>
                     </div>
-                    <div className="space-y-1.5 text-xs">
+                    <div className="space-y-2 text-xs">
                       <div className="flex justify-between">
-                        <span className="text-[var(--app-text-secondary)]">Palabras:</span>
-                        <span className="font-mono font-medium">{stats.words}</span>
+                        <span className="text-neutral-500">Palabras:</span>
+                        <span className="font-mono font-semibold">{stats.words}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-[var(--app-text-secondary)]">Caracteres:</span>
-                        <span className="font-mono font-medium">{stats.chars}</span>
+                        <span className="text-neutral-500">Caracteres:</span>
+                        <span className="font-mono font-semibold">{stats.chars}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-[var(--app-text-secondary)]">Tiempo de lectura:</span>
-                        <span className="font-mono font-medium">~{stats.time} min</span>
+                        <span className="text-neutral-500">Tiempo de lectura:</span>
+                        <span className="font-mono font-semibold">~{stats.time} min</span>
                       </div>
-                      <div className="flex justify-between pt-1 border-t border-[var(--app-divider)]">
-                        <span className="text-[var(--app-text-secondary)]">Modo:</span>
-                        <span className="capitalize font-semibold text-[var(--app-accent)]">{currentWorkspace?.viewMode}</span>
+                      <div className="flex justify-between pt-2 border-t border-black/[0.06] dark:border-white/[0.08]">
+                        <span className="text-neutral-500">Modo:</span>
+                        <span className="capitalize font-semibold text-blue-500">{currentWorkspace?.viewMode}</span>
                       </div>
                     </div>
                   </div>
@@ -986,15 +1126,17 @@ export default function App() {
                     e.stopPropagation()
                     setActiveDropdown(activeDropdown === 'more' ? null : 'more')
                   }}
-                  className="p-1.5 rounded-md hover:bg-[var(--app-hover)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] transition"
+                  className={`w-7 h-7 rounded-full bg-white/70 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 border border-black/5 dark:border-white/10 flex items-center justify-center text-neutral-600 dark:text-neutral-300 transition shadow-2xs cursor-pointer active:scale-95 ${
+                    activeDropdown === 'more' ? 'bg-white dark:bg-[#28292d] shadow-xs' : ''
+                  }`}
                   title="Más acciones"
                 >
-                  <MoreHorizontalIcon className="w-4.5 h-4.5" />
+                  <DotsThree size={18} weight="bold" />
                 </button>
 
                 {activeDropdown === 'more' && (
                   <div
-                    className="absolute left-0 top-10 z-50 w-60 bg-[var(--affine-background-overlay-panel-color)] border border-[var(--affine-border-color)] rounded-xl shadow-[var(--affine-menu-shadow)] py-1.5 text-xs text-[var(--affine-text-primary-color)] animate-in fade-in zoom-in-95 duration-100"
+                    className="absolute left-0 top-10 z-50 w-64 bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] rounded-3xl shadow-2xl backdrop-blur-2xl p-2.5 text-xs text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 duration-100 space-y-0.5"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button
@@ -1002,9 +1144,9 @@ export default function App() {
                         setViewMode('doc')
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center gap-2.5 text-sm"
+                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 text-xs font-medium transition active:scale-[0.98] cursor-pointer"
                     >
-                      <PageIcon className="w-4.5 h-4.5 text-[var(--affine-primary-color)]" />
+                      <FileText size={16} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
                       <span>Modo Página</span>
                     </button>
 
@@ -1013,9 +1155,9 @@ export default function App() {
                         setViewMode('canvas')
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center gap-2.5 text-sm"
+                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 text-xs font-medium transition active:scale-[0.98] cursor-pointer"
                     >
-                      <EdgelessIcon className="w-4.5 h-4.5 text-[var(--affine-primary-color)]" />
+                      <Kanban size={16} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
                       <span>Modo Tablero (Milanote)</span>
                     </button>
 
@@ -1024,9 +1166,9 @@ export default function App() {
                         setViewMode(activeViewMode === 'split' ? 'doc' : 'split')
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center gap-2.5 text-sm"
+                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 text-xs font-medium transition active:scale-[0.98] cursor-pointer"
                     >
-                      <SplitViewIcon className="w-4.5 h-4.5" />
+                      <Columns size={16} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
                       <span>{activeViewMode === 'split' ? 'Cerrar vista dividida' : 'Vista dividida'}</span>
                     </button>
 
@@ -1035,13 +1177,13 @@ export default function App() {
                         openSpecialViewTab('knowledge-graph', 'Grafo de Conocimiento')
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center justify-between text-sm"
+                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center justify-between text-xs font-medium transition active:scale-[0.98] cursor-pointer"
                     >
                       <div className="flex items-center gap-2.5">
-                        <span className="text-indigo-400">🌐</span>
+                        <Graph size={16} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
                         <span>Grafo Global de Conocimiento</span>
                       </div>
-                      <span className="text-[10px] text-indigo-400 font-mono">Obsidian</span>
+                      <span className="text-[10px] text-neutral-500 font-mono px-2 py-0.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06]">Obsidian</span>
                     </button>
 
                     <button
@@ -1049,13 +1191,13 @@ export default function App() {
                         setIsFindInPageOpen(true)
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center justify-between text-sm"
+                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center justify-between text-xs font-medium transition active:scale-[0.98] cursor-pointer"
                     >
                       <div className="flex items-center gap-2.5">
-                        <SearchIcon className="w-4.5 h-4.5 text-[var(--affine-primary-color)]" />
+                        <MagnifyingGlass size={16} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
                         <span>Buscar en página</span>
                       </div>
-                      <kbd className="text-[10px] bg-[var(--affine-background-tertiary-color)] px-1.5 py-0.5 rounded text-[var(--affine-text-secondary-color)] border border-[var(--affine-border-color)]">
+                      <kbd className="text-[10px] bg-black/[0.04] dark:bg-white/[0.06] px-2 py-0.5 rounded-full text-neutral-400 border border-black/[0.04] dark:border-white/[0.06]">
                         Ctrl F
                       </kbd>
                     </button>
@@ -1068,16 +1210,16 @@ export default function App() {
                         setTimeout(() => setCopiedLink(false), 2000)
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center gap-2.5 text-sm"
+                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 text-xs font-medium transition active:scale-[0.98] cursor-pointer"
                     >
-                      <CopyIcon className="w-4.5 h-4.5" />
+                      <Copy size={16} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
                       <span>{copiedLink ? '¡Enlace copiado!' : 'Copiar enlace a nota'}</span>
                     </button>
 
-                    <div className="border-t border-[var(--affine-divider-color)] my-1" />
+                    <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-1" />
 
                     {/* Export suite */}
-                    <div className="px-3.5 py-1 text-[11px] font-semibold text-[var(--affine-text-secondary-color)] uppercase">
+                    <div className="px-3 py-1 text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
                       Exportar
                     </div>
 
@@ -1086,9 +1228,9 @@ export default function App() {
                         if (currentWorkspace) exportDocumentAsMarkdown(currentWorkspace)
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center gap-2.5 text-sm"
+                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 text-xs font-medium transition active:scale-[0.98] cursor-pointer"
                     >
-                      <DownloadIcon className="w-4.5 h-4.5" />
+                      <DownloadSimple size={16} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
                       <span>Exportar como Markdown (.md)</span>
                     </button>
 
@@ -1097,9 +1239,9 @@ export default function App() {
                         if (currentWorkspace) exportDocumentAsHtml(currentWorkspace)
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center gap-2.5 text-sm"
+                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 text-xs font-medium transition active:scale-[0.98] cursor-pointer"
                     >
-                      <DownloadIcon className="w-4.5 h-4.5" />
+                      <FileHtml size={16} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
                       <span>Exportar como HTML (.html)</span>
                     </button>
 
@@ -1111,9 +1253,9 @@ export default function App() {
                         }
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center gap-2.5 text-sm"
+                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 text-xs font-medium transition active:scale-[0.98] cursor-pointer"
                     >
-                      <DownloadIcon className="w-4.5 h-4.5" />
+                      <FileCode size={16} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
                       <span>Exportar copia JSON (.json)</span>
                     </button>
 
@@ -1122,22 +1264,22 @@ export default function App() {
                         if (currentWorkspace) copyAsPlainText(currentWorkspace.docContent)
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center gap-2.5 text-sm"
+                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 text-xs font-medium transition active:scale-[0.98] cursor-pointer"
                     >
-                      <CopyIcon className="w-4.5 h-4.5" />
+                      <Copy size={16} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
                       <span>Copiar como texto plano</span>
                     </button>
 
-                    <div className="border-t border-[var(--affine-divider-color)] my-1" />
+                    <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-1" />
 
                     {/* Quick Scale controls in More Menu */}
-                    <div className="px-3.5 py-1.5 text-[11px] font-semibold text-[var(--affine-text-secondary-color)] uppercase">
+                    <div className="px-3 py-1 text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
                       Escala de interfaz: {uiScale}%
                     </div>
-                    <div className="flex items-center gap-1 px-3 pb-1">
+                    <div className="flex items-center gap-1.5 px-2 pb-1">
                       <button
                         onClick={() => handleStepUiScale(-1)}
-                        className="flex-1 py-1 px-2 rounded-lg bg-[var(--affine-hover-color)] hover:bg-[var(--affine-hover-color-filled)] text-xs font-semibold text-center transition"
+                        className="flex-1 py-1 px-2 rounded-full bg-black/[0.04] dark:bg-white/[0.06] hover:bg-black/[0.08] dark:hover:bg-white/[0.12] text-xs font-semibold text-center transition cursor-pointer active:scale-95"
                       >
                         - Reducir
                       </button>
@@ -1146,35 +1288,35 @@ export default function App() {
                           setUiScale('100')
                           toast.info('Escala restablecida al 100%')
                         }}
-                        className="py-1 px-2 rounded-lg bg-[var(--affine-hover-color)] hover:bg-[var(--affine-hover-color-filled)] text-xs font-mono font-semibold transition"
+                        className="py-1 px-2.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06] hover:bg-black/[0.08] dark:hover:bg-white/[0.12] text-xs font-mono font-semibold transition cursor-pointer active:scale-95"
                       >
                         100%
                       </button>
                       <button
                         onClick={() => handleStepUiScale(1)}
-                        className="flex-1 py-1 px-2 rounded-lg bg-[var(--affine-hover-color)] hover:bg-[var(--affine-hover-color-filled)] text-xs font-semibold text-center transition"
+                        className="flex-1 py-1 px-2 rounded-full bg-black/[0.04] dark:bg-white/[0.06] hover:bg-black/[0.08] dark:hover:bg-white/[0.12] text-xs font-semibold text-center transition cursor-pointer active:scale-95"
                       >
                         + Aumentar
                       </button>
                     </div>
 
-                    <div className="border-t border-[var(--affine-divider-color)] my-1" />
+                    <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-1" />
 
                     <button
                       onClick={() => {
                         setIsShortcutsOpen(true)
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-[var(--affine-hover-color)] flex items-center justify-between text-sm"
+                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center justify-between text-xs font-medium transition active:scale-[0.98] cursor-pointer"
                     >
                       <div className="flex items-center gap-2.5">
-                        <KeyboardIcon className="w-4.5 h-4.5 text-[var(--affine-primary-color)]" />
+                        <Keyboard size={16} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
                         <span>Atajos de teclado</span>
                       </div>
-                      <kbd className="text-[10px] bg-[var(--affine-background-tertiary-color)] px-1.5 py-0.5 rounded text-[var(--affine-text-secondary-color)] border border-[var(--affine-border-color)]">?</kbd>
+                      <kbd className="text-[10px] bg-black/[0.04] dark:bg-white/[0.06] px-2 py-0.5 rounded-full text-neutral-400 border border-black/[0.04] dark:border-white/[0.06]">?</kbd>
                     </button>
 
-                    <div className="border-t border-[var(--affine-divider-color)] my-1" />
+                    <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-1" />
 
                     <button
                       onClick={() => {
@@ -1186,9 +1328,9 @@ export default function App() {
                         }
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3.5 py-2 hover:bg-rose-500/10 text-rose-500 flex items-center gap-2.5 text-sm"
+                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-rose-500/10 text-rose-500 flex items-center gap-2.5 text-xs font-semibold transition active:scale-[0.98] cursor-pointer"
                     >
-                      <DeleteIcon className="w-4.5 h-4.5" />
+                      <Trash size={16} weight="duotone" className="text-rose-500" />
                       <span>Eliminar página</span>
                     </button>
                   </div>
@@ -1196,37 +1338,45 @@ export default function App() {
               </div>
             </div>
 
-            {/* Center: Milanote Iconic Centered Editorial Serif Title */}
-            <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center pointer-events-auto z-10">
-              {isEditingHeaderTitle ? (
-                <input
-                  type="text"
-                  value={currentWorkspace?.title === 'Untitled' ? '' : (currentWorkspace?.title || '')}
-                  onChange={(e) => handleTitleChange(e.target.value || 'Untitled')}
-                  onBlur={() => setIsEditingHeaderTitle(false)}
-                  onKeyDown={(e) => e.key === 'Enter' && setIsEditingHeaderTitle(false)}
-                  autoFocus
-                  placeholder="Título del tablero..."
-                  className="font-serif font-bold text-base md:text-lg text-center text-[var(--app-text-primary)] bg-[var(--app-bg-primary)] px-2 py-0.5 rounded border border-[var(--app-accent)] outline-none min-w-[200px]"
-                />
-              ) : (
-                <h1
-                  onClick={() => setIsEditingHeaderTitle(true)}
-                  className="font-serif font-bold text-base md:text-lg text-[var(--app-text-primary)] hover:opacity-75 transition cursor-pointer select-none tracking-tight text-center truncate max-w-[220px] md:max-w-[400px]"
-                  title="Haz clic para renombrar tablero"
-                >
-                  {currentWorkspace?.title || 'Tablero de inspiración'}
-                </h1>
-              )}
-            </div>
+            {/* Center: Board Title (touch/click to rename) */}
+            {activeViewMode === 'canvas' && (
+              <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center pointer-events-auto z-10 max-w-[50vw]">
+                {isEditingBoardTitle ? (
+                  <input
+                    type="text"
+                    value={boardTitleInput}
+                    onChange={(e) => setBoardTitleInput(e.target.value)}
+                    onBlur={commitBoardTitle}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') commitBoardTitle()
+                      if (e.key === 'Escape') setIsEditingBoardTitle(false)
+                    }}
+                    autoFocus
+                    placeholder="Título del tablero..."
+                    className="font-serif font-bold text-base md:text-lg text-center text-neutral-900 dark:text-neutral-100 bg-white dark:bg-[#28292d] px-4 py-1 rounded-full border border-black/15 dark:border-white/20 shadow-md outline-none min-w-[220px] max-w-full focus:ring-2 focus:ring-blue-500/50"
+                  />
+                ) : (
+                  <button
+                    onClick={startEditingBoardTitle}
+                    className="group flex items-center gap-2 px-3 py-1 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] transition cursor-pointer select-none tracking-tight text-center active:scale-95"
+                    title="Toca para cambiar el nombre del tablero"
+                  >
+                    <span className="font-serif font-bold text-base md:text-lg text-neutral-800 dark:text-neutral-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition truncate max-w-[250px] md:max-w-[420px]">
+                      {currentWorkspace?.title || 'Sin título'}
+                    </span>
+                    <PencilSimpleLine size={15} weight="duotone" className="text-neutral-400 group-hover:text-blue-500 opacity-0 group-hover:opacity-100 transition shrink-0" />
+                  </button>
+                )}
+              </div>
+            )}
 
-            {/* Right section: Presentation Icon, Exportar, Collabs + Compartir, and Sin clasificar */}
-            <div className="flex items-center gap-1">
+            {/* Right section: Presentation Icon, Exportar, Collabs + Compartir */}
+            <div className="flex items-center gap-1.5">
               {/* Focus mode (board only) */}
               {activeViewMode === 'canvas' && (
                 <button
                   onClick={() => setFocusMode(true)}
-                  className="h-7 px-2.5 rounded-md hover:bg-[var(--app-hover)] text-xs font-medium text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] transition select-none"
+                  className="h-7 px-3 rounded-full bg-white/70 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 border border-black/5 dark:border-white/10 text-xs font-medium text-neutral-700 dark:text-neutral-200 transition shadow-2xs cursor-pointer active:scale-95 select-none"
                   title="Ocultar herramientas y menús (solo tablero)"
                 >
                   Solo tablero
@@ -1236,10 +1386,10 @@ export default function App() {
               {/* Presentation Icon */}
               <button
                 onClick={() => setIsPresentationMode(true)}
-                className="p-1.5 rounded-md text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition"
+                className="w-7 h-7 rounded-full bg-white/70 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 border border-black/5 dark:border-white/10 flex items-center justify-center text-neutral-600 dark:text-neutral-300 transition shadow-2xs cursor-pointer active:scale-95"
                 title="Modo Presentación pantalla completa (F5)"
               >
-                <PresentationIcon className="w-4.5 h-4.5" />
+                <Presentation size={15} weight="duotone" />
               </button>
 
               {/* Milanote Exportar ⌵ Dropdown */}
@@ -1249,7 +1399,9 @@ export default function App() {
                     e.stopPropagation()
                     setActiveDropdown(activeDropdown === 'export' ? null : 'export')
                   }}
-                  className="h-7 px-2.5 rounded-md hover:bg-[var(--app-hover)] text-xs font-medium text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] flex items-center gap-1 transition select-none"
+                  className={`h-7 px-3 rounded-full bg-white/70 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 border border-black/5 dark:border-white/10 flex items-center gap-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-200 transition shadow-2xs cursor-pointer active:scale-95 select-none ${
+                    activeDropdown === 'export' ? 'bg-white dark:bg-[#28292d] shadow-xs' : ''
+                  }`}
                   title="Exportar tablero"
                 >
                   <span>Exportar</span>
@@ -1258,7 +1410,7 @@ export default function App() {
 
                 {activeDropdown === 'export' && (
                   <div
-                    className="absolute right-0 top-8 z-50 w-52 bg-white dark:bg-[#252525] border border-neutral-200 dark:border-neutral-700 rounded-xl shadow-xl py-1 text-xs text-neutral-800 dark:text-neutral-200 animate-in fade-in zoom-in-95"
+                    className="absolute right-0 top-9 z-50 w-56 bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] rounded-3xl shadow-2xl backdrop-blur-2xl p-2 text-xs text-neutral-800 dark:text-neutral-200 animate-in fade-in zoom-in-95 space-y-0.5"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button
@@ -1266,9 +1418,9 @@ export default function App() {
                         if (currentWorkspace) exportDocumentAsMarkdown(currentWorkspace)
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center gap-2"
+                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
                     >
-                      <DownloadIcon className="w-4 h-4 text-blue-500" />
+                      <DownloadSimple size={15} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
                       <span>Exportar como Markdown (.md)</span>
                     </button>
                     <button
@@ -1276,9 +1428,9 @@ export default function App() {
                         if (currentWorkspace) exportDocumentAsHtml(currentWorkspace)
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center gap-2"
+                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
                     >
-                      <DownloadIcon className="w-4 h-4 text-emerald-500" />
+                      <FileHtml size={15} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
                       <span>Exportar como HTML (.html)</span>
                     </button>
                     <button
@@ -1289,9 +1441,9 @@ export default function App() {
                         }
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3 py-1.5 hover:bg-neutral-100 dark:hover:bg-neutral-800 flex items-center gap-2"
+                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
                     >
-                      <DownloadIcon className="w-4 h-4 text-purple-500" />
+                      <FileCode size={15} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
                       <span>Exportar copia JSON (.json)</span>
                     </button>
                   </div>
@@ -1301,19 +1453,19 @@ export default function App() {
               {/* Milanote Collaborators & Compartir Button */}
               <button
                 onClick={() => setIsShareOpen(true)}
-                className="h-7 px-2.5 rounded-md hover:bg-[var(--app-hover)] text-xs font-medium text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] flex items-center gap-1.5 transition select-none"
+                className="h-7 px-3 rounded-full bg-white/70 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 border border-black/5 dark:border-white/10 text-xs font-medium text-neutral-700 dark:text-neutral-200 flex items-center gap-2 transition shadow-2xs cursor-pointer active:scale-95 select-none"
                 title="Compartir tablero con colaboradores"
               >
-                <div className="flex items-center -space-x-1">
-                  <div className="w-5 h-5 rounded-full bg-amber-500 text-white font-bold text-[9px] flex items-center justify-center border border-white dark:border-neutral-900 shadow-xs" title="Natali">
+                <div className="flex items-center -space-x-1.5">
+                  <div className="w-4.5 h-4.5 rounded-full bg-amber-500 text-white font-bold text-[9px] flex items-center justify-center ring-1 ring-white dark:ring-neutral-900 shadow-2xs" title="Natali">
                     N
                   </div>
-                  <div className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold text-[9px] flex items-center justify-center border border-white dark:border-neutral-900 shadow-xs" title="Kevin">
+                  <div className="w-4.5 h-4.5 rounded-full bg-blue-600 text-white font-bold text-[9px] flex items-center justify-center ring-1 ring-white dark:ring-neutral-900 shadow-2xs" title="Kevin">
                     K
                   </div>
                 </div>
                 <span>Compartir</span>
-                <ShareIcon className="w-3 h-3 text-neutral-400" />
+                <ShareNetwork size={14} weight="duotone" className="text-neutral-500 dark:text-neutral-400" />
               </button>
             </div>
           </header>
@@ -1349,7 +1501,10 @@ export default function App() {
                   updatedAt: now,
                   isFavorite: false,
                   isDeleted: false,
-                  syncStatus: 'pending'
+                  syncStatus: 'pending',
+                  ownerMember: currentMember.id,
+                  ownerName: currentMember.name,
+                  createdBy: currentMember.name
                 })
                 selectWorkspaceWithTab(newId)
               }}
@@ -1401,7 +1556,6 @@ export default function App() {
                   onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
                   onTitleChange={handleTitleChange}
                   onToggleViewMode={() => setViewMode('canvas')}
-                  onOpenAIModal={() => setIsAIOpen(true)}
                   onOpenTemplatesModal={() => setIsTemplatesOpen(true)}
                 />
               </div>
@@ -1434,7 +1588,6 @@ export default function App() {
                     onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
                     onTitleChange={handleTitleChange}
                     onToggleViewMode={() => setViewMode('canvas')}
-                    onOpenAIModal={() => setIsAIOpen(true)}
                     onOpenTemplatesModal={() => setIsTemplatesOpen(true)}
                   />
                 </div>
@@ -1456,7 +1609,7 @@ export default function App() {
         </main>
       </div>
 
-      {/* 3. Right Sidebar (Propiedades, Outline, AI, Historial) */}
+      {/* 3. Right Sidebar (Propiedades, Outline, Historial) */}
       {rightSidebarOpen && !isPresentationMode && activeViewMode === 'doc' && (
         <RightSidebar
           workspace={currentWorkspace}
@@ -1464,7 +1617,6 @@ export default function App() {
           onClose={() => setRightSidebarOpen(false)}
           activeTab={rightSidebarTab}
           onTabChange={(tab) => setRightSidebarTab(tab)}
-          onApplyAIContent={handleInsertAIContent}
           onScrollToHeading={handleScrollToHeading}
         />
       )}
@@ -1493,7 +1645,10 @@ export default function App() {
             updatedAt: now,
             isFavorite: false,
             isDeleted: false,
-            syncStatus: 'pending'
+            syncStatus: 'pending',
+            ownerMember: currentMember.id,
+            ownerName: currentMember.name,
+            createdBy: currentMember.name
           })
           selectWorkspaceWithTab(newId)
           toast.success('Página creada')
@@ -1507,6 +1662,31 @@ export default function App() {
         syncStatus={syncStatus}
         uiScale={uiScale}
         onUiScaleChange={setUiScale}
+      />
+
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        initialMode={authModalMode}
+        onClose={() => setIsAuthModalOpen(false)}
+        onAuthSuccess={(member) => {
+          setCurrentMemberState(member)
+        }}
+      />
+
+      <UserProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        currentMember={currentMember}
+        onProfileUpdated={(updated) => {
+          setCurrentMemberState(updated)
+        }}
+        onSignOut={handleSignOut}
+      />
+
+      <UserManagementModal
+        isOpen={isUserManagementModalOpen}
+        onClose={() => setIsUserManagementModalOpen(false)}
+        currentUserId={currentMember.id}
       />
 
       <TrashModal
@@ -1524,13 +1704,6 @@ export default function App() {
         isOpen={isTemplatesOpen}
         onClose={() => setIsTemplatesOpen(false)}
         onSelectTemplate={handleApplyTemplate}
-      />
-
-      <AIModal
-        isOpen={isAIOpen}
-        onClose={() => setIsAIOpen(false)}
-        onInsertContent={handleInsertAIContent}
-        currentTitle={currentWorkspace?.title}
       />
 
       <AllDocsModal
@@ -1555,7 +1728,10 @@ export default function App() {
             updatedAt: now,
             isFavorite: false,
             isDeleted: false,
-            syncStatus: 'pending'
+            syncStatus: 'pending',
+            ownerMember: currentMember.id,
+            ownerName: currentMember.name,
+            createdBy: currentMember.name
           })
           selectWorkspaceWithTab(newId)
         }}

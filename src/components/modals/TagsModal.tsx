@@ -18,6 +18,7 @@ import {
   deleteTag
 } from '../../db'
 import { toast } from 'sonner'
+import { AppleEmoji } from '../ui/AppleEmoji'
 
 interface TagsModalProps {
   isOpen: boolean
@@ -308,7 +309,7 @@ export function TagsModal({
                         className="flex items-center justify-between p-3 rounded-xl bg-[var(--affine-background-primary-color)] hover:bg-[var(--affine-hover-color)] cursor-pointer text-xs border border-[var(--affine-border-color)] transition group shadow-2xs"
                       >
                         <div className="flex items-center gap-2.5 truncate">
-                          <span className="text-base shrink-0">{doc.icon || '📄'}</span>
+                          <AppleEmoji emoji={doc.icon || '📄'} size={18} className="shrink-0" />
                           <div className="truncate">
                             <div className="font-semibold truncate">{doc.title || 'Untitled'}</div>
                             <div className="text-[10px] text-[var(--affine-text-secondary-color)]">

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-export type RightSidebarTab = 'properties' | 'outline' | 'ai' | 'history'
+export type RightSidebarTab = 'properties' | 'outline' | 'history'
 
 interface AppState {
   // Theme
@@ -41,9 +41,6 @@ interface AppState {
 
   isTemplatesOpen: boolean
   setTemplatesOpen: (open: boolean) => void
-
-  isAIOpen: boolean
-  setAIOpen: (open: boolean) => void
 
   isAllDocsOpen: boolean
   setAllDocsOpen: (open: boolean) => void
@@ -123,9 +120,6 @@ export const useAppStore = create<AppState>((set) => ({
 
   isTemplatesOpen: false,
   setTemplatesOpen: (open) => set({ isTemplatesOpen: open }),
-
-  isAIOpen: false,
-  setAIOpen: (open) => set({ isAIOpen: open }),
 
   isAllDocsOpen: false,
   setAllDocsOpen: (open) => set({ isAllDocsOpen: open }),

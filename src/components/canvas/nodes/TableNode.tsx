@@ -7,29 +7,29 @@ import { areNodePropsEqual } from './nodeUtils'
 
 const HEADER_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   yellow: {
-    bg: 'bg-[#ffeb7a] dark:bg-[#3a341b]',
-    text: 'text-[#49420d] dark:text-[#fef08a]',
-    border: 'border-[#f5eeaf] dark:border-[#574e22]'
+    bg: 'bg-amber-50 dark:bg-amber-950/60',
+    text: 'text-amber-800 dark:text-amber-200',
+    border: 'border-amber-200/80 dark:border-amber-800/60'
   },
   dark: {
-    bg: 'bg-[#233544] dark:bg-[#1a2530]',
-    text: 'text-neutral-100',
-    border: 'border-[#2d4255] dark:border-[#202f3d]'
+    bg: 'bg-zinc-800 dark:bg-zinc-900',
+    text: 'text-zinc-100',
+    border: 'border-zinc-700 dark:border-zinc-800'
   },
   blue: {
-    bg: 'bg-[#e0f0fd] dark:bg-[#183048]',
-    text: 'text-[#11446e] dark:text-[#bae6fd]',
-    border: 'border-[#bde0fb] dark:border-[#23496e]'
+    bg: 'bg-sky-50 dark:bg-sky-950/60',
+    text: 'text-sky-800 dark:text-sky-200',
+    border: 'border-sky-200/80 dark:border-sky-800/60'
   },
   green: {
-    bg: 'bg-[#dcf5e3] dark:bg-[#1a3424]',
-    text: 'text-[#184a25] dark:text-[#bbf7d0]',
-    border: 'border-[#b6e8c4] dark:border-[#285338]'
+    bg: 'bg-emerald-50 dark:bg-emerald-950/60',
+    text: 'text-emerald-800 dark:text-emerald-200',
+    border: 'border-emerald-200/80 dark:border-emerald-800/60'
   },
   slate: {
-    bg: 'bg-neutral-100 dark:bg-neutral-800',
-    text: 'text-neutral-800 dark:text-neutral-200',
-    border: 'border-neutral-200 dark:border-neutral-700'
+    bg: 'bg-zinc-100 dark:bg-zinc-800',
+    text: 'text-zinc-800 dark:text-zinc-200',
+    border: 'border-zinc-200 dark:border-zinc-700'
   }
 }
 
@@ -111,15 +111,43 @@ export const TableNode = memo(({ id, data, selected }: any) => {
 
   return (
     <div
-      className={`group relative min-w-[300px] max-w-[420px] rounded-lg bg-white dark:bg-[#252525] border border-neutral-200 dark:border-neutral-700/80 transition-[box-shadow,border-color] duration-150 overflow-hidden ${
+      className={`group relative min-w-[300px] max-w-[420px] rounded-lg bg-white dark:bg-[#252525] transition-[box-shadow] duration-150 overflow-hidden ${
         selected ? 'ring-2 ring-[var(--app-accent)] shadow-xl' : 'shadow-[0_2px_8px_rgba(0,0,0,0.06)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.35)]'
       }`}
     >
       {/* Handles */}
-      <Handle id="top" type="source" position={Position.Top} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
-      <Handle id="bottom" type="source" position={Position.Bottom} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
-      <Handle id="left" type="source" position={Position.Left} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
-      <Handle id="right" type="source" position={Position.Right} className="!w-2.5 !h-2.5 !bg-[var(--app-accent)] !border !border-white dark:!border-zinc-800" />
+      <Handle
+        id="top"
+        type="source"
+        position={Position.Top}
+        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
+          selected ? '!opacity-100' : ''
+        }`}
+      />
+      <Handle
+        id="bottom"
+        type="source"
+        position={Position.Bottom}
+        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
+          selected ? '!opacity-100' : ''
+        }`}
+      />
+      <Handle
+        id="left"
+        type="source"
+        position={Position.Left}
+        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
+          selected ? '!opacity-100' : ''
+        }`}
+      />
+      <Handle
+        id="right"
+        type="source"
+        position={Position.Right}
+        className={`!w-2.5 !h-2.5 !bg-zinc-400 dark:!bg-zinc-500 hover:!bg-[var(--app-accent)] !border-2 !border-white dark:!border-zinc-900 transition-all opacity-0 group-hover:opacity-100 ${
+          selected ? '!opacity-100' : ''
+        }`}
+      />
 
       {/* Floating delete button */}
       <button

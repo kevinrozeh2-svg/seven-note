@@ -1,6 +1,8 @@
 import React, { useState } from 'react'
 import { LayoutTemplate, Plus } from 'lucide-react'
 import { APP_TEMPLATES, type AppTemplate } from '../../lib/templates'
+import { AppleEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
+import { DocThumbnailPreview } from '../ui/DocThumbnailPreview'
 
 interface TemplatesPageProps {
   onSelectTemplate: (template: AppTemplate) => void
@@ -66,18 +68,25 @@ export const TemplatesPage: React.FC<TemplatesPageProps> = ({ onSelectTemplate }
               className="group p-5 rounded-xl bg-neutral-900/50 border border-neutral-800 hover:border-neutral-700 hover:bg-neutral-900/90 transition flex flex-col justify-between cursor-pointer space-y-4"
             >
               <div className="space-y-3">
+                <DocThumbnailPreview template={tpl} size="lg" className="w-full h-28 rounded-lg" />
                 <div className="flex items-center justify-between">
-                  <span className="text-2xl">{tpl.icon || '📄'}</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400 border border-neutral-700 font-medium">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    {tpl.icon && (
+                      <span className="shrink-0 flex items-center">
+                        <AppleEmoji emoji={tpl.icon} size={16} />
+                      </span>
+                    )}
+                    <h3 className="font-semibold text-sm text-neutral-100 group-hover:text-white transition truncate">
+                      {renderWithAppleEmoji(tpl.title)}
+                    </h3>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400 border border-neutral-700 font-medium shrink-0 ml-2">
                     {tpl.type === 'canvas' ? 'Lienzo' : 'Documento'}
                   </span>
                 </div>
                 <div>
-                  <h3 className="font-semibold text-sm text-neutral-100 group-hover:text-white transition">
-                    {tpl.title}
-                  </h3>
                   <p className="text-xs text-neutral-400 mt-1 line-clamp-2 leading-relaxed">
-                    {tpl.description}
+                    {renderWithAppleEmoji(tpl.description)}
                   </p>
                 </div>
               </div>

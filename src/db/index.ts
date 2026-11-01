@@ -24,6 +24,35 @@ export interface CustomPropertyItem {
   visibility: 'always_show' | 'always_hide' | 'hide_empty'
 }
 
+export type NotionDatabaseViewType = 'table' | 'board' | 'list' | 'timeline' | 'calendar' | 'gallery'
+
+export interface NotionDatabaseItem {
+  id: string
+  title: string
+  status: 'Sin empezar' | 'En progreso' | 'En revisión' | 'Completado' | string
+  priority?: 'Baja' | 'Media' | 'Alta' | 'Urgente'
+  date?: string // YYYY-MM-DD
+  endDate?: string // YYYY-MM-DD for timeline
+  tags?: string[]
+  assignee?: string
+  coverColor?: string
+  description?: string
+  completed?: boolean
+}
+
+export interface NotionDatabaseView {
+  id: string
+  name: string
+  type: NotionDatabaseViewType
+}
+
+export interface NotionDatabaseData {
+  enabled: boolean
+  activeView: NotionDatabaseViewType
+  views: NotionDatabaseView[]
+  items: NotionDatabaseItem[]
+}
+
 export interface WorkspaceItem {
   id: string
   parentId: string | null
@@ -56,6 +85,22 @@ export interface WorkspaceItem {
   propertyVisibility?: Record<string, 'always_show' | 'always_hide' | 'hide_empty'>
   activeProperties?: string[]
   customProperties?: CustomPropertyItem[]
+
+  // Modo Privado / Miembros del Equipo
+  isPrivate?: boolean
+  ownerMember?: string // 'kevin' | 'maikol' | 'marcos'
+  ownerName?: string
+
+  // Compartir mediante Enlace Externo
+  isPublicShared?: boolean
+  shareToken?: string
+  sharePermission?: 'view' | 'edit'
+
+  // Notion Database Views (Table, Board, List, Timeline, Calendar, Gallery)
+  databaseData?: NotionDatabaseData
+
+  // Canvas visual configuration
+  canvasGridVariant?: 'dots' | 'lines' | 'none'
 }
 
 export type CanvasNodeType =
@@ -71,9 +116,6 @@ export type CanvasNodeType =
   | 'frame'
   | 'mindmap'
   | 'colorPalette'
-  | 'voiceNote'
-  | 'file'
-  | 'audio'
   | 'table'
   | 'comment'
 
@@ -126,10 +168,6 @@ export interface CanvasNodeData {
   // Milanote Color Palette specific
   paletteColors?: string[]
   swatches?: any[]
-
-  // Milanote Voice Note specific
-  audioDataUrl?: string
-  audioDuration?: number
 }
 
 export interface CanvasNodeItem {
@@ -255,6 +293,16 @@ export class SevenNoteDatabase extends Dexie {
       collections: 'id, spaceId, name, createdAt, updatedAt, syncStatus',
       tags: 'id, spaceId, name, color, createdAt, syncStatus'
     })
+    this.version(5).stores({
+      workspaces: 'id, parentId, spaceId, updatedAt, isDeleted, isFavorite, syncStatus, isPrivate, ownerMember, isPublicShared, shareToken',
+      canvasNodes: 'id, workspaceId, type, updatedAt, isDeleted, syncStatus',
+      canvasEdges: 'id, workspaceId, source, target, updatedAt, isDeleted, syncStatus',
+      offlineAssets: 'id, workspaceId, createdAt, syncStatus',
+      syncLogs: 'id, timestamp, status',
+      spaces: 'id, name, createdAt, updatedAt, syncStatus',
+      collections: 'id, spaceId, name, createdAt, updatedAt, syncStatus',
+      tags: 'id, spaceId, name, color, createdAt, syncStatus'
+    })
 
     // Auto-hook: Mark any newly created or modified items as 'pending'
     const setupAutoSyncHooks = (table: Table<any, string>) => {
@@ -283,8 +331,34 @@ export class SevenNoteDatabase extends Dexie {
 
 export const db = new SevenNoteDatabase()
 
+// Purge legacy template presets that were accidentally created as real workspaces
+export async function cleanupLegacyTemplatePresets() {
+  const legacyTitles = [
+    'Tablero de inspiración',
+    'Investigación',
+    'Plano del proyecto',
+    'Tablero de inspiración (Milanote)',
+    'Investigación (Milanote)',
+    'Plano del proyecto (Milanote Dark)'
+  ]
+
+  const presetWorkspaces = await db.workspaces
+    .filter((w) => legacyTitles.includes(w.title))
+    .toArray()
+
+  if (presetWorkspaces.length > 0) {
+    for (const ws of presetWorkspaces) {
+      await db.canvasNodes.where('workspaceId').equals(ws.id).delete().catch(() => {})
+      await db.canvasEdges.where('workspaceId').equals(ws.id).delete().catch(() => {})
+      await db.workspaces.delete(ws.id).catch(() => {})
+    }
+  }
+}
+
 // Seed default initial data if database is empty
 export async function seedInitialData() {
+  await cleanupLegacyTemplatePresets()
+
   const spaceCount = await db.spaces.count()
   if (spaceCount === 0) {
     await db.spaces.add({
@@ -401,6 +475,86 @@ export async function seedInitialData() {
       docContent: '<h1>🎨 Inspiración y Paleta Visual</h1><p>Tablero visual para recopilar referencias y notas de diseño.</p>',
       createdAt: now + 1,
       updatedAt: now + 1,
+      isFavorite: false,
+      isDeleted: false,
+      syncStatus: 'pending'
+    },
+    {
+      id: 'ws-feature-priorities',
+      parentId: null,
+      spaceId: DEFAULT_SPACE_ID,
+      folder: 'First Folder',
+      title: 'Feature Priorities',
+      icon: '⚡',
+      color: '#3b82f6',
+      viewMode: 'canvas',
+      docContent: '<h2>⚡ Feature Priorities</h2><p>Prioridades de producto para la próxima versión de Seven Note.</p>',
+      createdAt: now - 120000,
+      updatedAt: now - 120000,
+      isFavorite: true,
+      isDeleted: false,
+      syncStatus: 'pending'
+    },
+    {
+      id: 'ws-sync-draft',
+      parentId: null,
+      spaceId: DEFAULT_SPACE_ID,
+      folder: 'Spring - Habit Tracker',
+      title: 'Sync Draft',
+      icon: '🔄',
+      color: '#10b981',
+      viewMode: 'doc',
+      docContent: '<h2>🔄 Sync Draft</h2><p>Mapeo de sincronización y resolución de conflictos.</p>',
+      createdAt: now - 12 * 3600 * 1000,
+      updatedAt: now - 12 * 3600 * 1000,
+      isFavorite: false,
+      isDeleted: false,
+      syncStatus: 'pending'
+    },
+    {
+      id: 'ws-spring-prd',
+      parentId: null,
+      spaceId: DEFAULT_SPACE_ID,
+      folder: 'Spring - Habit Tracker',
+      title: 'Spring - PRD',
+      icon: '🌱',
+      color: '#8b5cf6',
+      viewMode: 'doc',
+      docContent: '<h2>🌱 Spring - PRD</h2><p>Documento de requerimientos para el seguimiento de hábitos.</p>',
+      createdAt: now - 2 * 86400 * 1000,
+      updatedAt: now - 2 * 86400 * 1000,
+      isFavorite: false,
+      isDeleted: false,
+      syncStatus: 'pending'
+    },
+    {
+      id: 'ws-2026-strategy',
+      parentId: null,
+      spaceId: DEFAULT_SPACE_ID,
+      folder: 'First Folder',
+      title: '2026 Strategy',
+      icon: '🎯',
+      color: '#f59e0b',
+      viewMode: 'doc',
+      docContent: '<h2>🎯 2026 Strategy</h2><p>Estrategia de diseño, producto e identidad para el 2026.</p>',
+      createdAt: now - 4 * 86400 * 1000,
+      updatedAt: now - 4 * 86400 * 1000,
+      isFavorite: true,
+      isDeleted: false,
+      syncStatus: 'pending'
+    },
+    {
+      id: 'ws-off-menu-thoughts',
+      parentId: null,
+      spaceId: DEFAULT_SPACE_ID,
+      folder: 'Off Menu',
+      title: 'Off Menu Thoughts',
+      icon: '💭',
+      color: '#ec4899',
+      viewMode: 'doc',
+      docContent: '<h2>💭 Off Menu Thoughts</h2><p>Ideas y notas para exploraciones experimentales fuera de menú.</p>',
+      createdAt: now - 7 * 86400 * 1000,
+      updatedAt: now - 7 * 86400 * 1000,
       isFavorite: false,
       isDeleted: false,
       syncStatus: 'pending'
@@ -697,4 +851,21 @@ export async function deleteTag(id: string, spaceId: string, tagName: string): P
       await db.workspaces.update(doc.id, { tags: newTags, updatedAt: Date.now(), syncStatus: 'pending' })
     }
   }
+}
+
+/**
+ * Limpia los datos locales almacenados en IndexedDB al cerrar sesión
+ * para garantizar la privacidad y prevenir filtraciones entre usuarios.
+ */
+export async function clearLocalUserData(): Promise<void> {
+  await Promise.all([
+    db.workspaces.clear(),
+    db.canvasNodes.clear(),
+    db.canvasEdges.clear(),
+    db.collections.clear(),
+    db.tags.clear(),
+    db.spaces.clear(),
+    db.offlineAssets.clear(),
+    db.syncLogs.clear()
+  ])
 }

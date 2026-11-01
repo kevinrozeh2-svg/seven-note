@@ -11,6 +11,8 @@ import {
   EdgelessIcon
 } from '@blocksuite/icons/rc'
 import type { WorkspaceItem } from '../../db'
+import { AppleEmoji } from '../ui/AppleEmoji'
+import { DocThumbnailPreview } from '../ui/DocThumbnailPreview'
 
 interface AllDocsModalProps {
   isOpen: boolean
@@ -254,9 +256,14 @@ export function AllDocsModal({
                   }`}
                 >
                   <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <span className="text-base shrink-0">{ws.icon || (ws.viewMode === 'canvas' ? <EdgelessIcon style={{ width: 15, height: 15, color: 'var(--app-accent)' }} /> : <PageIcon style={{ width: 15, height: 15, color: 'var(--app-text-secondary)' }} />)}</span>
+                    <DocThumbnailPreview doc={ws} size="sm" className="w-8 h-8 rounded-md" />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
+                        {ws.icon && (
+                          <span className="shrink-0 flex items-center">
+                            <AppleEmoji emoji={ws.icon} size={14} />
+                          </span>
+                        )}
                         <h4 className="font-medium text-xs text-[var(--app-text-primary)] truncate">
                           {ws.title || 'Untitled'}
                         </h4>

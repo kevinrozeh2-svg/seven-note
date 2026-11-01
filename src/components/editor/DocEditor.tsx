@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import TaskList from '@tiptap/extension-task-list'
@@ -15,9 +16,9 @@ import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight'
 import { all, createLowlight } from 'lowlight'
 import { toast } from 'sonner'
 import confetti from 'canvas-confetti'
+import { Lock, Unlock, Globe, ChevronDown } from 'lucide-react'
 import {
   SmileIcon,
-  AiIcon,
   EdgelessIcon,
   ToggleDownIcon,
   ToggleRightIcon,
@@ -43,9 +44,20 @@ import {
   PageIcon,
   CopyIcon
 } from '@blocksuite/icons/rc'
-import { db, type WorkspaceItem } from '../../db'
+import { db, type WorkspaceItem, type NotionDatabaseData, type NotionDatabaseViewType } from '../../db'
 import { syncEngine } from '../../lib/syncEngine'
 import { EmojiPickerPopover } from '../modals/EmojiPickerPopover'
+import { AppleEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
+import { NotionDatabaseView, getDefaultDatabaseData } from './NotionDatabaseView'
+import { NotionViewsDropdown, NOTION_TOOLS } from './NotionViewsDropdown'
+import {
+  NotionTableIcon,
+  NotionBoardIcon,
+  NotionListIcon,
+  NotionTimelineIcon,
+  NotionCalendarIcon,
+  NotionGalleryIcon
+} from './NotionIcons'
 
 const lowlight = createLowlight(all)
 
@@ -55,7 +67,6 @@ interface DocEditorProps {
   onSelectWorkspace?: (id: string) => void
   onTitleChange?: (newTitle: string) => void
   onToggleViewMode?: () => void
-  onOpenAIModal?: () => void
   onOpenTemplatesModal?: () => void
 }
 
@@ -65,11 +76,11 @@ export function DocEditor({
   onSelectWorkspace,
   onTitleChange,
   onToggleViewMode,
-  onOpenAIModal,
   onOpenTemplatesModal
 }: DocEditorProps) {
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved')
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false)
+  const [isBodyEmojiPickerOpen, setIsBodyEmojiPickerOpen] = useState(false)
   const [isInfoExpanded, setIsInfoExpanded] = useState(workspace.isInformationOpen ?? false)
   const [infoText, setInfoText] = useState(workspace.informationContent || '')
   const [showBiDirectional, setShowBiDirectional] = useState(workspace.biDirectionalLinksVisible ?? false)
@@ -100,6 +111,13 @@ export function DocEditor({
 
   // Code block language state
   const [codeLanguage, setCodeLanguage] = useState('javascript')
+
+  // Notion database state
+  const [databaseData, setDatabaseData] = useState<NotionDatabaseData | null>(
+    workspace.databaseData || null
+  )
+  const [isNotionMenuOpen, setIsNotionMenuOpen] = useState(false)
+  const [isActionRowNotionMenuOpen, setIsActionRowNotionMenuOpen] = useState(false)
 
   const isFirstRender = useRef(true)
   const saveTimeoutRef = useRef<any>(null)
@@ -315,6 +333,7 @@ export function DocEditor({
       setInfoText(workspace.informationContent || '')
       setIsInfoExpanded(workspace.isInformationOpen ?? false)
       setShowBiDirectional(workspace.biDirectionalLinksVisible ?? false)
+      setDatabaseData(workspace.databaseData || null)
     }
     isFirstRender.current = false
   }, [
@@ -323,8 +342,41 @@ export function DocEditor({
     workspace.informationContent,
     workspace.isInformationOpen,
     workspace.biDirectionalLinksVisible,
+    workspace.databaseData,
     editor
   ])
+
+  // Save Notion Database Data
+  const handleSaveDatabaseData = async (newData: NotionDatabaseData) => {
+    setDatabaseData(newData)
+    try {
+      await db.workspaces.update(workspace.id, {
+        databaseData: newData,
+        updatedAt: Date.now(),
+        syncStatus: 'pending'
+      })
+      syncEngine.scheduleSync(1000)
+    } catch (err) {
+      console.error('Error saving databaseData', err)
+    }
+  }
+
+  // Activate specific Notion View (Table, Board, List, Timeline, Calendar, Gallery)
+  const handleActivateNotionView = (viewType: NotionDatabaseViewType) => {
+    let nextData: NotionDatabaseData
+    if (databaseData) {
+      nextData = {
+        ...databaseData,
+        enabled: true,
+        activeView: viewType
+      }
+    } else {
+      nextData = getDefaultDatabaseData(viewType)
+    }
+    handleSaveDatabaseData(nextData)
+    const viewOption = NOTION_TOOLS.find((t) => t.id === viewType)
+    toast.success(`Vista ${viewOption?.label || viewType} de Notion activada`)
+  }
 
   // Icon handler
   const handleSelectIcon = async (emoji: string) => {
@@ -477,6 +529,27 @@ export function DocEditor({
           editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
           toast.success('Tabla interactiva insertada')
           break
+        case 'notion-table':
+          handleActivateNotionView('table')
+          break
+        case 'notion-board':
+          handleActivateNotionView('board')
+          break
+        case 'notion-list':
+          handleActivateNotionView('list')
+          break
+        case 'notion-timeline':
+          handleActivateNotionView('timeline')
+          break
+        case 'notion-calendar':
+          handleActivateNotionView('calendar')
+          break
+        case 'notion-gallery':
+          handleActivateNotionView('gallery')
+          break
+        case 'emoji':
+          setIsBodyEmojiPickerOpen(true)
+          break
         case 'bookmark':
           setIsBookmarkModalOpen(true)
           break
@@ -489,13 +562,10 @@ export function DocEditor({
         case 'image':
           editorImageInputRef.current?.click()
           break
-        case 'ai':
-          onOpenAIModal?.()
-          break
       }
       setSlashMenuOpen(false)
     },
-    [editor, onOpenAIModal]
+    [editor]
   )
 
   const handleInsertBookmark = () => {
@@ -587,6 +657,13 @@ export function DocEditor({
   }
 
   const slashMenuItems = [
+    { id: 'emoji', title: 'Emoji de Apple', desc: 'Insertar un emoji Apple de la lista completa (1,870 emojis)', icon: <AppleEmoji emoji="✨" size={16} /> },
+    { id: 'notion-table', title: 'Table (Notion)', desc: 'Vista de tabla estructurada con columnas interactivas', icon: <NotionTableIcon className="w-4 h-4 text-blue-500" /> },
+    { id: 'notion-board', title: 'Board (Notion)', desc: 'Tablero Kanban de tarjetas agrupadas por estado', icon: <NotionBoardIcon className="w-4 h-4 text-amber-500" /> },
+    { id: 'notion-list', title: 'List (Notion)', desc: 'Lista limpia con checkboxes y estados', icon: <NotionListIcon className="w-4 h-4 text-emerald-500" /> },
+    { id: 'notion-timeline', title: 'Timeline (Notion)', desc: 'Cronograma horizontal estilo diagrama de Gantt', icon: <NotionTimelineIcon className="w-4 h-4 text-purple-500" /> },
+    { id: 'notion-calendar', title: 'Calendar (Notion)', desc: 'Calendario mensual interactivo con eventos', icon: <NotionCalendarIcon className="w-4 h-4 text-rose-500" /> },
+    { id: 'notion-gallery', title: 'Gallery (Notion)', desc: 'Mosaico visual de tarjetas con portadas', icon: <NotionGalleryIcon className="w-4 h-4 text-sky-500" /> },
     { id: 'h1', title: 'Título 1', desc: 'Encabezado principal de sección', icon: <Heading1Icon className="w-4 h-4 text-[#1e96eb]" /> },
     { id: 'h2', title: 'Título 2', desc: 'Subtítulo mediano', icon: <Heading2Icon className="w-4 h-4 text-[#1e96eb]" /> },
     { id: 'h3', title: 'Título 3', desc: 'Subtítulo pequeño', icon: <Heading3Icon className="w-4 h-4 text-[#1e96eb]" /> },
@@ -604,8 +681,7 @@ export function DocEditor({
     { id: 'table', title: 'Tabla / Matriz', desc: 'Tabla interactiva de 3 columnas', icon: <TableIcon className="w-4 h-4 text-indigo-500" /> },
     { id: 'math', title: 'Fórmula Matemática', desc: 'Bloque de notación LaTeX', icon: <CodeIcon className="w-4 h-4 text-pink-500" /> },
     { id: 'blockquote', title: 'Cita', desc: 'Párrafo en bloque destacado', icon: <QuoteIcon className="w-4 h-4 text-[var(--affine-text-secondary-color)]" /> },
-    { id: 'divider', title: 'Separador Horizontal', desc: 'Línea de división de contenido', icon: <DividerIcon className="w-4 h-4 text-[var(--affine-text-secondary-color)]" /> },
-    { id: 'ai', title: 'Escribir con IA', desc: 'Generar o expandir con asistente', icon: <AiIcon className="w-4 h-4 text-[#1e96eb]" /> }
+    { id: 'divider', title: 'Separador Horizontal', desc: 'Línea de división de contenido', icon: <DividerIcon className="w-4 h-4 text-[var(--affine-text-secondary-color)]" /> }
   ].filter((item) => item.title.toLowerCase().includes(slashFilter.toLowerCase()) || item.desc.toLowerCase().includes(slashFilter.toLowerCase()))
 
   const pageWidthClass =
@@ -620,85 +696,106 @@ export function DocEditor({
   return (
     <div className="flex flex-col h-full bg-[var(--app-bg-primary)] overflow-y-auto text-[var(--app-text-primary)] select-text relative">
       {/* Top Formatting Toolbar (Notion Minimal Bar) */}
-      <div className="sticky top-0 z-20 flex items-center justify-between px-6 py-1.5 border-b border-[var(--app-border)] bg-[var(--app-bg-primary)] text-xs flex-wrap gap-1">
-          <div className="flex items-center gap-0.5">
+      <div className="sticky top-0 z-20 flex items-center justify-between px-6 py-2 border-b border-black/[0.04] dark:border-white/[0.06] bg-white/80 dark:bg-[#121214]/80 backdrop-blur-xl text-xs flex-wrap gap-1 select-none">
+          <div className="flex items-center gap-1">
             {/* Quick insert block button */}
             <button
               onClick={() => {
                 setSlashMenuOpen(!slashMenuOpen)
                 setSlashFilter('')
               }}
-              className="flex items-center gap-1 px-2 py-1 rounded-md bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition mr-1 font-medium border border-[var(--app-border)]"
+              className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/[0.04] dark:bg-white/[0.08] hover:bg-black/[0.08] dark:hover:bg-white/[0.15] text-[var(--app-text-primary)] transition mr-1 font-semibold border border-black/[0.06] dark:border-white/[0.08] cursor-pointer active:scale-95"
               title="Insertar bloques de contenido (/)"
             >
               <PlusIcon className="w-3.5 h-3.5 text-[var(--app-accent)]" />
               <span>Bloque</span>
             </button>
 
-            <div className="w-[1px] h-3.5 bg-[var(--app-divider)] mx-0.5" />
+            {/* Notion Tools Dropdown (Table, Board, List, Timeline, Calendar, Gallery) */}
+            <div className="relative">
+              <button
+                onClick={() => setIsNotionMenuOpen(!isNotionMenuOpen)}
+                className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/[0.04] dark:bg-white/[0.08] hover:bg-black/[0.08] dark:hover:bg-white/[0.15] text-[var(--app-text-primary)] transition mr-1 font-semibold border border-black/[0.06] dark:border-white/[0.08] cursor-pointer active:scale-95"
+                title="Herramientas de Notion (Table, Board, List, Timeline, Calendar, Gallery)"
+              >
+                <NotionTableIcon className="w-3.5 h-3.5 text-blue-500" />
+                <span>Vistas Notion</span>
+                <ChevronDown className="w-3 h-3 text-neutral-400" />
+              </button>
+
+              <NotionViewsDropdown
+                isOpen={isNotionMenuOpen}
+                onClose={() => setIsNotionMenuOpen(false)}
+                onSelectView={handleActivateNotionView}
+                currentView={databaseData?.activeView}
+                className="absolute left-0 top-full mt-2"
+              />
+            </div>
+
+            <div className="w-[1px] h-3.5 bg-black/[0.08] dark:bg-white/[0.1] mx-0.5" />
 
             <button
               onClick={() => editor.chain().focus().toggleBold().run()}
-              className={`p-1 rounded-md transition ${editor.isActive('bold') ? 'bg-[var(--app-hover)] text-[var(--app-accent)] font-semibold' : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'}`}
+              className={`p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('bold') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'}`}
               title="Negrita"
             >
               <BoldIcon className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => editor.chain().focus().toggleItalic().run()}
-              className={`p-1 rounded-md transition ${editor.isActive('italic') ? 'bg-[var(--app-hover)] text-[var(--app-accent)] font-semibold' : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'}`}
+              className={`p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('italic') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'}`}
               title="Cursiva"
             >
               <ItalicIcon className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => editor.chain().focus().toggleUnderline().run()}
-              className={`p-1 rounded-md transition ${editor.isActive('underline') ? 'bg-[var(--app-hover)] text-[var(--app-accent)] font-semibold' : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'}`}
+              className={`p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('underline') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'}`}
               title="Subrayado"
             >
               <UnderLineIcon className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => editor.chain().focus().toggleCode().run()}
-              className={`p-1 rounded-md transition ${editor.isActive('code') ? 'bg-[var(--app-hover)] text-[var(--app-accent)] font-semibold' : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'}`}
+              className={`p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('code') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'}`}
               title="Código en línea"
             >
               <CodeIcon className="w-3.5 h-3.5" />
             </button>
 
-            <div className="w-[1px] h-3.5 bg-[var(--app-divider)] mx-0.5" />
+            <div className="w-[1px] h-3.5 bg-black/[0.08] dark:bg-white/[0.1] mx-0.5" />
 
             <button
               onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-              className={`p-1 rounded-md transition ${editor.isActive('heading', { level: 1 }) ? 'bg-[var(--app-hover)] text-[var(--app-accent)] font-semibold' : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'}`}
+              className={`p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('heading', { level: 1 }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'}`}
               title="Encabezado 1"
             >
               <Heading1Icon className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-              className={`p-1 rounded-md transition ${editor.isActive('heading', { level: 2 }) ? 'bg-[var(--app-hover)] text-[var(--app-accent)] font-semibold' : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'}`}
+              className={`p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('heading', { level: 2 }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'}`}
               title="Encabezado 2"
             >
               <Heading2Icon className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => editor.chain().focus().toggleBulletList().run()}
-              className={`p-1 rounded-md transition ${editor.isActive('bulletList') ? 'bg-[var(--app-hover)] text-[var(--app-accent)] font-semibold' : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'}`}
+              className={`p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('bulletList') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'}`}
               title="Lista de viñetas"
             >
               <BulletedListIcon className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => editor.chain().focus().toggleTaskList().run()}
-              className={`p-1 rounded-md transition ${editor.isActive('taskList') ? 'bg-[var(--app-hover)] text-[var(--app-accent)] font-semibold' : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'}`}
+              className={`p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('taskList') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'}`}
               title="Lista de tareas"
             >
               <CheckBoxCheckSolidIcon className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={() => editorImageInputRef.current?.click()}
-              className="p-1 rounded-md transition text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]"
+              className="p-1.5 rounded-full transition cursor-pointer text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 active:scale-95"
               title="Añadir foto"
             >
               <ImageIcon className="w-3.5 h-3.5" />
@@ -722,69 +819,69 @@ export function DocEditor({
 
       {/* Interactive Sticky Table Toolbar when inside a table */}
       {editor.isActive('table') && (
-        <div className="sticky top-11 z-20 flex items-center justify-center py-1.5 px-3 bg-[var(--affine-background-primary-color)]/95 border-b border-[var(--affine-border-color)] backdrop-blur-md">
-          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[var(--affine-background-secondary-color)] border border-[var(--affine-border-color)] text-xs text-[var(--affine-text-primary-color)] shadow-xs flex-wrap">
-            <span className="text-[10px] uppercase font-bold text-[#1e96eb] px-1.5">
+        <div className="sticky top-11 z-20 flex items-center justify-center py-2 px-3 bg-white/70 dark:bg-[#121214]/70 backdrop-blur-md">
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/90 dark:bg-[#1a1b1e]/90 border border-black/[0.08] dark:border-white/[0.1] text-xs text-[var(--app-text-primary)] shadow-lg flex-wrap">
+            <span className="text-[10px] uppercase font-bold text-blue-500 px-1">
               Tabla
             </span>
             <button
               onClick={() => editor.chain().focus().addRowBefore().run()}
-              className="px-2 py-0.5 rounded hover:bg-[var(--affine-hover-color)] transition text-[11px]"
+              className="px-2.5 py-0.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition text-[11px] font-medium cursor-pointer active:scale-95"
               title="Añadir fila arriba"
             >
               + Fila ↑
             </button>
             <button
               onClick={() => editor.chain().focus().addRowAfter().run()}
-              className="px-2 py-0.5 rounded hover:bg-[var(--affine-hover-color)] transition text-[11px]"
+              className="px-2.5 py-0.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition text-[11px] font-medium cursor-pointer active:scale-95"
               title="Añadir fila abajo"
             >
               + Fila ↓
             </button>
             <button
               onClick={() => editor.chain().focus().deleteRow().run()}
-              className="px-2 py-0.5 rounded hover:bg-rose-500/10 text-rose-400 transition text-[11px]"
+              className="px-2.5 py-0.5 rounded-full hover:bg-rose-500/10 text-rose-500 transition text-[11px] font-medium cursor-pointer active:scale-95"
               title="Eliminar fila actual"
             >
               - Fila
             </button>
 
-            <div className="w-[1px] h-3.5 bg-[var(--affine-divider-color)] mx-0.5" />
+            <div className="w-[1px] h-3.5 bg-black/[0.08] dark:bg-white/[0.1] mx-0.5" />
 
             <button
               onClick={() => editor.chain().focus().addColumnBefore().run()}
-              className="px-2 py-0.5 rounded hover:bg-[var(--affine-hover-color)] transition text-[11px]"
+              className="px-2.5 py-0.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition text-[11px] font-medium cursor-pointer active:scale-95"
               title="Añadir columna a la izquierda"
             >
               + Col ←
             </button>
             <button
               onClick={() => editor.chain().focus().addColumnAfter().run()}
-              className="px-2 py-0.5 rounded hover:bg-[var(--affine-hover-color)] transition text-[11px]"
+              className="px-2.5 py-0.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition text-[11px] font-medium cursor-pointer active:scale-95"
               title="Añadir columna a la derecha"
             >
               + Col →
             </button>
             <button
               onClick={() => editor.chain().focus().deleteColumn().run()}
-              className="px-2 py-0.5 rounded hover:bg-rose-500/10 text-rose-400 transition text-[11px]"
+              className="px-2.5 py-0.5 rounded-full hover:bg-rose-500/10 text-rose-500 transition text-[11px] font-medium cursor-pointer active:scale-95"
               title="Eliminar columna actual"
             >
               - Col
             </button>
 
-            <div className="w-[1px] h-3.5 bg-[var(--affine-divider-color)] mx-0.5" />
+            <div className="w-[1px] h-3.5 bg-black/[0.08] dark:bg-white/[0.1] mx-0.5" />
 
             <button
               onClick={() => editor.chain().focus().toggleHeaderRow().run()}
-              className="px-2 py-0.5 rounded hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] transition text-[11px]"
+              className="px-2.5 py-0.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-neutral-600 dark:text-neutral-300 transition text-[11px] font-medium cursor-pointer active:scale-95"
               title="Alternar fila de encabezado"
             >
               Encabezado
             </button>
             <button
               onClick={() => editor.chain().focus().deleteTable().run()}
-              className="px-2 py-0.5 rounded hover:bg-rose-500/10 text-rose-400 transition text-[11px]"
+              className="px-2.5 py-0.5 rounded-full hover:bg-rose-500/10 text-rose-500 transition text-[11px] font-medium cursor-pointer active:scale-95"
               title="Borrar tabla"
             >
               Borrar tabla
@@ -843,37 +940,66 @@ export function DocEditor({
             top: `${floatingMenuPos.y}px`,
             transform: 'translateX(-50%)'
           }}
-          className="z-50 flex items-center gap-0.5 p-1 rounded-lg bg-[var(--app-bg-overlay)] border border-[var(--app-border)] shadow-[var(--app-shadow-popover)] animate-in fade-in zoom-in-95 duration-100"
+          className="z-50 flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-white/90 dark:bg-[#1a1b1e]/90 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.1] shadow-2xl animate-in fade-in zoom-in-95 duration-100"
         >
           <button
             onClick={() => editor.chain().focus().toggleBold().run()}
-            className={`p-1.5 rounded-md transition ${editor.isActive('bold') ? 'bg-[var(--app-accent)] text-white shadow-xs' : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'}`}
+            className={`p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('bold') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-neutral-300 hover:bg-black/5 dark:hover:bg-white/10'}`}
             title="Negrita (Ctrl+B)"
           >
             <BoldIcon className="w-4 h-4" />
           </button>
           <button
             onClick={() => editor.chain().focus().toggleItalic().run()}
-            className={`p-1.5 rounded-md transition ${editor.isActive('italic') ? 'bg-[var(--app-accent)] text-white shadow-xs' : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'}`}
+            className={`p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('italic') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-neutral-300 hover:bg-black/5 dark:hover:bg-white/10'}`}
             title="Cursiva (Ctrl+I)"
           >
             <ItalicIcon className="w-4 h-4" />
           </button>
           <button
             onClick={() => editor.chain().focus().toggleUnderline().run()}
-            className={`p-1.5 rounded-md transition ${editor.isActive('underline') ? 'bg-[var(--app-accent)] text-white shadow-xs' : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'}`}
+            className={`p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('underline') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-neutral-300 hover:bg-black/5 dark:hover:bg-white/10'}`}
             title="Subrayado (Ctrl+U)"
           >
             <UnderLineIcon className="w-4 h-4" />
           </button>
           <button
             onClick={() => editor.chain().focus().toggleCode().run()}
-            className={`p-1.5 rounded-md transition ${editor.isActive('code') ? 'bg-[var(--app-accent)] text-white shadow-xs' : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'}`}
+            className={`p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('code') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-neutral-300 hover:bg-black/5 dark:hover:bg-white/10'}`}
             title="Código en línea (Ctrl+E)"
           >
             <CodeIcon className="w-4 h-4" />
           </button>
+          <button
+            onClick={() => setIsBodyEmojiPickerOpen(true)}
+            className="p-1.5 rounded-full transition cursor-pointer active:scale-95 text-neutral-600 dark:text-neutral-300 hover:bg-black/5 dark:hover:bg-white/10"
+            title="Insertar Emoji Apple en la nota"
+          >
+            <AppleEmoji emoji="✨" size={15} />
+          </button>
         </div>
+      )}
+
+      {/* Body Emoji Picker Modal */}
+      {isBodyEmojiPickerOpen && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-100"
+          onClick={() => setIsBodyEmojiPickerOpen(false)}
+        >
+          <div onClick={(e) => e.stopPropagation()} className="relative">
+            <EmojiPickerPopover
+              isOpen={isBodyEmojiPickerOpen}
+              onClose={() => setIsBodyEmojiPickerOpen(false)}
+              onSelectEmoji={(emoji) => {
+                editor?.commands.insertContent(emoji)
+                setIsBodyEmojiPickerOpen(false)
+              }}
+              title="Insertar Emoji Apple en la Nota"
+              isModal={true}
+            />
+          </div>
+        </div>,
+        document.body
       )}
 
       {/* Slash Menu Popover Dialog (Notion Style) */}
@@ -892,13 +1018,13 @@ export function DocEditor({
                   }
                 : undefined
             }
-            className={`w-full max-w-sm bg-[var(--app-bg-overlay)] border border-[var(--app-border)] rounded-lg shadow-[var(--app-shadow-popover)] overflow-hidden flex flex-col max-h-[380px] animate-in fade-in zoom-in-95 duration-100 ${
+            className={`w-full max-w-sm bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] rounded-3xl shadow-2xl backdrop-blur-2xl overflow-hidden flex flex-col max-h-[380px] p-2 animate-in fade-in zoom-in-95 duration-100 ${
               !slashMenuPos ? 'fixed top-24 left-1/2 -translate-x-1/2' : ''
             }`}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Search filter input */}
-            <div className="p-2.5 border-b border-[var(--app-divider)] flex items-center justify-between gap-2">
+            <div className="p-2 border-b border-black/[0.06] dark:border-white/[0.08] flex items-center justify-between gap-2">
               <input
                 autoFocus
                 type="text"
@@ -924,20 +1050,20 @@ export function DocEditor({
                   }
                 }}
                 placeholder="Filtrar bloques..."
-                className="w-full bg-transparent border-none outline-none text-xs text-[var(--app-text-primary)] placeholder:text-[var(--app-text-muted)] font-sans"
+                className="w-full bg-black/[0.04] dark:bg-white/[0.06] rounded-full px-3.5 py-1.5 text-xs text-[var(--app-text-primary)] placeholder:text-neutral-400 outline-none font-sans"
               />
               <button
                 onClick={() => setSlashMenuOpen(false)}
-                className="p-1 rounded-md text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]"
+                className="p-1.5 rounded-full text-neutral-400 hover:text-neutral-800 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer"
               >
                 <CloseIcon className="w-3.5 h-3.5" />
               </button>
             </div>
 
             {/* Blocks menu list */}
-            <div className="overflow-y-auto p-1.5 space-y-0.5 custom-scrollbar">
+            <div className="overflow-y-auto p-1.5 space-y-1 custom-scrollbar">
               {slashMenuItems.length === 0 ? (
-                <div className="py-5 text-center text-xs text-[var(--app-text-muted)]">
+                <div className="py-5 text-center text-xs text-neutral-400">
                   No se encontraron bloques para "{slashFilter}"
                 </div>
               ) : (
@@ -945,18 +1071,18 @@ export function DocEditor({
                   <button
                     key={item.id}
                     onClick={() => insertBlock(item.id)}
-                    className={`w-full text-left p-2 rounded-md transition flex items-center gap-2.5 group text-xs ${
-                      idx === selectedSlashIdx ? 'bg-[var(--app-hover)] ring-1 ring-[var(--app-accent)]' : 'hover:bg-[var(--app-hover)]'
+                    className={`w-full text-left p-2 rounded-2xl transition flex items-center gap-3 group text-xs cursor-pointer active:scale-[0.98] ${
+                      idx === selectedSlashIdx ? 'bg-black/[0.06] dark:bg-white/[0.08] ring-1 ring-neutral-400' : 'hover:bg-black/[0.04] dark:hover:bg-white/[0.05]'
                     }`}
                   >
-                    <div className="p-2 rounded-lg bg-[var(--affine-background-secondary-color)] group-hover:bg-[var(--affine-background-primary-color)] shrink-0 transition">
+                    <div className="p-2 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] text-neutral-700 dark:text-neutral-200 group-hover:scale-105 shrink-0 transition">
                       {item.icon}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="font-semibold text-[var(--affine-text-primary-color)] group-hover:text-[#1e96eb] transition text-sm">
+                      <div className="font-semibold text-neutral-800 dark:text-neutral-100 group-hover:text-blue-500 transition text-sm">
                         {item.title}
                       </div>
-                      <div className="text-xs text-[var(--affine-text-secondary-color)] truncate">{item.desc}</div>
+                      <div className="text-xs text-neutral-500 truncate">{item.desc}</div>
                     </div>
                   </button>
                 ))
@@ -1085,10 +1211,10 @@ export function DocEditor({
                     className="p-2.5 rounded-xl bg-[var(--affine-background-secondary-color)] hover:bg-[var(--affine-hover-color)] border border-[var(--affine-border-color)] cursor-pointer transition flex items-center justify-between group"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="text-xl">{ws.icon || '📄'}</span>
+                      <span className="shrink-0"><AppleEmoji emoji={ws.icon || '📄'} size={20} /></span>
                       <div className="min-w-0">
                         <div className="font-semibold text-xs text-[var(--affine-text-primary-color)] group-hover:text-[#1e96eb] truncate">
-                          {ws.title || 'Untitled'}
+                          {renderWithAppleEmoji(ws.title || 'Untitled')}
                         </div>
                         <div className="text-[10px] text-[var(--affine-text-secondary-color)] truncate">
                           {ws.informationContent || 'Página de Seven Note'}
@@ -1197,10 +1323,10 @@ export function DocEditor({
             <div className="flex items-center gap-2 group">
               <span
                 onClick={() => setIsEmojiPickerOpen(true)}
-                className="text-4xl cursor-pointer hover:scale-105 transition"
+                className="cursor-pointer hover:scale-105 transition flex items-center justify-center p-1 rounded-2xl hover:bg-black/5 dark:hover:bg-white/5"
                 title="Cambiar icono"
               >
-                {workspace.icon}
+                <AppleEmoji emoji={workspace.icon} size={42} />
               </span>
               <button
                 onClick={() => setIsEmojiPickerOpen(true)}
@@ -1218,6 +1344,46 @@ export function DocEditor({
               <span>Add icon</span>
             </button>
           )}
+
+          {/* Privacy & Sharing Badge Button */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={async () => {
+                const nextPrivate = !workspace.isPrivate
+                await db.workspaces.update(workspace.id, {
+                  isPrivate: nextPrivate,
+                  updatedAt: Date.now(),
+                  syncStatus: 'pending'
+                })
+                syncEngine.scheduleSync(500)
+                toast.success(nextPrivate ? 'Nota cambiada a MODO PRIVADO' : 'Nota compartida con TODO EL EQUIPO')
+              }}
+              className={`flex items-center gap-1.5 text-xs py-1 px-2.5 rounded-full transition font-medium cursor-pointer ${
+                workspace.isPrivate
+                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30'
+                  : 'bg-black/[0.04] dark:bg-white/[0.06] text-neutral-600 dark:text-neutral-300 hover:bg-black/[0.08]'
+              }`}
+              title={workspace.isPrivate ? 'Nota privada. Clic para hacerla pública para el equipo' : 'Nota del equipo. Clic para hacerla privada'}
+            >
+              {workspace.isPrivate ? <Lock className="w-3 h-3 text-amber-500" /> : <Unlock className="w-3 h-3 text-blue-500" />}
+              <span>{workspace.isPrivate ? 'Privada (Solo tú)' : 'Equipo'}</span>
+            </button>
+
+            {/* Creator attribution pill */}
+            {(workspace.ownerName || workspace.createdBy) && (
+              <span className="flex items-center gap-1.5 text-[11px] py-0.5 px-2.5 rounded-full bg-black/[0.03] dark:bg-white/[0.05] border border-black/[0.05] dark:border-white/[0.08] text-neutral-500 dark:text-neutral-400 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                <span>Creado por: <strong className="text-neutral-700 dark:text-neutral-200">{workspace.ownerName || workspace.createdBy}</strong></span>
+              </span>
+            )}
+
+            {workspace.isPublicShared && (
+              <span className="flex items-center gap-1 text-[11px] py-0.5 px-2 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-medium">
+                <Globe className="w-3 h-3" />
+                <span>Enlace externo activo</span>
+              </span>
+            )}
+          </div>
 
           {/* Emoji Picker Popover */}
           <EmojiPickerPopover
@@ -1280,23 +1446,58 @@ export function DocEditor({
           )}
         </div>
 
-        {/* Action Pills Row ("Iniciar", "Con IA", "Plantilla", "Sin bordes") */}
-        <div className="flex items-center gap-2 mb-8 flex-wrap select-none text-xs">
+        {/* Action Pills Row ("Iniciar", "Plantilla", "Sin bordes", Notion Tools) */}
+        <div className="flex items-center gap-2 mb-6 flex-wrap select-none text-xs">
           <span className="text-[var(--affine-text-secondary-color)] font-medium mr-1">Iniciar</span>
 
-          {/* Pill 1: Con IA */}
-          <button
-            onClick={onOpenAIModal}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--affine-background-secondary-color)] hover:bg-[var(--affine-hover-color)] border border-[var(--affine-border-color)] text-[var(--affine-text-primary-color)] transition shadow-xs group"
-          >
-            <span>Con IA</span>
-            <AiIcon className="w-3.5 h-3.5 text-[#1e96eb] group-hover:rotate-12 transition-transform" />
-          </button>
+          {/* Notion Tools Dropdown Pill (Exact UI from Notion screenshot) */}
+          <div className="relative">
+            <button
+              onClick={() => setIsActionRowNotionMenuOpen(!isActionRowNotionMenuOpen)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--affine-background-secondary-color)] hover:bg-[var(--affine-hover-color)] border border-[var(--affine-border-color)] text-[var(--affine-text-primary-color)] transition shadow-xs group cursor-pointer active:scale-95"
+              title="Herramientas y vistas de Notion"
+            >
+              <NotionTableIcon className="w-3.5 h-3.5 text-blue-500 group-hover:scale-110 transition-transform" />
+              <span className="font-medium">Vistas Notion</span>
+              <ChevronDown className="w-3 h-3 text-[var(--affine-text-secondary-color)]" />
+            </button>
 
-          {/* Pill 2: Plantilla */}
+            <NotionViewsDropdown
+              isOpen={isActionRowNotionMenuOpen}
+              onClose={() => setIsActionRowNotionMenuOpen(false)}
+              onSelectView={handleActivateNotionView}
+              currentView={databaseData?.activeView}
+              className="absolute left-0 top-full mt-2"
+            />
+          </div>
+
+          {/* Direct Quick Pills for each of the 6 Notion tools */}
+          {NOTION_TOOLS.map((tool) => {
+            const Icon = tool.Icon
+            const isCurrent = databaseData?.enabled && databaseData?.activeView === tool.id
+            return (
+              <button
+                key={tool.id}
+                onClick={() => handleActivateNotionView(tool.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition shadow-xs cursor-pointer active:scale-95 ${
+                  isCurrent
+                    ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 font-semibold shadow-xs'
+                    : 'bg-[var(--affine-background-secondary-color)] hover:bg-[var(--affine-hover-color)] border border-[var(--affine-border-color)] text-[var(--affine-text-primary-color)]'
+                }`}
+                title={`Activar vista ${tool.label} en este documento`}
+              >
+                <Icon className={isCurrent ? 'text-white dark:text-neutral-900' : 'text-blue-500'} size={14} />
+                <span>{tool.label}</span>
+              </button>
+            )
+          })}
+
+          <div className="w-[1px] h-4 bg-black/[0.08] dark:bg-white/[0.1] mx-0.5" />
+
+          {/* Pill: Plantilla */}
           <button
             onClick={onOpenTemplatesModal}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--affine-background-secondary-color)] hover:bg-[var(--affine-hover-color)] border border-[var(--affine-border-color)] text-[var(--affine-text-primary-color)] transition shadow-xs"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--affine-background-secondary-color)] hover:bg-[var(--affine-hover-color)] border border-[var(--affine-border-color)] text-[var(--affine-text-primary-color)] transition shadow-xs cursor-pointer active:scale-95"
           >
             <span>Plantilla</span>
             <TemplateIcon className="w-3.5 h-3.5 text-amber-500" />
@@ -1305,13 +1506,25 @@ export function DocEditor({
           {/* Pill 3: Sin bordes (Canvas / Edgeless mode) */}
           <button
             onClick={onToggleViewMode}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--affine-background-secondary-color)] hover:bg-[var(--affine-hover-color)] border border-[var(--affine-border-color)] text-[var(--affine-text-primary-color)] transition shadow-xs group"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--affine-background-secondary-color)] hover:bg-[var(--affine-hover-color)] border border-[var(--affine-border-color)] text-[var(--affine-text-primary-color)] transition shadow-xs group cursor-pointer active:scale-95"
             title="Alternar entre modo Página y Modo Sin bordes (Lienzo infinito)"
           >
             <span>Sin bordes</span>
             <EdgelessIcon className="w-3.5 h-3.5 text-indigo-500 group-hover:scale-110 transition-transform" />
           </button>
         </div>
+
+        {/* Interactive Notion Database Component Widget */}
+        {databaseData?.enabled && (
+          <NotionDatabaseView
+            data={databaseData}
+            onChange={handleSaveDatabaseData}
+            onClose={() => {
+              handleSaveDatabaseData({ ...databaseData, enabled: false })
+              toast.info('Base de datos minimizada')
+            }}
+          />
+        )}
 
         {/* TipTap WYSIWYG Document Editor */}
         <div className="min-h-[280px]">
@@ -1369,8 +1582,8 @@ export function DocEditor({
                           className="flex items-center justify-between p-1.5 rounded hover:bg-[var(--affine-hover-color)] cursor-pointer text-[var(--affine-text-primary-color)] transition"
                         >
                           <div className="flex items-center gap-2">
-                            <span>{ws.icon || '📄'}</span>
-                            <span className="truncate">{ws.title || 'Untitled'}</span>
+                            <AppleEmoji emoji={ws.icon || '📄'} size={16} />
+                            <span className="truncate">{renderWithAppleEmoji(ws.title || 'Untitled')}</span>
                           </div>
                           <span className="text-[10px] text-[#1e96eb]">Insertar enlace</span>
                         </div>
@@ -1394,10 +1607,10 @@ export function DocEditor({
                       className="p-3 rounded-xl bg-[var(--affine-background-secondary-color)] border border-[var(--affine-border-color)] hover:border-[#1e96eb] hover:bg-[var(--affine-hover-color)] cursor-pointer transition flex items-center justify-between group shadow-xs"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="text-lg">{linkWs.icon || '📄'}</span>
+                        <span className="shrink-0"><AppleEmoji emoji={linkWs.icon || '📄'} size={18} /></span>
                         <div className="min-w-0">
                           <p className="font-medium text-[var(--affine-text-primary-color)] group-hover:text-[#1e96eb] truncate text-xs">
-                            {linkWs.title || 'Untitled'}
+                            {renderWithAppleEmoji(linkWs.title || 'Untitled')}
                           </p>
                           <p className="text-[10px] text-[var(--affine-text-secondary-color)]">Nota vinculada</p>
                         </div>

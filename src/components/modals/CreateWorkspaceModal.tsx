@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { CloseIcon, LocalWorkspaceIcon } from '@blocksuite/icons/rc'
+import { AppleEmoji } from '../ui/AppleEmoji'
+import { EmojiPickerPopover } from './EmojiPickerPopover'
 
 interface CreateWorkspaceModalProps {
   isOpen: boolean
@@ -7,7 +10,7 @@ interface CreateWorkspaceModalProps {
   onCreate: (name: string, icon: string, color: string) => Promise<void>
 }
 
-const PRESET_EMOJIS = ['💼', '🚀', '💡', '📚', '🎨', '💻', '🎯', '⚡', '🏠', '☕', '🔬', '📊', '🌐', '📝', '✨', '🪐']
+const PRESET_EMOJIS = ['✨', '🤍', '🫧', '🎧', '🪐', '🌿', '☕', '🧸', '💼', '🚀', '💡', '📚', '🎨', '💻', '🎯', '⚡']
 
 const PRESET_COLORS = [
   { name: 'Azul', value: '#1e96eb' },
@@ -25,6 +28,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onCreate }: CreateWorksp
   const [selectedIcon, setSelectedIcon] = useState('💼')
   const [selectedColor, setSelectedColor] = useState('#1e96eb')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isPickerOpen, setIsPickerOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -33,6 +37,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onCreate }: CreateWorksp
       setSelectedIcon('💼')
       setSelectedColor('#1e96eb')
       setIsSubmitting(false)
+      setIsPickerOpen(false)
       setTimeout(() => inputRef.current?.focus(), 50)
     }
   }, [isOpen])
@@ -123,30 +128,81 @@ export function CreateWorkspaceModal({ isOpen, onClose, onCreate }: CreateWorksp
           </div>
 
           {/* Icon Selection */}
-          <div>
-            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--affine-text-secondary-color)' }}>
-              Icono / Emoji
-            </label>
+          <div className="relative">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-medium" style={{ color: 'var(--affine-text-secondary-color)' }}>
+                Icono / Emoji del espacio
+              </label>
+              <button
+                type="button"
+                onClick={() => setIsPickerOpen(!isPickerOpen)}
+                className="text-[11px] font-medium text-blue-500 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer flex items-center gap-1"
+              >
+                <span>Explorar todos (1,870)</span>
+                <span>→</span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 mb-2">
+              <button
+                type="button"
+                onClick={() => setIsPickerOpen(!isPickerOpen)}
+                className="w-10 h-10 rounded-xl flex items-center justify-center border transition hover:scale-105 active:scale-95 shadow-xs cursor-pointer shrink-0"
+                style={{
+                  borderColor: selectedColor,
+                  backgroundColor: `${selectedColor}15`
+                }}
+                title="Clic para abrir todos los emojis Apple"
+              >
+                <AppleEmoji emoji={selectedIcon} size={24} />
+              </button>
+              <div className="text-[11px] text-neutral-500 dark:text-neutral-400 leading-tight">
+                Icono seleccionado. Puedes escoger uno de los accesos rápidos o abrir la lista completa.
+              </div>
+            </div>
+
             <div className="grid grid-cols-8 gap-1.5 p-2 rounded-xl border" style={{ borderColor: 'var(--affine-border-color)', backgroundColor: 'var(--affine-background-secondary-color)' }}>
               {PRESET_EMOJIS.map((emoji) => (
                 <button
                   key={emoji}
                   type="button"
                   onClick={() => setSelectedIcon(emoji)}
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm transition ${
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer ${
                     selectedIcon === emoji
                       ? 'scale-110 shadow-sm ring-2 ring-offset-1'
-                      : 'hover:bg-[var(--affine-hover-color)] opacity-75 hover:opacity-100'
+                      : 'hover:bg-[var(--affine-hover-color)] opacity-85 hover:opacity-100'
                   }`}
                   style={{
                     backgroundColor: selectedIcon === emoji ? `${selectedColor}25` : 'transparent',
                     boxShadow: selectedIcon === emoji ? `0 0 0 2px ${selectedColor}` : 'none'
                   }}
                 >
-                  {emoji}
+                  <AppleEmoji emoji={emoji} size={18} />
                 </button>
               ))}
             </div>
+
+            {isPickerOpen && typeof document !== 'undefined' && createPortal(
+              <div
+                className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-100"
+                onClick={() => setIsPickerOpen(false)}
+              >
+                <div onClick={(e) => e.stopPropagation()} className="relative">
+                  <EmojiPickerPopover
+                    currentIcon={selectedIcon}
+                    isOpen={isPickerOpen}
+                    onClose={() => setIsPickerOpen(false)}
+                    onSelectEmoji={(emoji) => {
+                      setSelectedIcon(emoji)
+                      setIsPickerOpen(false)
+                    }}
+                    title="Seleccionar Icono del Espacio"
+                    isModal={true}
+                  />
+                </div>
+              </div>,
+              document.body
+            )}
           </div>
 
           {/* Color Selection */}
@@ -186,7 +242,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onCreate }: CreateWorksp
                 className="w-7 h-7 rounded-lg flex items-center justify-center text-sm font-bold text-white shadow-2xs shrink-0"
                 style={{ backgroundColor: selectedColor }}
               >
-                {selectedIcon}
+                <AppleEmoji emoji={selectedIcon} size={18} />
               </div>
               <div className="min-w-0 flex-1">
                 <div className="font-semibold text-xs truncate" style={{ color: 'var(--affine-text-primary-color)' }}>
