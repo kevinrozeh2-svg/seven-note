@@ -85,9 +85,6 @@ export default function App() {
   const [currentMember, setCurrentMemberState] = useState<TeamMember>(() => getCurrentMember())
   const [authUser, setAuthUser] = useState<any>(null)
   const [authLoading, setAuthLoading] = useState(true)
-  const [guestMode, setGuestMode] = useState(() => {
-    return typeof window !== 'undefined' && localStorage.getItem('seven_note_guest_mode') === 'true'
-  })
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const [authModalMode, setAuthModalMode] = useState<AuthMode>('login')
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
@@ -153,8 +150,6 @@ export default function App() {
   const handleSignOut = async () => {
     await signOutUser()
     setAuthUser(null)
-    setGuestMode(false)
-    localStorage.removeItem('seven_note_guest_mode')
     toast.info('Sesión cerrada correctamente')
   }
 
@@ -926,7 +921,7 @@ export default function App() {
   }
 
   // Auth Gate: Bloqueo total de la web si no hay sesión iniciada
-  if (!authUser && !guestMode) {
+  if (!authUser) {
     return (
       <div className="relative flex h-screen w-screen items-center justify-center bg-[#f8f9fa] dark:bg-[#121214] text-neutral-900 dark:text-neutral-100 font-sans select-none overflow-hidden">
         <Toaster position="top-right" richColors closeButton />
@@ -937,11 +932,6 @@ export default function App() {
           onClose={() => {}}
           onAuthSuccess={(member) => {
             setCurrentMemberState(member)
-          }}
-          onContinueAsGuest={() => {
-            setGuestMode(true)
-            localStorage.setItem('seven_note_guest_mode', 'true')
-            toast.info('Accediendo en modo local / sin conexión')
           }}
         />
       </div>

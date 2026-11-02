@@ -13,8 +13,6 @@ import {
   RefreshCw,
   CheckCircle2,
   ArrowLeft,
-  Settings,
-  Sparkles,
   User
 } from 'lucide-react'
 import {
@@ -40,7 +38,6 @@ interface AuthModalProps {
   initialMode?: AuthMode
   onAuthSuccess?: (member: TeamMember) => void
   canDismiss?: boolean
-  onContinueAsGuest?: () => void
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -48,8 +45,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onClose,
   initialMode = 'login',
   onAuthSuccess,
-  canDismiss = true,
-  onContinueAsGuest
+  canDismiss = true
 }) => {
   const [mode, setMode] = useState<AuthMode>(initialMode)
   const [email, setEmail] = useState('')
@@ -719,42 +715,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 </button>
               </div>
             </form>
-          )}
-
-          {/* Bottom Security Info & Offline Fallback */}
-          <div className="p-3 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.04] dark:border-white/[0.06] text-[11px] text-neutral-500 dark:text-neutral-400 leading-relaxed space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-neutral-800 dark:text-neutral-200 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-blue-500" />
-                Seguridad &amp; Privacidad
-              </span>
-              <button
-                type="button"
-                onClick={() => setMode(mode === 'config' ? 'login' : 'config')}
-                className="text-[10px] text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 cursor-pointer"
-              >
-                <Settings className="w-3 h-3" />
-                <span>{mode === 'config' ? 'Volver al Login' : 'Configurar Servidor'}</span>
-              </button>
-            </div>
-            <p>
-              • Las notas privadas solo son accesibles desde tu propia cuenta autenticada.
-            </p>
-            <p>
-              • Tus datos se respaldan en la nube de Supabase con cifrado y control de acceso RLS.
-            </p>
-          </div>
-
-          {onContinueAsGuest && (
-            <div className="pt-0.5 text-center">
-              <button
-                type="button"
-                onClick={onContinueAsGuest}
-                className="text-[11px] text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition cursor-pointer underline underline-offset-2"
-              >
-                Continuar en modo local / sin conexión →
-              </button>
-            </div>
           )}
         </div>
       </div>
