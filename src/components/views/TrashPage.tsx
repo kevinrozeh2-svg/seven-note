@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { AppleEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
 import { deleteImageFromStorage, extractStorageUrlsFromHtml } from '../../lib/imageOptimizer'
 import { getSupabaseClient } from '../../lib/supabase'
+import { getCurrentMember, isWorkspaceVisible } from '../../lib/teamAuth'
 
 interface TrashPageProps {
   onSelectWorkspace: (id: string) => void
@@ -29,7 +30,8 @@ export const TrashPage: React.FC<TrashPageProps> = () => {
 
   const loadDeleted = async () => {
     const all = await db.workspaces.toArray()
-    setDeletedWorkspaces(all.filter((w) => w.isDeleted))
+    const member = getCurrentMember()
+    setDeletedWorkspaces(all.filter((w) => w.isDeleted && isWorkspaceVisible(w, member)))
   }
 
   useEffect(() => {
@@ -137,44 +139,45 @@ export const TrashPage: React.FC<TrashPageProps> = () => {
   return (
     <div className="flex-1 flex flex-col h-full bg-[#18181b] text-neutral-200 select-none overflow-hidden">
       {/* Header */}
-      <header className="h-14 px-8 border-b border-neutral-800 flex items-center justify-between shrink-0 bg-[#18181b]">
+      <header className="h-auto min-h-14 py-2 px-4 sm:px-8 border-b border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between shrink-0 bg-[#18181b] gap-2.5">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-400 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-400 flex items-center justify-center shrink-0">
             <Trash2 className="w-4 h-4" />
           </div>
           <div>
             <h2 className="text-sm font-semibold text-white">Papelera de reciclaje</h2>
-            <p className="text-[11px] text-neutral-400">
+            <p className="text-[11px] text-neutral-400 hidden sm:block">
               {deletedWorkspaces.length} {deletedWorkspaces.length === 1 ? 'documento' : 'documentos'} en la papelera
             </p>
           </div>
         </div>
 
         {/* Header Actions */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
           {deletedWorkspaces.length > 0 && (
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Buscar en papelera..."
-              className="px-2.5 py-1 text-xs bg-neutral-900 border border-neutral-700 rounded-md text-neutral-200 outline-none"
+              className="flex-1 sm:w-44 px-2.5 py-1 text-xs bg-neutral-900 border border-neutral-700 rounded-md text-neutral-200 outline-none"
             />
           )}
           {deletedWorkspaces.length > 0 && (
             <button
               onClick={handleEmptyTrash}
-              className="px-3 py-1.5 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-medium border border-rose-500/20 transition flex items-center gap-1.5"
+              className="px-3 py-1.5 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-medium border border-rose-500/20 transition flex items-center gap-1.5 shrink-0 cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              <span>Vaciar papelera</span>
+              <span className="hidden sm:inline">Vaciar papelera</span>
+              <span className="sm:hidden">Vaciar</span>
             </button>
           )}
         </div>
       </header>
 
       {/* Main List */}
-      <div className="flex-1 overflow-y-auto px-10 py-6 max-w-5xl w-full mx-auto space-y-4 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-6 md:px-10 py-4 sm:py-6 max-w-5xl w-full mx-auto space-y-4 custom-scrollbar">
         {deletedWorkspaces.length === 0 ? (
           <div className="py-24 text-center">
             <div className="w-12 h-12 rounded-full bg-neutral-800/80 mx-auto flex items-center justify-center text-neutral-500 mb-3">

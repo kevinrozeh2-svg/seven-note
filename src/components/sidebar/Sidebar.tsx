@@ -36,7 +36,8 @@ import {
   ChartBar,
   PushPin,
   Kanban,
-  Columns
+  Columns,
+  X
 } from '@phosphor-icons/react'
 import {
   db,
@@ -45,11 +46,12 @@ import {
   DEFAULT_SPACE_ID,
   updateSpace
 } from '../../db'
-import { type SyncEngineStatus } from '../../lib/syncEngine'
+import { type SyncEngineStatus, syncEngine } from '../../lib/syncEngine'
 import { TeamMemberSwitcher } from './TeamMemberSwitcher'
 import { AppleEmoji, isEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
 import { EmojiPickerPopover } from '../modals/EmojiPickerPopover'
-import { getCurrentMember, type TeamMember, isWorkspaceVisible } from '../../lib/teamAuth'
+import { getCurrentMember, type TeamMember, isWorkspaceVisible, isSpaceVisible } from '../../lib/teamAuth'
+import { toast } from 'sonner'
 
 export interface SidebarProps {
   spaces?: SpaceItem[]
@@ -255,12 +257,18 @@ export function Sidebar({
   const [editingSpaceName, setEditingSpaceName] = useState('')
   const [emojiPickerTarget, setEmojiPickerTarget] = useState<{ id: string; type: 'space' | 'doc'; currentIcon?: string } | null>(null)
 
-  const currentSpace = spaces.find((s) => s.id === currentSpaceId) || spaces[0] || {
+  const visibleSpaces = spaces.filter(
+    (s) => !s.isDeleted && isSpaceVisible(s, activeMember, authUser?.id)
+  )
+
+  const currentSpace = visibleSpaces.find((s) => s.id === currentSpaceId) || visibleSpaces[0] || {
     id: DEFAULT_SPACE_ID,
     name: 'Espacio Principal',
     icon: '✦',
     color: '#1e96eb'
   }
+
+  const isCurrentSpacePrivate = Boolean(currentSpace.isPrivate)
 
   // Live queries for collections and tags in current space
   const dbCollections = useLiveQuery(
@@ -278,7 +286,7 @@ export function Sidebar({
     parentId: string | null = null,
     folderName: string | null = null,
     viewMode: 'doc' | 'canvas' = 'doc',
-    isPrivate: boolean = false
+    isPrivate: boolean = isCurrentSpacePrivate
   ) => {
     const newId = crypto.randomUUID()
     const now = Date.now()
@@ -342,10 +350,12 @@ export function Sidebar({
       await db.workspaces.update(ws.id, {
         isPrivate: nextPrivate,
         ownerMember: nextPrivate ? (ws.ownerMember || activeMember.id) : (ws.ownerMember || activeMember.id),
-        ownerName: nextPrivate ? activeMember.name : undefined,
+        ownerName: nextPrivate ? (ws.ownerName || activeMember.name) : ws.ownerName,
         updatedAt: Date.now(),
         syncStatus: 'pending'
       })
+      syncEngine.scheduleSync(500)
+      toast.success(nextPrivate ? 'Nota cambiada a MODO PRIVADO (solo tú)' : 'Nota cambiada a MODO EQUIPO (pública)')
     } catch (err) {
       console.error('Error toggling private', err)
     }
@@ -376,7 +386,7 @@ export function Sidebar({
     (w) =>
       !w.isDeleted &&
       (w.spaceId || DEFAULT_SPACE_ID) === currentSpace.id &&
-      isWorkspaceVisible(w, activeMember)
+      isWorkspaceVisible(w, activeMember, authUser?.id)
   )
   const privateDocs = activeWorkspaces.filter((w) => w.isPrivate)
   const teamDocs = activeWorkspaces.filter((w) => !w.isPrivate)
@@ -397,7 +407,7 @@ export function Sidebar({
   )
 
   return (
-    <aside className="w-64 h-full flex flex-col bg-[#fbfbfa] dark:bg-[#161619] border-r border-black/[0.05] dark:border-white/[0.06] text-neutral-800 dark:text-neutral-200 select-none shrink-0 text-xs transition-colors duration-200 font-sans">
+    <aside className="w-72 sm:w-64 h-full flex flex-col bg-[#fbfbfa] dark:bg-[#161619] border-r border-black/[0.05] dark:border-white/[0.06] text-neutral-800 dark:text-neutral-200 select-none shrink-0 text-xs transition-colors duration-200 font-sans shadow-2xl md:shadow-none">
       {/* 1. Header: Space Switcher & Controls */}
       <div className="h-12 px-3 flex items-center justify-between shrink-0 border-b border-black/[0.04] dark:border-white/[0.06] relative">
         <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -416,18 +426,24 @@ export function Sidebar({
             <span className="font-semibold text-neutral-900 dark:text-neutral-100 truncate text-xs flex-1">
               {currentSpace.name}
             </span>
+            {isCurrentSpacePrivate && (
+              <span className="text-amber-500 shrink-0" title="Espacio privado: Solo visible para ti">
+                <Lock size={12} weight="bold" />
+              </span>
+            )}
             <CaretDown size={14} className="text-neutral-400 group-hover:text-neutral-700 dark:group-hover:text-neutral-200 transition shrink-0" />
           </button>
         </div>
 
-        {/* Right buttons: Collapse */}
+        {/* Right buttons: Collapse on desktop, Close on mobile */}
         <div className="flex items-center gap-0.5 shrink-0 ml-1">
           <button
             onClick={onToggleSidebar}
-            className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-black/[0.04] dark:hover:bg-white/[0.06] transition"
-            title="Ocultar barra lateral"
+            className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-black/[0.04] dark:hover:bg-white/[0.06] transition cursor-pointer"
+            title="Cerrar barra lateral"
           >
-            <SidebarSimple size={15} weight="duotone" />
+            <X size={16} weight="bold" className="md:hidden text-neutral-600 dark:text-neutral-300" />
+            <SidebarSimple size={15} weight="duotone" className="hidden md:block" />
           </button>
         </div>
 
@@ -442,7 +458,7 @@ export function Sidebar({
               }}
             />
             <div
-              className="absolute left-2.5 right-2.5 top-11 z-50 bg-white dark:bg-[#1e1f23] border border-black/[0.08] dark:border-white/[0.1] rounded-2xl shadow-2xl p-2 animate-in fade-in zoom-in-95 duration-100 flex flex-col gap-1"
+              className="absolute left-2.5 right-2.5 top-11 z-50 bg-white dark:bg-[#1e1f23] border border-black/[0.08] dark:border-white/[0.1] rounded-xl sm:rounded-2xl shadow-2xl p-1.5 sm:p-2 animate-in fade-in zoom-in-95 duration-100 flex flex-col gap-1 max-h-[60vh] overflow-y-auto custom-scrollbar"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between px-2.5 py-1">
@@ -450,15 +466,15 @@ export function Sidebar({
                   Espacios
                 </span>
                 <span className="text-[10px] bg-black/5 dark:bg-white/10 text-neutral-500 px-1.5 py-0.5 rounded-full font-mono">
-                  {spaces.length}
+                  {visibleSpaces.length}
                 </span>
               </div>
 
               <div className="space-y-0.5 max-h-48 overflow-y-auto custom-scrollbar">
-                {spaces.map((sp) => {
+                {visibleSpaces.map((sp) => {
                   const isSelected = sp.id === currentSpace.id
                   const docsInSpace = workspaces.filter(
-                    (w) => !w.isDeleted && (w.spaceId || DEFAULT_SPACE_ID) === sp.id
+                    (w) => !w.isDeleted && (w.spaceId || DEFAULT_SPACE_ID) === sp.id && isWorkspaceVisible(w, activeMember, authUser?.id)
                   ).length
                   const isEditingThis = editingSpaceId === sp.id
 
@@ -519,6 +535,15 @@ export function Sidebar({
                           <AppleEmoji emoji={sp.icon || sp.name.charAt(0)} size={12} />
                         </div>
                         <span className="truncate flex-1 text-left">{sp.name}</span>
+                        {sp.isPrivate && (
+                          <span
+                            className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full text-[9px] font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 shrink-0"
+                            title="Espacio privado: Solo visible para ti"
+                          >
+                            <Lock size={9} weight="bold" />
+                            <span>Privado</span>
+                          </span>
+                        )}
                         <span className="text-[10px] opacity-60 font-mono shrink-0">
                           {docsInSpace}
                         </span>
@@ -526,6 +551,31 @@ export function Sidebar({
 
                       <div className="flex items-center gap-1 shrink-0 ml-1.5">
                         {isSelected && <Check size={14} weight="bold" className="text-neutral-900 dark:text-white shrink-0" />}
+                        <button
+                          type="button"
+                          onClick={async (e) => {
+                            e.stopPropagation()
+                            const nextPrivate = !sp.isPrivate
+                            await updateSpace(sp.id, {
+                              isPrivate: nextPrivate,
+                              ownerMember: nextPrivate ? (sp.ownerMember || activeMember.id) : sp.ownerMember,
+                              ownerName: nextPrivate ? (sp.ownerName || activeMember.name) : sp.ownerName,
+                              userId: nextPrivate ? (sp.userId || authUser?.id) : sp.userId,
+                              updatedAt: Date.now(),
+                              syncStatus: 'pending'
+                            })
+                            syncEngine.scheduleSync(500)
+                            toast.success(nextPrivate ? `Espacio "${sp.name}" cambiado a MODO PRIVADO (solo tú)` : `Espacio "${sp.name}" cambiado a MODO EQUIPO (público)`)
+                          }}
+                          className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 transition"
+                          title={sp.isPrivate ? 'Hacer público para el equipo' : 'Hacer privado (solo tú)'}
+                        >
+                          {sp.isPrivate ? (
+                            <LockOpen size={13} weight="duotone" className="text-amber-500" />
+                          ) : (
+                            <Lock size={13} weight="duotone" className="text-neutral-400 hover:text-amber-500" />
+                          )}
+                        </button>
                         <button
                           type="button"
                           onClick={(e) => {
@@ -538,7 +588,7 @@ export function Sidebar({
                         >
                           <PencilSimple size={13} weight="duotone" />
                         </button>
-                        {spaces.length > 1 && (
+                        {visibleSpaces.length > 1 && (
                           <button
                             type="button"
                             onClick={(e) => {
@@ -604,12 +654,12 @@ export function Sidebar({
       {/* 3. Tactile Pill Button: "+ Nueva Nota / Página" */}
       <div className="px-3 py-2">
         <button
-          onClick={() => handleCreateWorkspace(null, null, 'doc')}
+          onClick={() => handleCreateWorkspace(null, null, 'doc', isCurrentSpacePrivate)}
           className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-2xl bg-neutral-900 hover:bg-black dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 font-semibold text-xs shadow-md hover:shadow-lg transition-all active:scale-[0.98] cursor-pointer group"
-          title="Crear nueva página o nota"
+          title={isCurrentSpacePrivate ? 'Crear nueva nota en espacio privado' : 'Crear nueva página o nota'}
         >
           <Plus size={14} weight="bold" className="transition-transform group-hover:rotate-90" />
-          <span>Nueva Nota</span>
+          <span>{isCurrentSpacePrivate ? 'Nueva Nota Privada' : 'Nueva Nota'}</span>
         </button>
       </div>
 

@@ -172,7 +172,7 @@ export function FindInPage({ isOpen, onClose }: FindInPageProps) {
   if (!isOpen) return null
 
   return (
-    <div className="absolute top-3 right-5 z-40 flex items-center gap-1.5 bg-[var(--affine-background-overlay-panel-color)] border border-[var(--affine-border-color)] shadow-[var(--affine-menu-shadow)] px-3 py-1.5 rounded-xl text-xs text-[var(--affine-text-primary-color)] animate-in fade-in slide-in-from-top-2 duration-150 select-none">
+    <div className="absolute top-2 right-2 sm:top-3 sm:right-5 max-w-[calc(100vw-1rem)] z-40 flex items-center gap-1.5 bg-[var(--affine-background-overlay-panel-color)] border border-[var(--affine-border-color)] shadow-[var(--affine-menu-shadow)] px-2 sm:px-3 py-1.5 rounded-xl text-xs text-[var(--affine-text-primary-color)] animate-in fade-in slide-in-from-top-2 duration-150 select-none">
       <SearchIcon className="w-3.5 h-3.5 text-[var(--affine-text-secondary-color)] shrink-0" />
 
       <input
@@ -181,11 +181,11 @@ export function FindInPage({ isOpen, onClose }: FindInPageProps) {
         placeholder="Buscar en página..."
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
-        className="w-40 bg-transparent outline-none text-xs text-[var(--affine-text-primary-color)] placeholder:text-[var(--affine-placeholder-color)]"
+        className="w-24 sm:w-40 min-w-0 bg-transparent outline-none text-xs text-[var(--affine-text-primary-color)] placeholder:text-[var(--affine-placeholder-color)]"
       />
 
       {searchTerm && (
-        <span className="text-[11px] font-mono text-[var(--affine-text-secondary-color)] px-1 shrink-0">
+        <span className="text-[10px] sm:text-[11px] font-mono text-[var(--affine-text-secondary-color)] px-0.5 sm:px-1 shrink-0">
           {totalMatches > 0 ? `${currentMatch}/${totalMatches}` : 'Sin coincidencias'}
         </span>
       )}

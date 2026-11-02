@@ -87,7 +87,7 @@ export function CommandPalette({
     <>
       <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 bg-black/40 backdrop-blur-xs p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center pt-6 sm:pt-20 bg-black/40 backdrop-blur-xs p-2 sm:p-4">
           <motion.div
             initial={{ opacity: 0, scale: 0.98, y: -8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -323,8 +323,9 @@ export function CommandPalette({
               </Command.List>
 
               {/* Footer */}
-              <div className="px-4 py-2.5 border-t border-black/[0.06] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.02] rounded-b-2xl text-[11px] text-neutral-400 flex items-center justify-between">
-                <span>Navega con ↑↓ · Selecciona con ↵ · Sal con Esc</span>
+              <div className="px-4 py-2 border-t border-black/[0.06] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.02] rounded-b-2xl text-[11px] text-neutral-400 flex items-center justify-between">
+                <span className="hidden sm:inline">Navega con ↑↓ · Selecciona con ↵ · Sal con Esc</span>
+                <span className="sm:hidden">Buscar y ejecutar</span>
                 <span className="font-semibold text-neutral-500">Seven Search</span>
               </div>
             </Command>

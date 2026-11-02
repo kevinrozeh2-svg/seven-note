@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { CloseIcon, LocalWorkspaceIcon } from '@blocksuite/icons/rc'
+import { Lock, Users } from 'lucide-react'
 import { AppleEmoji } from '../ui/AppleEmoji'
 import { EmojiPickerPopover } from './EmojiPickerPopover'
 
 interface CreateWorkspaceModalProps {
   isOpen: boolean
   onClose: () => void
-  onCreate: (name: string, icon: string, color: string) => Promise<void>
+  onCreate: (name: string, icon: string, color: string, isPrivate?: boolean) => Promise<void>
 }
 
 const PRESET_EMOJIS = ['✨', '🤍', '🫧', '🎧', '🪐', '🌿', '☕', '🧸', '💼', '🚀', '💡', '📚', '🎨', '💻', '🎯', '⚡']
@@ -27,6 +28,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onCreate }: CreateWorksp
   const [name, setName] = useState('')
   const [selectedIcon, setSelectedIcon] = useState('💼')
   const [selectedColor, setSelectedColor] = useState('#1e96eb')
+  const [isPrivate, setIsPrivate] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isPickerOpen, setIsPickerOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -36,6 +38,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onCreate }: CreateWorksp
       setName('')
       setSelectedIcon('💼')
       setSelectedColor('#1e96eb')
+      setIsPrivate(false)
       setIsSubmitting(false)
       setIsPickerOpen(false)
       setTimeout(() => inputRef.current?.focus(), 50)
@@ -51,7 +54,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onCreate }: CreateWorksp
 
     try {
       setIsSubmitting(true)
-      await onCreate(trimmed, selectedIcon, selectedColor)
+      await onCreate(trimmed, selectedIcon, selectedColor, isPrivate)
       onClose()
     } catch (err) {
       console.error('Error creating workspace', err)
@@ -66,7 +69,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onCreate }: CreateWorksp
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl border shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col"
+        className="w-full max-w-md rounded-2xl border shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh] overflow-y-auto"
         style={{
           backgroundColor: 'var(--affine-background-primary-color)',
           borderColor: 'var(--affine-border-color)'
@@ -205,6 +208,50 @@ export function CreateWorkspaceModal({ isOpen, onClose, onCreate }: CreateWorksp
             )}
           </div>
 
+          {/* Workspace Visibility: Public vs Private */}
+          <div>
+            <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--affine-text-secondary-color)' }}>
+              Visibilidad del espacio
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setIsPrivate(false)}
+                className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 cursor-pointer ${
+                  !isPrivate
+                    ? 'border-blue-500 bg-blue-500/10 shadow-xs ring-1 ring-blue-500'
+                    : 'border-black/[0.08] dark:border-white/[0.08] hover:bg-black/[0.03] dark:hover:bg-white/[0.03]'
+                }`}
+              >
+                <div className="flex items-center gap-1.5 font-semibold text-xs" style={{ color: !isPrivate ? '#2563eb' : 'var(--affine-text-primary-color)' }}>
+                  <Users className="w-3.5 h-3.5 shrink-0" />
+                  <span>Público</span>
+                </div>
+                <p className="text-[10px] leading-tight text-neutral-500 dark:text-neutral-400">
+                  Visible para todo el equipo. Cualquiera puede ver y colaborar.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsPrivate(true)}
+                className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 cursor-pointer ${
+                  isPrivate
+                    ? 'border-amber-500 bg-amber-500/10 shadow-xs ring-1 ring-amber-500'
+                    : 'border-black/[0.08] dark:border-white/[0.08] hover:bg-black/[0.03] dark:hover:bg-white/[0.03]'
+                }`}
+              >
+                <div className="flex items-center gap-1.5 font-semibold text-xs text-amber-600 dark:text-amber-400">
+                  <Lock className="w-3.5 h-3.5 shrink-0" />
+                  <span>Privado</span>
+                </div>
+                <p className="text-[10px] leading-tight text-neutral-500 dark:text-neutral-400">
+                  Solo tú tienes acceso. Ni los administradores pueden verlo.
+                </p>
+              </button>
+            </div>
+          </div>
+
           {/* Color Selection */}
           <div>
             <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--affine-text-secondary-color)' }}>
@@ -248,8 +295,19 @@ export function CreateWorkspaceModal({ isOpen, onClose, onCreate }: CreateWorksp
                 <div className="font-semibold text-xs truncate" style={{ color: 'var(--affine-text-primary-color)' }}>
                   {name.trim() || 'Nuevo Espacio'}
                 </div>
-                <div className="text-[10px]" style={{ color: 'var(--affine-text-secondary-color)' }}>
-                  1 página inicial incluida
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="text-[10px]" style={{ color: 'var(--affine-text-secondary-color)' }}>
+                    1 página inicial incluida
+                  </span>
+                  <span className="text-[10px] text-neutral-300 dark:text-neutral-600">•</span>
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.2 rounded-full inline-flex items-center gap-1 ${
+                    isPrivate
+                      ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30'
+                      : 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+                  }`}>
+                    {isPrivate ? <Lock className="w-2.5 h-2.5" /> : <Users className="w-2.5 h-2.5" />}
+                    <span>{isPrivate ? 'Privado (Solo tú)' : 'Público (Equipo)'}</span>
+                  </span>
                 </div>
               </div>
             </div>

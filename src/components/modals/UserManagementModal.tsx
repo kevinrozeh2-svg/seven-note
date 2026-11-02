@@ -160,15 +160,15 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-black/[0.06] dark:border-white/[0.08] shrink-0">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-black/[0.06] dark:border-white/[0.08] shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold shadow-2xs">
+            <div className="w-10 h-10 rounded-2xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold shadow-2xs shrink-0">
               <Shield className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-sm font-bold">Gestión de Usuarios y Equipo</h2>
-                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                <span className="hidden sm:inline-block text-[10px] px-2 py-0.5 rounded-full font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
                   Panel de Administrador
                 </span>
               </div>
@@ -186,11 +186,11 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-black/[0.06] dark:border-white/[0.08] px-6 pt-2 bg-black/[0.01] dark:bg-white/[0.01] shrink-0">
+        <div className="flex border-b border-black/[0.06] dark:border-white/[0.08] px-4 sm:px-6 pt-2 bg-black/[0.01] dark:bg-white/[0.01] shrink-0 overflow-x-auto no-scrollbar">
           <button
             type="button"
             onClick={() => setActiveTab('members')}
-            className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
+            className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
               activeTab === 'members'
                 ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
                 : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
@@ -203,19 +203,19 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('invitations')}
-            className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
+            className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
               activeTab === 'invitations'
                 ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
                 : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
             }`}
           >
             <Mail className="w-3.5 h-3.5" />
-            <span>Invitaciones / Pre-autorizados ({invitations.length})</span>
+            <span>Invitaciones ({invitations.length})</span>
           </button>
         </div>
 
         {/* Tab Content */}
-        <div className="p-6 overflow-y-auto flex-1 custom-scrollbar space-y-4 text-xs">
+        <div className="p-3.5 sm:p-6 overflow-y-auto flex-1 custom-scrollbar space-y-4 text-xs">
           {/* TAB 1: MEMBERS */}
           {activeTab === 'members' && (
             <div className="space-y-3.5">
@@ -256,7 +256,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                     return (
                       <div
                         key={p.id}
-                        className={`p-3 rounded-2xl border transition flex items-center justify-between gap-3 ${
+                        className={`p-3 rounded-2xl border transition flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 ${
                           isSuspended
                             ? 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-500/20 opacity-75'
                             : 'bg-black/[0.015] dark:bg-white/[0.025] border-black/[0.05] dark:border-white/[0.07]'
@@ -292,12 +292,12 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                         </div>
 
                         {/* Actions: Role Selector and Status Toggle */}
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center justify-end gap-2 shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-black/[0.04] dark:border-white/[0.06]">
                           <select
                             value={p.role}
                             disabled={isSelf}
                             onChange={(e) => handleRoleChange(p.id, e.target.value as UserRole, p.status)}
-                            className="text-xs px-2.5 py-1.5 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-[#1a1b1e] outline-none cursor-pointer disabled:opacity-60"
+                            className="text-xs px-2.5 py-1.5 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-[#1a1b1e] outline-none cursor-pointer disabled:opacity-60 flex-1 sm:flex-none"
                           >
                             <option value="admin">Administrador</option>
                             <option value="member">Miembro (Editor)</option>
@@ -308,7 +308,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                             <button
                               type="button"
                               onClick={() => handleToggleStatus(p.id, p.role, p.status)}
-                              className={`p-1.5 rounded-xl border transition cursor-pointer ${
+                              className={`p-1.5 rounded-xl border transition cursor-pointer shrink-0 ${
                                 isSuspended
                                   ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/20'
                                   : 'bg-rose-500/10 text-rose-600 border-rose-500/20 hover:bg-rose-500/20'
@@ -338,7 +338,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                 <div className="font-semibold text-xs text-neutral-800 dark:text-neutral-200">
                   Pre-autorizar nuevo correo en el equipo
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                   <div className="relative flex-1">
                     <Mail className="w-3.5 h-3.5 absolute left-3 top-3 text-neutral-400 pointer-events-none" />
                     <input
@@ -364,7 +364,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                   <button
                     type="submit"
                     disabled={inviting}
-                    className="py-2 px-3.5 rounded-xl bg-neutral-900 hover:bg-black dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 font-semibold text-xs shadow-sm transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    className="py-2 px-3.5 rounded-xl bg-neutral-900 hover:bg-black dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 font-semibold text-xs shadow-sm transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                   >
                     {inviting ? (
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />

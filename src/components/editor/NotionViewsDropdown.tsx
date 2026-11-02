@@ -63,7 +63,7 @@ export const NotionViewsDropdown: React.FC<NotionViewsDropdownProps> = ({
     <div
       ref={dropdownRef}
       style={style}
-      className={`z-50 min-w-[165px] bg-[#1a1b1e] text-zinc-100 border border-zinc-800/90 rounded-2xl shadow-2xl p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in-95 duration-100 select-none ${className}`}
+      className={`z-50 w-[calc(100vw-32px)] max-w-[180px] sm:min-w-[165px] bg-[#1a1b1e] text-zinc-100 border border-zinc-800/90 rounded-xl sm:rounded-2xl shadow-2xl p-1 sm:p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in-95 duration-100 select-none max-h-[60vh] overflow-y-auto custom-scrollbar ${className}`}
       onClick={(e) => e.stopPropagation()}
     >
       {NOTION_TOOLS.map((tool) => {
@@ -76,14 +76,14 @@ export const NotionViewsDropdown: React.FC<NotionViewsDropdownProps> = ({
               onSelectView(tool.id)
               onClose()
             }}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] font-medium transition cursor-pointer text-left active:scale-[0.98] ${
+            className={`w-full flex items-center gap-2 sm:gap-3 px-2 sm:px-3 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-xs sm:text-[13px] font-medium transition cursor-pointer text-left active:scale-[0.98] ${
               isSelected
                 ? 'bg-white/15 text-white shadow-2xs'
                 : 'text-zinc-200 hover:bg-white/10 hover:text-white'
             }`}
           >
-            <Icon className="text-zinc-300 shrink-0" size={17} />
-            <span className="flex-1 tracking-tight">{tool.label}</span>
+            <Icon className="text-zinc-300 shrink-0" size={16} />
+            <span className="flex-1 tracking-tight truncate">{tool.label}</span>
             {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />}
           </button>
         )

@@ -315,10 +315,10 @@ export const NotionDatabaseView: React.FC<NotionDatabaseViewProps> = ({
             {/* Notion View Switcher Dropdown (Matching User Screenshot) */}
             {isAddViewOpen && (
               <div
-                className="absolute left-0 top-full mt-2 z-50 min-w-[175px] bg-[#1a1b1e] border border-zinc-800 rounded-2xl shadow-2xl p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in-95 duration-100"
+                className="fixed inset-x-3 top-24 sm:absolute sm:inset-x-auto sm:left-0 sm:top-full sm:mt-2 z-50 w-auto max-w-[190px] mx-auto sm:min-w-[175px] bg-[#1a1b1e] border border-zinc-800 rounded-xl sm:rounded-2xl shadow-2xl p-1 sm:p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in-95 duration-100 max-h-[60vh] overflow-y-auto custom-scrollbar"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="px-2.5 py-1 text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
+                <div className="px-2 sm:px-2.5 py-0.5 sm:py-1 text-[9px] sm:text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">
                   Vistas de Notion
                 </div>
                 {NOTION_VIEW_OPTIONS.map((opt) => {
@@ -331,15 +331,15 @@ export const NotionDatabaseView: React.FC<NotionDatabaseViewProps> = ({
                         handleSelectView(opt.id)
                         setIsAddViewOpen(false)
                       }}
-                      className={`flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-medium transition cursor-pointer text-left w-full ${
+                      className={`flex items-center gap-2 sm:gap-2.5 px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-medium transition cursor-pointer text-left w-full ${
                         isCurrent
                           ? 'bg-white/15 text-white'
                           : 'text-zinc-300 hover:bg-white/10 hover:text-white'
                       }`}
                     >
-                      <Icon className="text-zinc-300 shrink-0" size={16} />
-                      <span className="flex-1">{opt.label}</span>
-                      {isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />}
+                      <Icon className="text-zinc-300 shrink-0" size={15} />
+                      <span className="flex-1 truncate">{opt.label}</span>
+                      {isCurrent && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 shrink-0" />}
                     </button>
                   )
                 })}

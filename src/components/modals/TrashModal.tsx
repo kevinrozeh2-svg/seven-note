@@ -10,6 +10,7 @@ import { syncEngine } from '../../lib/syncEngine'
 import { AppleEmoji } from '../ui/AppleEmoji'
 import { deleteImageFromStorage, extractStorageUrlsFromHtml } from '../../lib/imageOptimizer'
 import { getSupabaseClient } from '../../lib/supabase'
+import { getCurrentMember, isWorkspaceVisible } from '../../lib/teamAuth'
 
 interface TrashModalProps {
   isOpen: boolean
@@ -21,7 +22,8 @@ export function TrashModal({ isOpen, onClose }: TrashModalProps) {
 
   const loadDeleted = async () => {
     const all = await db.workspaces.toArray()
-    setDeletedWorkspaces(all.filter((w) => w.isDeleted))
+    const member = getCurrentMember()
+    setDeletedWorkspaces(all.filter((w) => w.isDeleted && isWorkspaceVisible(w, member)))
   }
 
   useEffect(() => {

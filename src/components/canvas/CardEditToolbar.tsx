@@ -218,8 +218,8 @@ export const CardEditToolbar = memo(function CardEditToolbar({
 
             {/* Opacity Dropdown Popover */}
             {isOpacityOpen && (
-              <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-48 p-3 rounded-xl bg-[#1c1c1e] border border-white/10 shadow-2xl text-white z-50 flex flex-col gap-2.5">
-                <div className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">
+              <div className="fixed inset-x-3 bottom-16 sm:absolute sm:inset-x-auto sm:top-full sm:mt-2 sm:left-1/2 sm:-translate-x-1/2 w-auto max-w-[200px] mx-auto sm:w-48 p-2 sm:p-3 rounded-xl bg-[#1c1c1e] border border-white/10 shadow-2xl text-white z-50 flex flex-col gap-2 sm:gap-2.5 max-h-[60vh] overflow-y-auto custom-scrollbar">
+                <div className="text-[10px] sm:text-[11px] font-semibold text-zinc-400 uppercase tracking-wider">
                   Opacidad
                 </div>
                 <div className="flex items-center gap-2">
@@ -232,7 +232,7 @@ export const CardEditToolbar = memo(function CardEditToolbar({
                     onChange={(e) => handleUpdate({ opacity: Number(e.target.value) / 100 })}
                     className="w-full accent-sky-500 h-1.5 bg-zinc-700 rounded-lg cursor-pointer"
                   />
-                  <span className="text-xs font-mono w-9 text-right">
+                  <span className="text-[11px] sm:text-xs font-mono w-9 text-right">
                     {Math.round(currentOpacity * 100)}%
                   </span>
                 </div>
@@ -241,7 +241,7 @@ export const CardEditToolbar = memo(function CardEditToolbar({
                     <button
                       key={op}
                       onClick={() => handleUpdate({ opacity: op })}
-                      className={`px-1 py-0.5 rounded text-[11px] font-mono transition cursor-pointer ${
+                      className={`px-1 py-0.5 rounded text-[10px] sm:text-[11px] font-mono transition cursor-pointer ${
                         Math.abs(currentOpacity - op) < 0.05
                           ? 'bg-sky-500 text-white font-bold'
                           : 'bg-white/5 hover:bg-white/10 text-zinc-300'
@@ -301,7 +301,7 @@ export const CardEditToolbar = memo(function CardEditToolbar({
             {/* 3-Dots Dropdown Menu (Matches user screenshot 2 exactly)                  */}
             {/* ========================================================================= */}
             {isMoreOpen && (
-              <div className="absolute top-full mt-2 right-0 w-[210px] p-1.5 rounded-2xl bg-[#1c1c1e] border border-white/10 shadow-2xl text-white z-50 flex flex-col gap-0.5 select-none animate-in fade-in zoom-in-95 duration-100">
+              <div className="fixed inset-x-3 bottom-16 sm:absolute sm:inset-x-auto sm:top-full sm:mt-2 sm:right-0 w-auto max-w-[240px] mx-auto sm:w-56 p-1 sm:p-1.5 rounded-xl sm:rounded-2xl bg-[#1c1c1e] border border-white/10 shadow-2xl text-white z-50 flex flex-col gap-0.5 select-none animate-in fade-in zoom-in-95 duration-100 max-h-[min(360px,65vh)] overflow-y-auto custom-scrollbar">
                 {/* Group 1: Frame section & Group section */}
                 {onFrameSection && (
                   <button
@@ -309,9 +309,9 @@ export const CardEditToolbar = memo(function CardEditToolbar({
                       onFrameSection(node.id)
                       setIsMoreOpen(false)
                     }}
-                    className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] hover:bg-white/10 transition text-zinc-200 text-left cursor-pointer"
+                    className="flex items-center gap-2 sm:gap-2.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-xs sm:text-[13px] hover:bg-white/10 transition text-zinc-200 text-left cursor-pointer"
                   >
-                    <Hash className="w-4 h-4 text-zinc-400 shrink-0" />
+                    <Hash className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-zinc-400 shrink-0" />
                     <span>Frame section</span>
                   </button>
                 )}
@@ -322,14 +322,14 @@ export const CardEditToolbar = memo(function CardEditToolbar({
                       onGroupSection(node.id)
                       setIsMoreOpen(false)
                     }}
-                    className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] hover:bg-white/10 transition text-zinc-200 text-left cursor-pointer"
+                    className="flex items-center gap-2 sm:gap-2.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-xs sm:text-[13px] hover:bg-white/10 transition text-zinc-200 text-left cursor-pointer"
                   >
-                    <BoxSelect className="w-4 h-4 text-zinc-400 shrink-0" />
+                    <BoxSelect className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-zinc-400 shrink-0" />
                     <span>Group section</span>
                   </button>
                 )}
 
-                <div className="my-1 border-t border-white/10" />
+                <div className="my-0.5 sm:my-1 border-t border-white/10" />
 
                 {/* Group 2: Z-Index Ordering */}
                 {onBringToFront && (
@@ -338,9 +338,9 @@ export const CardEditToolbar = memo(function CardEditToolbar({
                       onBringToFront(node.id)
                       setIsMoreOpen(false)
                     }}
-                    className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] hover:bg-white/10 transition text-zinc-200 text-left cursor-pointer"
+                    className="flex items-center gap-2 sm:gap-2.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-xs sm:text-[13px] hover:bg-white/10 transition text-zinc-200 text-left cursor-pointer"
                   >
-                    <ArrowUpToLine className="w-4 h-4 text-zinc-400 shrink-0" />
+                    <ArrowUpToLine className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-zinc-400 shrink-0" />
                     <span>Bring to Front</span>
                   </button>
                 )}
@@ -351,9 +351,9 @@ export const CardEditToolbar = memo(function CardEditToolbar({
                       onBringForward(node.id)
                       setIsMoreOpen(false)
                     }}
-                    className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] hover:bg-white/10 transition text-zinc-200 text-left cursor-pointer"
+                    className="flex items-center gap-2 sm:gap-2.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-xs sm:text-[13px] hover:bg-white/10 transition text-zinc-200 text-left cursor-pointer"
                   >
-                    <ArrowUp className="w-4 h-4 text-zinc-400 shrink-0" />
+                    <ArrowUp className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-zinc-400 shrink-0" />
                     <span>Bring Forward</span>
                   </button>
                 )}
@@ -364,9 +364,9 @@ export const CardEditToolbar = memo(function CardEditToolbar({
                       onSendBackward(node.id)
                       setIsMoreOpen(false)
                     }}
-                    className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] hover:bg-white/10 transition text-zinc-200 text-left cursor-pointer"
+                    className="flex items-center gap-2 sm:gap-2.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-xs sm:text-[13px] hover:bg-white/10 transition text-zinc-200 text-left cursor-pointer"
                   >
-                    <ArrowDown className="w-4 h-4 text-zinc-400 shrink-0" />
+                    <ArrowDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-zinc-400 shrink-0" />
                     <span>Send Backward</span>
                   </button>
                 )}
@@ -377,45 +377,45 @@ export const CardEditToolbar = memo(function CardEditToolbar({
                       onSendToBack(node.id)
                       setIsMoreOpen(false)
                     }}
-                    className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] hover:bg-white/10 transition text-zinc-200 text-left cursor-pointer"
+                    className="flex items-center gap-2 sm:gap-2.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-xs sm:text-[13px] hover:bg-white/10 transition text-zinc-200 text-left cursor-pointer"
                   >
-                    <ArrowDownToLine className="w-4 h-4 text-zinc-400 shrink-0" />
+                    <ArrowDownToLine className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-zinc-400 shrink-0" />
                     <span>Send to Back</span>
                   </button>
                 )}
 
-                <div className="my-1 border-t border-white/10" />
+                <div className="my-0.5 sm:my-1 border-t border-white/10" />
 
                 {/* Group 3: Copy, Copy as Image, Copy as Markdown, Copy link to block, Duplicate */}
                 <button
                   onClick={handleCopy}
-                  className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] hover:bg-white/10 transition text-zinc-200 text-left cursor-pointer"
+                  className="flex items-center gap-2 sm:gap-2.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-xs sm:text-[13px] hover:bg-white/10 transition text-zinc-200 text-left cursor-pointer"
                 >
-                  <Copy className="w-4 h-4 text-zinc-400 shrink-0" />
+                  <Copy className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-zinc-400 shrink-0" />
                   <span>Copy</span>
                 </button>
 
                 <button
                   onClick={handleCopyAsImage}
-                  className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] hover:bg-white/10 transition text-zinc-200 text-left cursor-pointer"
+                  className="flex items-center gap-2 sm:gap-2.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-xs sm:text-[13px] hover:bg-white/10 transition text-zinc-200 text-left cursor-pointer"
                 >
-                  <ImageIcon className="w-4 h-4 text-zinc-400 shrink-0" />
+                  <ImageIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-zinc-400 shrink-0" />
                   <span>Copy as Image</span>
                 </button>
 
                 <button
                   onClick={handleCopyAsMarkdown}
-                  className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] hover:bg-white/10 transition text-zinc-200 text-left cursor-pointer"
+                  className="flex items-center gap-2 sm:gap-2.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-xs sm:text-[13px] hover:bg-white/10 transition text-zinc-200 text-left cursor-pointer"
                 >
-                  <FileCode className="w-4 h-4 text-zinc-400 shrink-0" />
+                  <FileCode className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-zinc-400 shrink-0" />
                   <span>Copy as Markdown</span>
                 </button>
 
                 <button
                   onClick={handleCopyLinkToBlock}
-                  className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] hover:bg-white/10 transition text-zinc-200 text-left cursor-pointer"
+                  className="flex items-center gap-2 sm:gap-2.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-xs sm:text-[13px] hover:bg-white/10 transition text-zinc-200 text-left cursor-pointer"
                 >
-                  <Link2 className="w-4 h-4 text-zinc-400 shrink-0" />
+                  <Link2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-zinc-400 shrink-0" />
                   <span>Copy link to block</span>
                 </button>
 
@@ -424,13 +424,13 @@ export const CardEditToolbar = memo(function CardEditToolbar({
                     onDuplicate(node.id)
                     setIsMoreOpen(false)
                   }}
-                  className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] hover:bg-white/10 transition text-zinc-200 text-left cursor-pointer"
+                  className="flex items-center gap-2 sm:gap-2.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-xs sm:text-[13px] hover:bg-white/10 transition text-zinc-200 text-left cursor-pointer"
                 >
-                  <CopyPlus className="w-4 h-4 text-zinc-400 shrink-0" />
+                  <CopyPlus className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-zinc-400 shrink-0" />
                   <span>Duplicate</span>
                 </button>
 
-                <div className="my-1 border-t border-white/10" />
+                <div className="my-0.5 sm:my-1 border-t border-white/10" />
 
                 {/* Group 4: Turn into linked doc */}
                 {onTurnIntoLinkedDoc && (
@@ -439,14 +439,14 @@ export const CardEditToolbar = memo(function CardEditToolbar({
                       onTurnIntoLinkedDoc(node.id)
                       setIsMoreOpen(false)
                     }}
-                    className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] hover:bg-white/10 transition text-zinc-200 text-left cursor-pointer"
+                    className="flex items-center gap-2 sm:gap-2.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-xs sm:text-[13px] hover:bg-white/10 transition text-zinc-200 text-left cursor-pointer"
                   >
-                    <FileSymlink className="w-4 h-4 text-zinc-400 shrink-0" />
+                    <FileSymlink className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-zinc-400 shrink-0" />
                     <span>Turn into linked doc</span>
                   </button>
                 )}
 
-                <div className="my-1 border-t border-white/10" />
+                <div className="my-0.5 sm:my-1 border-t border-white/10" />
 
                 {/* Group 5: Delete */}
                 <button
@@ -454,9 +454,9 @@ export const CardEditToolbar = memo(function CardEditToolbar({
                     onDelete(node.id)
                     setIsMoreOpen(false)
                   }}
-                  className="flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] hover:bg-rose-500/20 text-rose-400 transition text-left cursor-pointer"
+                  className="flex items-center gap-2 sm:gap-2.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-xs sm:text-[13px] hover:bg-rose-500/20 text-rose-400 transition text-left cursor-pointer"
                 >
-                  <Trash2 className="w-4 h-4 shrink-0" />
+                  <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                   <span>Delete</span>
                 </button>
               </div>
@@ -469,10 +469,10 @@ export const CardEditToolbar = memo(function CardEditToolbar({
         {/* Matches user screenshot 1 exactly                                         */}
         {/* ========================================================================= */}
         {isPaletteOpen && (
-          <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-[340px] p-4 rounded-2xl bg-[#1c1c1e] text-white border border-white/10 shadow-2xl z-50 flex flex-col gap-4 select-none transition-all">
+          <div className="fixed inset-x-3 bottom-16 sm:absolute sm:inset-x-auto sm:top-full sm:mt-2 sm:left-1/2 sm:-translate-x-1/2 w-auto max-w-[340px] mx-auto sm:w-[340px] p-2.5 sm:p-4 rounded-xl sm:rounded-2xl bg-[#1c1c1e] text-white border border-white/10 shadow-2xl z-50 flex flex-col gap-2.5 sm:gap-4 select-none transition-all max-h-[min(440px,65vh)] overflow-y-auto custom-scrollbar">
             {/* Section 1: Fill color */}
             <div>
-              <div className="text-zinc-400 text-xs font-medium mb-2.5">Fill color</div>
+              <div className="text-zinc-400 text-[11px] sm:text-xs font-medium mb-1.5 sm:mb-2.5">Fill color</div>
               <div className="flex items-center justify-between gap-1.5 flex-wrap">
                 {/* 8 Color Swatches */}
                 {FILL_COLORS.map((c) => {
@@ -532,12 +532,12 @@ export const CardEditToolbar = memo(function CardEditToolbar({
 
             {/* Section 2: Shadow */}
             <div>
-              <div className="text-zinc-400 text-xs font-medium mb-2.5">Shadow</div>
-              <div className="grid grid-cols-6 gap-2">
+              <div className="text-zinc-400 text-[11px] sm:text-xs font-medium mb-1.5 sm:mb-2.5">Shadow</div>
+              <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 sm:gap-2">
                 {/* 1. None */}
                 <button
                   onClick={() => handleUpdate({ shadowType: 'none' })}
-                  className={`h-11 rounded-lg bg-[#27272a]/60 border flex items-center justify-center transition-all cursor-pointer ${
+                  className={`h-9 sm:h-11 rounded-lg bg-[#27272a]/60 border flex items-center justify-center transition-all cursor-pointer ${
                     currentShadow === 'none'
                       ? 'border-sky-500 bg-sky-500/10 text-sky-400 ring-1 ring-sky-500/50'
                       : 'border-white/10 hover:border-white/25 text-zinc-500'
@@ -550,14 +550,14 @@ export const CardEditToolbar = memo(function CardEditToolbar({
                 {/* 2. Subtle */}
                 <button
                   onClick={() => handleUpdate({ shadowType: 'subtle' })}
-                  className={`h-11 rounded-lg bg-[#27272a] border p-1.5 flex flex-col justify-center items-center gap-1 transition-all shadow-sm cursor-pointer ${
+                  className={`h-9 sm:h-11 rounded-lg bg-[#27272a] border p-1 sm:p-1.5 flex flex-col justify-center items-center gap-1 transition-all shadow-sm cursor-pointer ${
                     currentShadow === 'subtle'
                       ? 'border-sky-500 bg-sky-500/10 ring-1 ring-sky-500/50'
                       : 'border-white/10 hover:border-white/25'
                   }`}
                   title="Sombra sutil"
                 >
-                  <div className="w-5 h-6 rounded bg-zinc-700/80 p-1 flex flex-col gap-0.5 shadow-xs">
+                  <div className="w-4.5 sm:w-5 h-5 sm:h-6 rounded bg-zinc-700/80 p-0.5 sm:p-1 flex flex-col gap-0.5 shadow-xs">
                     <div className="w-full h-0.5 bg-zinc-500 rounded" />
                     <div className="w-2/3 h-0.5 bg-zinc-500 rounded" />
                     <div className="w-full h-0.5 bg-zinc-500 rounded" />
@@ -567,14 +567,14 @@ export const CardEditToolbar = memo(function CardEditToolbar({
                 {/* 3. Elevated (Dark bottom drop shadow) */}
                 <button
                   onClick={() => handleUpdate({ shadowType: 'elevated' })}
-                  className={`h-11 rounded-lg bg-[#27272a] border p-1.5 flex flex-col justify-center items-center gap-1 transition-all cursor-pointer ${
+                  className={`h-9 sm:h-11 rounded-lg bg-[#27272a] border p-1 sm:p-1.5 flex flex-col justify-center items-center gap-1 transition-all cursor-pointer ${
                     currentShadow === 'elevated'
                       ? 'border-sky-500 bg-sky-500/10 ring-1 ring-sky-500/50'
                       : 'border-white/10 hover:border-white/25'
                   }`}
                   title="Sombra profunda elevada"
                 >
-                  <div className="w-5 h-6 rounded bg-zinc-700 p-1 flex flex-col gap-0.5 shadow-[0_5px_8px_rgba(0,0,0,0.9)]">
+                  <div className="w-4.5 sm:w-5 h-5 sm:h-6 rounded bg-zinc-700 p-0.5 sm:p-1 flex flex-col gap-0.5 shadow-[0_5px_8px_rgba(0,0,0,0.9)]">
                     <div className="w-full h-0.5 bg-zinc-500 rounded" />
                     <div className="w-2/3 h-0.5 bg-zinc-500 rounded" />
                     <div className="w-full h-0.5 bg-zinc-500 rounded" />
@@ -584,14 +584,14 @@ export const CardEditToolbar = memo(function CardEditToolbar({
                 {/* 4. Border (High-contrast outline) */}
                 <button
                   onClick={() => handleUpdate({ shadowType: 'border' })}
-                  className={`h-11 rounded-lg bg-[#27272a] border p-1.5 flex flex-col justify-center items-center gap-1 transition-all cursor-pointer ${
+                  className={`h-9 sm:h-11 rounded-lg bg-[#27272a] border p-1 sm:p-1.5 flex flex-col justify-center items-center gap-1 transition-all cursor-pointer ${
                     currentShadow === 'border'
                       ? 'border-sky-500 bg-sky-500/10 ring-1 ring-sky-500/50'
                       : 'border-white/10 hover:border-white/25'
                   }`}
                   title="Contorno nítido"
                 >
-                  <div className="w-5 h-6 rounded bg-zinc-800 border-1.5 border-zinc-400 p-1 flex flex-col gap-0.5">
+                  <div className="w-4.5 sm:w-5 h-5 sm:h-6 rounded bg-zinc-800 border-1.5 border-zinc-400 p-0.5 sm:p-1 flex flex-col gap-0.5">
                     <div className="w-full h-0.5 bg-zinc-500 rounded" />
                     <div className="w-2/3 h-0.5 bg-zinc-500 rounded" />
                     <div className="w-full h-0.5 bg-zinc-500 rounded" />
@@ -601,14 +601,14 @@ export const CardEditToolbar = memo(function CardEditToolbar({
                 {/* 5. Glow */}
                 <button
                   onClick={() => handleUpdate({ shadowType: 'glow' })}
-                  className={`h-11 rounded-lg bg-[#27272a] border p-1.5 flex flex-col justify-center items-center gap-1 transition-all cursor-pointer ${
+                  className={`h-9 sm:h-11 rounded-lg bg-[#27272a] border p-1 sm:p-1.5 flex flex-col justify-center items-center gap-1 transition-all cursor-pointer ${
                     currentShadow === 'glow'
                       ? 'border-sky-500 bg-sky-500/10 ring-1 ring-sky-500/50'
                       : 'border-white/10 hover:border-white/25'
                   }`}
                   title="Resplandor suave"
                 >
-                  <div className="w-5 h-6 rounded bg-zinc-700 p-1 flex flex-col gap-0.5 shadow-[0_0_8px_rgba(56,189,248,0.7)]">
+                  <div className="w-4.5 sm:w-5 h-5 sm:h-6 rounded bg-zinc-700 p-0.5 sm:p-1 flex flex-col gap-0.5 shadow-[0_0_8px_rgba(56,189,248,0.7)]">
                     <div className="w-full h-0.5 bg-zinc-400 rounded" />
                     <div className="w-2/3 h-0.5 bg-zinc-400 rounded" />
                     <div className="w-full h-0.5 bg-zinc-400 rounded" />
@@ -618,16 +618,16 @@ export const CardEditToolbar = memo(function CardEditToolbar({
                 {/* 6. Stacked */}
                 <button
                   onClick={() => handleUpdate({ shadowType: 'stacked' })}
-                  className={`h-11 rounded-lg bg-[#27272a] border p-1.5 flex flex-col justify-center items-center gap-1 transition-all cursor-pointer ${
+                  className={`h-9 sm:h-11 rounded-lg bg-[#27272a] border p-1 sm:p-1.5 flex flex-col justify-center items-center gap-1 transition-all cursor-pointer ${
                     currentShadow === 'stacked'
                       ? 'border-sky-500 bg-sky-500/10 ring-1 ring-sky-500/50'
                       : 'border-white/10 hover:border-white/25'
                   }`}
                   title="Tarjetas apiladas"
                 >
-                  <div className="relative w-5 h-6">
-                    <div className="absolute top-0.5 right-0.5 w-4.5 h-5.5 rounded bg-zinc-600/60 border border-white/20" />
-                    <div className="absolute top-0 left-0 w-4.5 h-5.5 rounded bg-zinc-700 border border-white/30 p-0.5 flex flex-col gap-0.5 shadow-sm">
+                  <div className="relative w-4.5 sm:w-5 h-5 sm:h-6">
+                    <div className="absolute top-0.5 right-0.5 w-4 sm:w-4.5 h-4.5 sm:h-5.5 rounded bg-zinc-600/60 border border-white/20" />
+                    <div className="absolute top-0 left-0 w-4 sm:w-4.5 h-4.5 sm:h-5.5 rounded bg-zinc-700 border border-white/30 p-0.5 flex flex-col gap-0.5 shadow-sm">
                       <div className="w-full h-0.5 bg-zinc-400 rounded" />
                       <div className="w-2/3 h-0.5 bg-zinc-400 rounded" />
                     </div>

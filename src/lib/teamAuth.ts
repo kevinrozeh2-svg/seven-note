@@ -243,13 +243,53 @@ export function canUserEdit(member?: TeamMember | UserProfile | null): boolean {
 }
 
 /**
+ * Determina si un espacio de trabajo es visible para el miembro actual.
+ * - Si no es privado (isPrivate === false o undefined): visible para todo el equipo.
+ * - Si es privado (isPrivate === true): SOLO visible si pertenece al usuario actual.
+ *   ¡IMPORTANTE: Ni siquiera el administrador puede ver los espacios privados de otros usuarios, y viceversa!
+ */
+export function isSpaceVisible(
+  space: { isPrivate?: boolean; ownerMember?: string; userId?: string; user_id?: string },
+  currentMemberOrId?: string | TeamMember | null,
+  authUserId?: string
+): boolean {
+  if (!space || !space.isPrivate) return true
+  if (!currentMemberOrId) return false
+
+  const member = typeof currentMemberOrId === 'string'
+    ? TEAM_MEMBERS.find((m: TeamMember) => m.id === currentMemberOrId) || getCurrentMember()
+    : currentMemberOrId
+
+  const memberId = typeof currentMemberOrId === 'string' ? currentMemberOrId : currentMemberOrId.id
+  const effectiveAuthId = authUserId || (member?.id !== 'kevin' && member?.id !== 'maikol' && member?.id !== 'marcos' ? member?.id : undefined)
+
+  // Un espacio privado SOLO es visible si pertenece al usuario actual
+  // Ni el administrador puede ver los espacios privados de los demás usuarios, y viceversa
+  const matchesOwnerMember = Boolean(
+    space.ownerMember && (
+      space.ownerMember === memberId ||
+      (member?.email && space.ownerMember.toLowerCase() === member.email.toLowerCase())
+    )
+  )
+
+  const matchesUserId = Boolean(
+    (space.userId && (space.userId === memberId || (effectiveAuthId && space.userId === effectiveAuthId))) ||
+    (space.user_id && (space.user_id === memberId || (effectiveAuthId && space.user_id === effectiveAuthId)))
+  )
+
+  return matchesOwnerMember || matchesUserId
+}
+
+/**
  * Determina si una nota o documento es visible para el miembro actual.
  * - Si no es privada (isPrivate === false o undefined): visible para todo el equipo.
- * - Si es privada (isPrivate === true): SOLO visible si ownerMember coincide con el miembro actual o si es administrador.
+ * - Si es privada (isPrivate === true): SOLO visible si pertenece al usuario actual (autor).
+ *   ¡IMPORTANTE: Ni siquiera el administrador puede ver las notas privadas de otros usuarios, y viceversa!
  */
 export function isWorkspaceVisible(
-  workspace: { isPrivate?: boolean; ownerMember?: string; user_id?: string },
-  currentMemberOrId?: string | TeamMember | null
+  workspace: { isPrivate?: boolean; ownerMember?: string; user_id?: string; spaceId?: string },
+  currentMemberOrId?: string | TeamMember | null,
+  authUserId?: string
 ): boolean {
   if (!workspace || !workspace.isPrivate) return true
   if (!currentMemberOrId) return false
@@ -259,9 +299,24 @@ export function isWorkspaceVisible(
     : currentMemberOrId
 
   const memberId = typeof currentMemberOrId === 'string' ? currentMemberOrId : currentMemberOrId.id
-  const isAdmin = member ? isUserAdmin(member) : false
+  const effectiveAuthId = authUserId || (member?.id !== 'kevin' && member?.id !== 'maikol' && member?.id !== 'marcos' ? member?.id : undefined)
 
-  // Si es privada, visible para su autor o admin
-  return workspace.ownerMember === memberId || (workspace.user_id !== undefined && workspace.user_id === memberId) || isAdmin
+  // Estricto: Si es privada, SOLO visible para su autor original.
+  // ¡Ni siquiera el administrador puede ver las notas privadas de los demás usuarios, y viceversa!
+  const matchesOwnerMember = Boolean(
+    workspace.ownerMember && (
+      workspace.ownerMember === memberId ||
+      (member?.email && workspace.ownerMember.toLowerCase() === member.email.toLowerCase())
+    )
+  )
+
+  const matchesUserId = Boolean(
+    workspace.user_id && (
+      workspace.user_id === memberId ||
+      (effectiveAuthId && workspace.user_id === effectiveAuthId)
+    )
+  )
+
+  return matchesOwnerMember || matchesUserId
 }
 

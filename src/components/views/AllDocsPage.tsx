@@ -146,12 +146,12 @@ export const AllDocsPage: React.FC<AllDocsPageProps> = ({
   return (
     <div className="flex-1 flex flex-col h-full bg-[#18181b] text-neutral-200 select-none overflow-hidden">
       {/* Top AFFiNE-style Header */}
-      <header className="h-14 px-8 border-b border-neutral-800 flex items-center justify-between shrink-0 bg-[#18181b]">
+      <header className="h-14 px-3 sm:px-8 border-b border-neutral-800 flex items-center justify-between shrink-0 bg-[#18181b] gap-2 overflow-x-auto no-scrollbar">
         {/* Navigation Tabs (Documentos / Colecciones / Etiquetas) */}
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-3 sm:gap-6 shrink-0">
           <button
             onClick={() => setActiveTab('docs')}
-            className={`text-sm font-semibold transition pb-0.5 ${
+            className={`text-xs sm:text-sm font-semibold transition pb-0.5 whitespace-nowrap cursor-pointer ${
               activeTab === 'docs'
                 ? 'text-white border-b-2 border-white'
                 : 'text-neutral-400 hover:text-neutral-200'
@@ -161,7 +161,7 @@ export const AllDocsPage: React.FC<AllDocsPageProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('collections')}
-            className={`text-sm font-semibold transition pb-0.5 ${
+            className={`text-xs sm:text-sm font-semibold transition pb-0.5 whitespace-nowrap cursor-pointer ${
               activeTab === 'collections'
                 ? 'text-white border-b-2 border-white'
                 : 'text-neutral-400 hover:text-neutral-200'
@@ -171,7 +171,7 @@ export const AllDocsPage: React.FC<AllDocsPageProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('tags')}
-            className={`text-sm font-semibold transition pb-0.5 ${
+            className={`text-xs sm:text-sm font-semibold transition pb-0.5 whitespace-nowrap cursor-pointer ${
               activeTab === 'tags'
                 ? 'text-white border-b-2 border-white'
                 : 'text-neutral-400 hover:text-neutral-200'
@@ -182,30 +182,30 @@ export const AllDocsPage: React.FC<AllDocsPageProps> = ({
         </div>
 
         {/* Right Actions: View switchers, Mostrar, Nueva Página */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           {/* Layout buttons */}
-          <div className="flex items-center gap-1 bg-neutral-900/60 p-1 rounded-md border border-neutral-800">
+          <div className="flex items-center gap-0.5 sm:gap-1 bg-neutral-900/60 p-0.5 sm:p-1 rounded-md border border-neutral-800">
             <button
               onClick={() => setViewLayout('list')}
-              className={`p-1.5 rounded transition ${
+              className={`p-1.5 rounded transition cursor-pointer ${
                 viewLayout === 'list'
                   ? 'bg-neutral-800 text-white'
                   : 'text-neutral-400 hover:text-neutral-200'
               }`}
               title="Vista de lista"
             >
-              <ListIcon className="w-4 h-4" />
+              <ListIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
             <button
               onClick={() => setViewLayout('grid')}
-              className={`p-1.5 rounded transition ${
+              className={`p-1.5 rounded transition cursor-pointer ${
                 viewLayout === 'grid'
                   ? 'bg-neutral-800 text-white'
                   : 'text-neutral-400 hover:text-neutral-200'
               }`}
               title="Vista de tarjetas"
             >
-              <LayoutGrid className="w-4 h-4" />
+              <LayoutGrid className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
           </div>
 
@@ -217,16 +217,17 @@ export const AllDocsPage: React.FC<AllDocsPageProps> = ({
                 const next = modes[(modes.indexOf(subFilter) + 1) % modes.length]
                 setSubFilter(next)
               }}
-              className="px-3 py-1.5 rounded-md bg-neutral-900/80 hover:bg-neutral-800 text-xs font-medium text-neutral-300 border border-neutral-800 flex items-center gap-1.5 transition"
+              className="px-2.5 sm:px-3 py-1.5 rounded-md bg-neutral-900/80 hover:bg-neutral-800 text-xs font-medium text-neutral-300 border border-neutral-800 flex items-center gap-1 sm:gap-1.5 transition cursor-pointer"
             >
+              <span className="hidden sm:inline">Mostrar: </span>
               <span>
                 {subFilter === 'all'
-                  ? 'Mostrar: Todos'
+                  ? 'Todos'
                   : subFilter === 'doc'
-                  ? 'Mostrar: Páginas'
+                  ? 'Páginas'
                   : subFilter === 'canvas'
-                  ? 'Mostrar: Tableros'
-                  : 'Mostrar: Favoritos'}
+                  ? 'Tableros'
+                  : 'Favoritos'}
               </span>
               <ChevronDown className="w-3 h-3 opacity-60" />
             </button>
@@ -235,21 +236,22 @@ export const AllDocsPage: React.FC<AllDocsPageProps> = ({
           {/* New Page button */}
           <button
             onClick={onCreateWorkspace}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-semibold border border-neutral-700 shadow-sm transition"
+            className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-semibold border border-neutral-700 shadow-sm transition cursor-pointer"
           >
-            <span>Nueva Página</span>
+            <span className="hidden sm:inline">Nueva Página</span>
+            <span className="sm:hidden">Nueva</span>
             <ChevronDown className="w-3.5 h-3.5 opacity-70" />
           </button>
         </div>
       </header>
 
       {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto px-10 py-6 max-w-6xl w-full mx-auto space-y-6 custom-scrollbar">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-6 md:px-10 py-4 sm:py-6 max-w-6xl w-full mx-auto space-y-4 sm:space-y-6 custom-scrollbar">
         {/* Filter Pills: Todos + */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar py-0.5">
           <button
             onClick={() => setSubFilter('all')}
-            className={`px-3 py-1 rounded-md text-xs font-medium transition ${
+            className={`px-3 py-1 rounded-md text-xs font-medium transition cursor-pointer whitespace-nowrap ${
               subFilter === 'all'
                 ? 'bg-neutral-800 text-white border border-neutral-700'
                 : 'text-neutral-400 hover:bg-neutral-800/50 hover:text-neutral-200'
@@ -483,7 +485,7 @@ export const AllDocsPage: React.FC<AllDocsPageProps> = ({
                               e.stopPropagation()
                               setOpenMenuDocId(openMenuDocId === doc.id ? null : doc.id)
                             }}
-                            className="p-1 rounded text-neutral-500 hover:text-neutral-200 opacity-0 group-hover:opacity-100 transition"
+                            className="p-1 rounded text-neutral-500 hover:text-neutral-200 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition cursor-pointer"
                             title="Más opciones"
                           >
                             <MoreHorizontal className="w-4 h-4" />
@@ -492,7 +494,7 @@ export const AllDocsPage: React.FC<AllDocsPageProps> = ({
                           {openMenuDocId === doc.id && (
                             <div
                               onClick={(e) => e.stopPropagation()}
-                              className="absolute right-0 top-7 z-30 w-36 bg-neutral-900 border border-neutral-700 rounded-lg shadow-xl p-1 text-xs"
+                              className="absolute right-0 top-7 z-30 w-36 bg-neutral-900 border border-neutral-700 rounded-xl shadow-2xl p-1 text-xs backdrop-blur-md"
                             >
                               <button
                                 onClick={(e) => {

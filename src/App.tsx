@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
   FileText,
@@ -18,7 +18,9 @@ import {
   FileHtml,
   FileCode,
   Graph,
-  PencilSimpleLine
+  PencilSimpleLine,
+  LockKey,
+  LockKeyOpen
 } from '@phosphor-icons/react'
 import {
   db,
@@ -26,6 +28,7 @@ import {
   seedInitialData,
   type ViewMode,
   type WorkspaceItem,
+  type SpaceItem,
   DEFAULT_SPACE_ID,
   createSpace,
   updateSpace,
@@ -62,7 +65,7 @@ import { CollectionsPage } from './components/views/CollectionsPage'
 import { TagsPage } from './components/views/TagsPage'
 import { ExternalShareView } from './components/views/ExternalShareView'
 import { type AppTemplate } from './lib/templates'
-import { getCurrentMember, setCurrentMember, subscribeToMemberChanges, mapSupabaseUserToMember, type TeamMember, isWorkspaceVisible } from './lib/teamAuth'
+import { getCurrentMember, setCurrentMember, subscribeToMemberChanges, mapSupabaseUserToMember, type TeamMember, isWorkspaceVisible, isSpaceVisible } from './lib/teamAuth'
 import { getAuthUser, onAuthChange, signOutUser, fetchUserProfile } from './lib/supabase'
 import {
   exportDocumentAsMarkdown,
@@ -153,7 +156,12 @@ function MainApp() {
   }
 
   const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string>('ws-feature-priorities')
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 768
+    }
+    return true
+  })
   const [rightSidebarOpen, setRightSidebarOpen] = useState(false)
   const [rightSidebarTab, setRightSidebarTab] = useState<'properties' | 'outline' | 'history'>('properties')
   const [isPresentationMode, setIsPresentationMode] = useState(false)
@@ -319,6 +327,9 @@ function MainApp() {
   }, [workspaces])
 
   const selectWorkspaceWithTab = (wsId: string) => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setSidebarOpen(false)
+    }
     const ws = workspaces.find((w) => w.id === wsId)
     if (ws?.spaceId && ws.spaceId !== currentSpaceId) {
       setCurrentSpaceId(ws.spaceId)
@@ -350,6 +361,9 @@ function MainApp() {
     viewType: 'all-docs' | 'knowledge-graph' | 'trash' | 'templates' | 'collections' | 'tags',
     title: string
   ) => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setSidebarOpen(false)
+    }
     setTabs((prev) => {
       const existing = prev.find((t) => t.viewType === viewType)
       if (existing) {
@@ -656,20 +670,25 @@ function MainApp() {
     }
   }, [darkMode])
 
-  // Keep currentSpaceId in sync with spaces
+  // Filter visible spaces for current member (Strict privacy: private spaces only visible to owner)
+  const visibleSpaces = useMemo(() => {
+    return spaces.filter((s: SpaceItem) => !s.isDeleted && isSpaceVisible(s, currentMember, authUser?.id))
+  }, [spaces, currentMember, authUser?.id])
+
+  // Keep currentSpaceId in sync with visible spaces
   useEffect(() => {
-    if (spaces.length > 0 && !spaces.some((s) => s.id === currentSpaceId)) {
-      const fallbackId = spaces[0].id
+    if (visibleSpaces.length > 0 && !visibleSpaces.some((s: SpaceItem) => s.id === currentSpaceId)) {
+      const fallbackId = visibleSpaces[0].id
       setCurrentSpaceId(fallbackId)
       localStorage.setItem('seven_note_active_space_id', fallbackId)
     }
-  }, [spaces, currentSpaceId])
+  }, [visibleSpaces, currentSpaceId])
 
   // Select active workspace items belonging to current space and visible to currentMember
   const currentSpaceWorkspaces = workspaces.filter(
     (w) =>
       (w.spaceId || DEFAULT_SPACE_ID) === currentSpaceId &&
-      isWorkspaceVisible(w, currentMember)
+      isWorkspaceVisible(w, currentMember, authUser?.id)
   )
   const activeWorkspaces = currentSpaceWorkspaces.filter((w) => !w.isDeleted)
   const currentWorkspace: WorkspaceItem | undefined =
@@ -681,42 +700,61 @@ function MainApp() {
     localStorage.setItem('seven_note_active_space_id', spaceId)
 
     const targetSpacePages = workspaces.filter(
-      (w) => !w.isDeleted && (w.spaceId || DEFAULT_SPACE_ID) === spaceId
+      (w) => !w.isDeleted && (w.spaceId || DEFAULT_SPACE_ID) === spaceId && isWorkspaceVisible(w, currentMember, authUser?.id)
     )
     if (targetSpacePages.length > 0) {
       setCurrentWorkspaceId(targetSpacePages[0].id)
     } else {
-      // Auto-create initial page if space has no pages
+      // Auto-create initial page if space has no visible pages
       const sp = spaces.find((s) => s.id === spaceId)
+      const isSpPrivate = Boolean(sp?.isPrivate)
       const newPageId = crypto.randomUUID()
       const now = Date.now()
       await db.workspaces.add({
         id: newPageId,
         parentId: null,
         spaceId: spaceId,
-        title: 'Página inicial',
-        icon: sp?.icon || '📄',
+        title: isSpPrivate ? 'Página inicial privada' : 'Página inicial',
+        icon: isSpPrivate ? '🔒' : (sp?.icon || '📄'),
         color: sp?.color || '#1e96eb',
         viewMode: 'doc',
-        docContent: `<h1>✨ ${sp?.name || 'Nuevo Espacio'}</h1><p>¡Bienvenido a tu espacio de trabajo! Comienza a escribir o planificar aquí.</p>`,
+        docContent: isSpPrivate
+          ? `<h1>🔒 ${sp?.name || 'Espacio Privado'}</h1><p>Espacio privado. Solo tú tienes acceso a este contenido.</p>`
+          : `<h1>✨ ${sp?.name || 'Nuevo Espacio'}</h1><p>¡Bienvenido a tu espacio de trabajo! Comienza a escribir o planificar aquí.</p>`,
         createdAt: now,
         updatedAt: now,
         isFavorite: false,
         isDeleted: false,
         syncStatus: 'pending',
+        isPrivate: isSpPrivate,
         ownerMember: currentMember.id,
-        ownerName: currentMember.name,
-        createdBy: currentMember.name
+        ownerName: currentMember.fullName || currentMember.name,
+        createdBy: currentMember.fullName || currentMember.name,
+        activeProperties: ['tags', 'createdAt', 'updatedAt'],
+        propertyVisibility: {
+          tags: 'always_show',
+          createdAt: 'always_show',
+          updatedAt: 'always_show'
+        }
       })
       setCurrentWorkspaceId(newPageId)
     }
   }
 
-  const handleCreateSpace = async (name: string, icon: string, color: string) => {
-    const { space, initialPageId } = await createSpace(name, icon, color)
+  const handleCreateSpace = async (name: string, icon: string, color: string, isPrivate: boolean = false) => {
+    const { space, initialPageId } = await createSpace(
+      name,
+      icon,
+      color,
+      isPrivate,
+      currentMember.id,
+      currentMember.fullName || currentMember.name,
+      authUser?.id
+    )
     setCurrentSpaceId(space.id)
     localStorage.setItem('seven_note_active_space_id', space.id)
     setCurrentWorkspaceId(initialPageId)
+    toast.success(isPrivate ? `Espacio privado "${space.name}" creado (solo visible para ti)` : `Espacio "${space.name}" creado`)
   }
 
   const handleRenameSpace = async (id: string, newName: string) => {
@@ -795,6 +833,25 @@ function MainApp() {
       syncEngine.scheduleSync(1000)
     } catch (e) {
       console.error('Error toggling favorite', e)
+    }
+  }
+
+  // Toggle privacy (pública para el equipo vs privada solo para el autor)
+  const handleTogglePrivacy = async () => {
+    if (!currentWorkspace) return
+    const nextPrivate = !currentWorkspace.isPrivate
+    try {
+      await db.workspaces.update(currentWorkspace.id, {
+        isPrivate: nextPrivate,
+        ownerMember: nextPrivate ? (currentWorkspace.ownerMember || currentMember.id) : (currentWorkspace.ownerMember || currentMember.id),
+        ownerName: nextPrivate ? (currentWorkspace.ownerName || currentMember.name) : undefined,
+        updatedAt: Date.now(),
+        syncStatus: 'pending'
+      })
+      syncEngine.scheduleSync(500)
+      toast.success(nextPrivate ? 'Nota cambiada a MODO PRIVADO (solo tú)' : 'Nota cambiada a MODO EQUIPO (pública para todos)')
+    } catch (e) {
+      console.error('Error toggling privacy', e)
     }
   }
 
@@ -941,44 +998,53 @@ function MainApp() {
     <div className="relative flex h-screen w-screen overflow-hidden bg-[#fbfbfa] dark:bg-[#121214] text-[var(--app-text-primary)] font-sans select-none">
       {/* 1. Left Sidebar Navigation */}
       {sidebarOpen && !isPresentationMode && !focusMode && (
-        <Sidebar
-          spaces={spaces}
-          currentSpaceId={currentSpaceId}
-          currentMember={currentMember}
-          onSelectMember={handleSelectMember}
-          authUser={authUser}
-          onOpenAuthModal={() => {
-            setAuthModalMode('login')
-            setIsAuthModalOpen(true)
-          }}
-          onOpenProfileModal={() => setIsProfileModalOpen(true)}
-          onOpenUserManagementModal={() => setIsUserManagementModalOpen(true)}
-          onSignOut={handleSignOut}
-          onSelectSpace={handleSelectSpace}
-          onOpenCreateSpace={() => setIsCreateWorkspaceOpen(true)}
-          onRenameSpace={handleRenameSpace}
-          onDeleteSpace={handleDeleteSpace}
-          workspaces={workspaces}
-          currentWorkspaceId={currentWorkspace?.id || ''}
-          onSelectWorkspace={selectWorkspaceWithTab}
-          onToggleSidebar={() => setSidebarOpen(false)}
-          onOpenSettings={() => setIsSettingsOpen(true)}
-          onOpenSearch={() => setIsSearchOpen(true)}
-          onOpenAllDocs={() => openSpecialViewTab('all-docs', 'Todos los documentos')}
-          onOpenTrash={() => openSpecialViewTab('trash', 'Papelera')}
-          onOpenImport={() => setIsImportOpen(true)}
-          onOpenTemplates={() => openSpecialViewTab('templates', 'Plantillas')}
-          onOpenShortcuts={() => setIsShortcutsOpen(true)}
-          onOpenTags={(tag) => {
-            setSelectedTagForModal(tag || null)
-            openSpecialViewTab('tags', 'Etiquetas')
-          }}
-          onOpenCollections={() => openSpecialViewTab('collections', 'Colecciones')}
-          onOpenKnowledgeGraph={() => openSpecialViewTab('knowledge-graph', 'Grafo de Conocimiento')}
-          syncStatus={syncStatus}
-          darkMode={darkMode}
-          onToggleDarkMode={() => setDarkMode(!darkMode)}
-        />
+        <>
+          {/* Mobile backdrop overlay */}
+          <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-xs z-40 md:hidden animate-in fade-in duration-150"
+            onClick={() => setSidebarOpen(false)}
+          />
+          <div className="fixed inset-y-0 left-0 z-50 md:relative md:z-auto h-full flex shrink-0">
+            <Sidebar
+              spaces={visibleSpaces}
+              currentSpaceId={currentSpaceId}
+              currentMember={currentMember}
+              onSelectMember={handleSelectMember}
+              authUser={authUser}
+              onOpenAuthModal={() => {
+                setAuthModalMode('login')
+                setIsAuthModalOpen(true)
+              }}
+              onOpenProfileModal={() => setIsProfileModalOpen(true)}
+              onOpenUserManagementModal={() => setIsUserManagementModalOpen(true)}
+              onSignOut={handleSignOut}
+              onSelectSpace={handleSelectSpace}
+              onOpenCreateSpace={() => setIsCreateWorkspaceOpen(true)}
+              onRenameSpace={handleRenameSpace}
+              onDeleteSpace={handleDeleteSpace}
+              workspaces={workspaces}
+              currentWorkspaceId={currentWorkspace?.id || ''}
+              onSelectWorkspace={selectWorkspaceWithTab}
+              onToggleSidebar={() => setSidebarOpen(false)}
+              onOpenSettings={() => setIsSettingsOpen(true)}
+              onOpenSearch={() => setIsSearchOpen(true)}
+              onOpenAllDocs={() => openSpecialViewTab('all-docs', 'Todos los documentos')}
+              onOpenTrash={() => openSpecialViewTab('trash', 'Papelera')}
+              onOpenImport={() => setIsImportOpen(true)}
+              onOpenTemplates={() => openSpecialViewTab('templates', 'Plantillas')}
+              onOpenShortcuts={() => setIsShortcutsOpen(true)}
+              onOpenTags={(tag) => {
+                setSelectedTagForModal(tag || null)
+                openSpecialViewTab('tags', 'Etiquetas')
+              }}
+              onOpenCollections={() => openSpecialViewTab('collections', 'Colecciones')}
+              onOpenKnowledgeGraph={() => openSpecialViewTab('knowledge-graph', 'Grafo de Conocimiento')}
+              syncStatus={syncStatus}
+              darkMode={darkMode}
+              onToggleDarkMode={() => setDarkMode(!darkMode)}
+            />
+          </div>
+        </>
       )}
 
       {/* 2. Main Content Center Column */}
@@ -998,14 +1064,16 @@ function MainApp() {
             onCloseTabsToRight={handleCloseTabsToRight}
             onReopenClosedTab={handleReopenClosedTab}
             onReorderTabs={handleReorderTabs}
+            onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
+            sidebarOpen={sidebarOpen}
           />
         )}
 
         {/* Secondary Header for Document/Split Mode: Notion & Milanote Clean Human-Crafted Tactile Aesthetic */}
         {!isPresentationMode && !focusMode && (!activeTab || !activeTab.viewType || activeTab.viewType === 'doc') && currentWorkspace && (
-          <header className="relative h-11 border-b border-black/[0.04] dark:border-white/[0.06] bg-[#fbfbfa]/80 dark:bg-[#161619]/80 backdrop-blur-md px-4 flex items-center justify-between shrink-0 z-15 select-none text-xs transition-colors duration-150">
+          <header className="relative h-10 sm:h-11 border-b border-black/[0.04] dark:border-white/[0.06] bg-[#fbfbfa]/90 dark:bg-[#161619]/90 backdrop-blur-md px-2.5 sm:px-4 flex items-center justify-between shrink-0 z-15 select-none text-xs transition-colors duration-150">
             {/* Left section: Sidebar toggle, Mode Switcher [ Page | Edgeless ], Title, Favorite, Info, More */}
-            <div className="flex items-center gap-2 min-w-0">
+            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
               {/* Sidebar Toggle (if collapsed) */}
               {!sidebarOpen && (
                 <button
@@ -1021,7 +1089,7 @@ function MainApp() {
               <div className="inline-flex items-center bg-white/60 dark:bg-white/10 backdrop-blur-md p-0.5 rounded-full border border-black/5 dark:border-white/10 shadow-2xs">
                 <button
                   onClick={() => setViewMode('doc')}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs transition active:scale-95 cursor-pointer ${
+                  className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-full text-xs transition active:scale-95 cursor-pointer ${
                     activeViewMode === 'doc'
                       ? 'bg-white dark:bg-[#28292d] text-neutral-900 dark:text-white shadow-2xs font-semibold'
                       : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
@@ -1033,7 +1101,7 @@ function MainApp() {
                 </button>
                 <button
                   onClick={() => setViewMode('canvas')}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs transition active:scale-95 cursor-pointer ${
+                  className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-full text-xs transition active:scale-95 cursor-pointer ${
                     activeViewMode === 'canvas'
                       ? 'bg-white dark:bg-[#28292d] text-neutral-900 dark:text-white shadow-2xs font-semibold'
                       : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
@@ -1062,8 +1130,32 @@ function MainApp() {
                 )}
               </button>
 
+              {/* Privacy Selector Button (Pública / Privada) */}
+              <button
+                onClick={handleTogglePrivacy}
+                className={`h-7 px-2.5 rounded-full border flex items-center gap-1.5 text-xs font-medium transition shadow-2xs cursor-pointer active:scale-95 select-none ${
+                  currentWorkspace?.isPrivate
+                    ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20'
+                    : 'border-black/5 dark:border-white/10 bg-white/70 dark:bg-white/10 text-blue-600 dark:text-blue-400 hover:bg-white dark:hover:bg-white/20'
+                }`}
+                title={
+                  currentWorkspace?.isPrivate
+                    ? 'Nota privada (solo tú). Clic para cambiar a pública para el equipo'
+                    : 'Nota pública (visible para todo el equipo). Clic para hacerla privada'
+                }
+              >
+                {currentWorkspace?.isPrivate ? (
+                  <LockKey size={14} weight="fill" className="text-amber-600 dark:text-amber-400 shrink-0" />
+                ) : (
+                  <LockKeyOpen size={14} weight="duotone" className="text-blue-600 dark:text-blue-400 shrink-0" />
+                )}
+                <span className="hidden sm:inline font-semibold">
+                  {currentWorkspace?.isPrivate ? 'Privada' : 'Pública'}
+                </span>
+              </button>
+
               {/* Info Button ⓘ */}
-              <div className="relative">
+              <div className="relative hidden sm:block">
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
@@ -1079,14 +1171,14 @@ function MainApp() {
 
                 {activeDropdown === 'info' && (
                   <div
-                    className="absolute left-0 top-10 z-50 w-72 bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] rounded-3xl shadow-2xl backdrop-blur-2xl p-4 text-xs text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 duration-100"
+                    className="fixed right-3 top-12 sm:absolute sm:right-auto sm:left-0 sm:top-10 z-50 w-[calc(100vw-24px)] max-w-[270px] sm:w-72 sm:max-w-none bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] rounded-2xl sm:rounded-3xl shadow-2xl backdrop-blur-2xl p-2.5 sm:p-4 text-[11px] sm:text-xs text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 duration-100 max-h-[calc(100vh-64px)] overflow-y-auto custom-scrollbar"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <div className="font-bold pb-2.5 border-b border-black/[0.06] dark:border-white/[0.08] mb-2.5 flex items-center justify-between">
-                      <span className="text-xs font-semibold">Estadísticas de la página</span>
-                      <span className="text-[10px] text-neutral-400 uppercase font-mono px-2 py-0.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06]">Info</span>
+                    <div className="font-bold pb-1.5 sm:pb-2.5 border-b border-black/[0.06] dark:border-white/[0.08] mb-1.5 sm:mb-2.5 flex items-center justify-between">
+                      <span className="text-[11px] sm:text-xs font-semibold">Estadísticas de la página</span>
+                      <span className="text-[9px] sm:text-[10px] text-neutral-400 uppercase font-mono px-1.5 sm:px-2 py-0.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06]">Info</span>
                     </div>
-                    <div className="space-y-2 text-xs">
+                    <div className="space-y-1 sm:space-y-2 text-[11px] sm:text-xs">
                       <div className="flex justify-between">
                         <span className="text-neutral-500">Palabras:</span>
                         <span className="font-mono font-semibold">{stats.words}</span>
@@ -1099,7 +1191,7 @@ function MainApp() {
                         <span className="text-neutral-500">Tiempo de lectura:</span>
                         <span className="font-mono font-semibold">~{stats.time} min</span>
                       </div>
-                      <div className="flex justify-between pt-2 border-t border-black/[0.06] dark:border-white/[0.08]">
+                      <div className="flex justify-between pt-1.5 sm:pt-2 border-t border-black/[0.06] dark:border-white/[0.08]">
                         <span className="text-neutral-500">Modo:</span>
                         <span className="capitalize font-semibold text-blue-500">{currentWorkspace?.viewMode}</span>
                       </div>
@@ -1125,7 +1217,7 @@ function MainApp() {
 
                 {activeDropdown === 'more' && (
                   <div
-                    className="absolute left-0 top-10 z-50 w-64 bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] rounded-3xl shadow-2xl backdrop-blur-2xl p-2.5 text-xs text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 duration-100 space-y-0.5"
+                    className="fixed right-3 top-12 sm:absolute sm:right-auto sm:left-0 sm:top-10 z-50 w-[calc(100vw-24px)] max-w-[260px] sm:w-64 sm:max-w-none bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] rounded-2xl sm:rounded-3xl shadow-2xl backdrop-blur-2xl p-1.5 sm:p-2.5 text-[11px] sm:text-xs text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 duration-100 space-y-0.5 max-h-[calc(100vh-64px)] overflow-y-auto custom-scrollbar"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button
@@ -1133,9 +1225,9 @@ function MainApp() {
                         setViewMode('doc')
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 text-xs font-medium transition active:scale-[0.98] cursor-pointer"
+                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
                     >
-                      <FileText size={16} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
+                      <FileText size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
                       <span>Modo Página</span>
                     </button>
 
@@ -1144,9 +1236,9 @@ function MainApp() {
                         setViewMode('canvas')
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 text-xs font-medium transition active:scale-[0.98] cursor-pointer"
+                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
                     >
-                      <Kanban size={16} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
+                      <Kanban size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
                       <span>Modo Tablero (Milanote)</span>
                     </button>
 
@@ -1155,24 +1247,58 @@ function MainApp() {
                         setViewMode(activeViewMode === 'split' ? 'doc' : 'split')
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 text-xs font-medium transition active:scale-[0.98] cursor-pointer"
+                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
                     >
-                      <Columns size={16} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
+                      <Columns size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
                       <span>{activeViewMode === 'split' ? 'Cerrar vista dividida' : 'Vista dividida'}</span>
                     </button>
+
+                    <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-0.5 sm:my-1" />
+
+                    <button
+                      onClick={() => {
+                        handleTogglePrivacy()
+                        setActiveDropdown(null)
+                      }}
+                      className={`w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl flex items-center justify-between text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer ${
+                        currentWorkspace?.isPrivate
+                          ? 'hover:bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                          : 'hover:bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 sm:gap-2.5 truncate">
+                        {currentWorkspace?.isPrivate ? (
+                          <LockKey size={15} weight="fill" className="shrink-0 text-amber-600 dark:text-amber-400" />
+                        ) : (
+                          <LockKeyOpen size={15} weight="duotone" className="shrink-0 text-blue-600 dark:text-blue-400" />
+                        )}
+                        <span className="truncate">
+                          {currentWorkspace?.isPrivate ? 'Nota Privada (Hacer Pública)' : 'Nota Pública (Hacer Privada)'}
+                        </span>
+                      </div>
+                      <span className={`text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-semibold shrink-0 ${
+                        currentWorkspace?.isPrivate
+                          ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300'
+                          : 'bg-blue-500/15 text-blue-600 dark:text-blue-400'
+                      }`}>
+                        {currentWorkspace?.isPrivate ? 'Privada' : 'Pública'}
+                      </span>
+                    </button>
+
+                    <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-0.5 sm:my-1" />
 
                     <button
                       onClick={() => {
                         openSpecialViewTab('knowledge-graph', 'Grafo de Conocimiento')
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center justify-between text-xs font-medium transition active:scale-[0.98] cursor-pointer"
+                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center justify-between text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
                     >
-                      <div className="flex items-center gap-2.5">
-                        <Graph size={16} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
-                        <span>Grafo Global de Conocimiento</span>
+                      <div className="flex items-center gap-2 sm:gap-2.5 truncate">
+                        <Graph size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
+                        <span className="truncate">Grafo Global</span>
                       </div>
-                      <span className="text-[10px] text-neutral-500 font-mono px-2 py-0.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06]">Obsidian</span>
+                      <span className="text-[9px] sm:text-[10px] text-neutral-500 font-mono px-1.5 sm:px-2 py-0.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06] shrink-0">Obsidian</span>
                     </button>
 
                     <button
@@ -1180,13 +1306,13 @@ function MainApp() {
                         setIsFindInPageOpen(true)
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center justify-between text-xs font-medium transition active:scale-[0.98] cursor-pointer"
+                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center justify-between text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
                     >
-                      <div className="flex items-center gap-2.5">
-                        <MagnifyingGlass size={16} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
-                        <span>Buscar en página</span>
+                      <div className="flex items-center gap-2 sm:gap-2.5 truncate">
+                        <MagnifyingGlass size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
+                        <span className="truncate">Buscar en página</span>
                       </div>
-                      <kbd className="text-[10px] bg-black/[0.04] dark:bg-white/[0.06] px-2 py-0.5 rounded-full text-neutral-400 border border-black/[0.04] dark:border-white/[0.06]">
+                      <kbd className="text-[9px] sm:text-[10px] bg-black/[0.04] dark:bg-white/[0.06] px-1.5 sm:px-2 py-0.5 rounded-full text-neutral-400 border border-black/[0.04] dark:border-white/[0.06] shrink-0">
                         Ctrl F
                       </kbd>
                     </button>
@@ -1199,16 +1325,16 @@ function MainApp() {
                         setTimeout(() => setCopiedLink(false), 2000)
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 text-xs font-medium transition active:scale-[0.98] cursor-pointer"
+                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
                     >
-                      <Copy size={16} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
-                      <span>{copiedLink ? '¡Enlace copiado!' : 'Copiar enlace a nota'}</span>
+                      <Copy size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
+                      <span className="truncate">{copiedLink ? '¡Enlace copiado!' : 'Copiar enlace a nota'}</span>
                     </button>
 
-                    <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-1" />
+                    <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-0.5 sm:my-1" />
 
                     {/* Export suite */}
-                    <div className="px-3 py-1 text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
+                    <div className="px-2.5 py-0.5 sm:px-3 sm:py-1 text-[9px] sm:text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
                       Exportar
                     </div>
 
@@ -1217,10 +1343,10 @@ function MainApp() {
                         if (currentWorkspace) exportDocumentAsMarkdown(currentWorkspace)
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 text-xs font-medium transition active:scale-[0.98] cursor-pointer"
+                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
                     >
-                      <DownloadSimple size={16} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
-                      <span>Exportar como Markdown (.md)</span>
+                      <DownloadSimple size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
+                      <span className="truncate">Exportar como Markdown (.md)</span>
                     </button>
 
                     <button
@@ -1228,10 +1354,10 @@ function MainApp() {
                         if (currentWorkspace) exportDocumentAsHtml(currentWorkspace)
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 text-xs font-medium transition active:scale-[0.98] cursor-pointer"
+                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
                     >
-                      <FileHtml size={16} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
-                      <span>Exportar como HTML (.html)</span>
+                      <FileHtml size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
+                      <span className="truncate">Exportar como HTML (.html)</span>
                     </button>
 
                     <button
@@ -1242,10 +1368,10 @@ function MainApp() {
                         }
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 text-xs font-medium transition active:scale-[0.98] cursor-pointer"
+                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
                     >
-                      <FileCode size={16} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
-                      <span>Exportar copia JSON (.json)</span>
+                      <FileCode size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
+                      <span className="truncate">Exportar copia JSON (.json)</span>
                     </button>
 
                     <button
@@ -1253,22 +1379,22 @@ function MainApp() {
                         if (currentWorkspace) copyAsPlainText(currentWorkspace.docContent)
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 text-xs font-medium transition active:scale-[0.98] cursor-pointer"
+                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
                     >
-                      <Copy size={16} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
-                      <span>Copiar como texto plano</span>
+                      <Copy size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
+                      <span className="truncate">Copiar como texto plano</span>
                     </button>
 
-                    <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-1" />
+                    <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-0.5 sm:my-1" />
 
                     {/* Quick Scale controls in More Menu */}
-                    <div className="px-3 py-1 text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
+                    <div className="px-2.5 py-0.5 sm:px-3 sm:py-1 text-[9px] sm:text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
                       Escala de interfaz: {uiScale}%
                     </div>
-                    <div className="flex items-center gap-1.5 px-2 pb-1">
+                    <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 pb-0.5 sm:pb-1">
                       <button
                         onClick={() => handleStepUiScale(-1)}
-                        className="flex-1 py-1 px-2 rounded-full bg-black/[0.04] dark:bg-white/[0.06] hover:bg-black/[0.08] dark:hover:bg-white/[0.12] text-xs font-semibold text-center transition cursor-pointer active:scale-95"
+                        className="flex-1 py-1 px-1.5 sm:px-2 rounded-full bg-black/[0.04] dark:bg-white/[0.06] hover:bg-black/[0.08] dark:hover:bg-white/[0.12] text-[10px] sm:text-xs font-semibold text-center transition cursor-pointer active:scale-95"
                       >
                         - Reducir
                       </button>
@@ -1277,35 +1403,35 @@ function MainApp() {
                           setUiScale('100')
                           toast.info('Escala restablecida al 100%')
                         }}
-                        className="py-1 px-2.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06] hover:bg-black/[0.08] dark:hover:bg-white/[0.12] text-xs font-mono font-semibold transition cursor-pointer active:scale-95"
+                        className="py-1 px-2 sm:px-2.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06] hover:bg-black/[0.08] dark:hover:bg-white/[0.12] text-[10px] sm:text-xs font-mono font-semibold transition cursor-pointer active:scale-95"
                       >
                         100%
                       </button>
                       <button
                         onClick={() => handleStepUiScale(1)}
-                        className="flex-1 py-1 px-2 rounded-full bg-black/[0.04] dark:bg-white/[0.06] hover:bg-black/[0.08] dark:hover:bg-white/[0.12] text-xs font-semibold text-center transition cursor-pointer active:scale-95"
+                        className="flex-1 py-1 px-1.5 sm:px-2 rounded-full bg-black/[0.04] dark:bg-white/[0.06] hover:bg-black/[0.08] dark:hover:bg-white/[0.12] text-[10px] sm:text-xs font-semibold text-center transition cursor-pointer active:scale-95"
                       >
                         + Aumentar
                       </button>
                     </div>
 
-                    <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-1" />
+                    <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-0.5 sm:my-1" />
 
                     <button
                       onClick={() => {
                         setIsShortcutsOpen(true)
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center justify-between text-xs font-medium transition active:scale-[0.98] cursor-pointer"
+                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center justify-between text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
                     >
-                      <div className="flex items-center gap-2.5">
-                        <Keyboard size={16} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
-                        <span>Atajos de teclado</span>
+                      <div className="flex items-center gap-2 sm:gap-2.5 truncate">
+                        <Keyboard size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
+                        <span className="truncate">Atajos de teclado</span>
                       </div>
-                      <kbd className="text-[10px] bg-black/[0.04] dark:bg-white/[0.06] px-2 py-0.5 rounded-full text-neutral-400 border border-black/[0.04] dark:border-white/[0.06]">?</kbd>
+                      <kbd className="text-[9px] sm:text-[10px] bg-black/[0.04] dark:bg-white/[0.06] px-1.5 sm:px-2 py-0.5 rounded-full text-neutral-400 border border-black/[0.04] dark:border-white/[0.06] shrink-0">?</kbd>
                     </button>
 
-                    <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-1" />
+                    <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-0.5 sm:my-1" />
 
                     <button
                       onClick={() => {
@@ -1317,10 +1443,10 @@ function MainApp() {
                         }
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-rose-500/10 text-rose-500 flex items-center gap-2.5 text-xs font-semibold transition active:scale-[0.98] cursor-pointer"
+                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-rose-500/10 text-rose-500 flex items-center gap-2 sm:gap-2.5 text-[11px] sm:text-xs font-semibold transition active:scale-[0.98] cursor-pointer"
                     >
-                      <Trash size={16} weight="duotone" className="text-rose-500" />
-                      <span>Eliminar página</span>
+                      <Trash size={15} weight="duotone" className="shrink-0 text-rose-500" />
+                      <span className="truncate">Eliminar página</span>
                     </button>
                   </div>
                 )}
@@ -1329,7 +1455,7 @@ function MainApp() {
 
             {/* Center: Board Title (touch/click to rename) */}
             {activeViewMode === 'canvas' && (
-              <div className="absolute left-1/2 -translate-x-1/2 flex items-center justify-center pointer-events-auto z-10 max-w-[50vw]">
+              <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 items-center justify-center pointer-events-auto z-10 max-w-[50vw]">
                 {isEditingBoardTitle ? (
                   <input
                     type="text"
@@ -1360,12 +1486,12 @@ function MainApp() {
             )}
 
             {/* Right section: Presentation Icon, Exportar, Collabs + Compartir */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 shrink-0">
               {/* Focus mode (board only) */}
               {activeViewMode === 'canvas' && (
                 <button
                   onClick={() => setFocusMode(true)}
-                  className="h-7 px-3 rounded-full bg-white/70 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 border border-black/5 dark:border-white/10 text-xs font-medium text-neutral-700 dark:text-neutral-200 transition shadow-2xs cursor-pointer active:scale-95 select-none"
+                  className="hidden sm:inline-flex h-7 px-3 rounded-full bg-white/70 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 border border-black/5 dark:border-white/10 text-xs font-medium text-neutral-700 dark:text-neutral-200 transition shadow-2xs cursor-pointer active:scale-95 select-none"
                   title="Ocultar herramientas y menús (solo tablero)"
                 >
                   Solo tablero
@@ -1388,18 +1514,19 @@ function MainApp() {
                     e.stopPropagation()
                     setActiveDropdown(activeDropdown === 'export' ? null : 'export')
                   }}
-                  className={`h-7 px-3 rounded-full bg-white/70 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 border border-black/5 dark:border-white/10 flex items-center gap-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-200 transition shadow-2xs cursor-pointer active:scale-95 select-none ${
+                  className={`h-7 px-2 sm:px-3 rounded-full bg-white/70 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 border border-black/5 dark:border-white/10 flex items-center gap-1 sm:gap-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-200 transition shadow-2xs cursor-pointer active:scale-95 select-none ${
                     activeDropdown === 'export' ? 'bg-white dark:bg-[#28292d] shadow-xs' : ''
                   }`}
                   title="Exportar tablero"
                 >
-                  <span>Exportar</span>
-                  <span className="text-[10px] opacity-60">⌵</span>
+                  <DownloadSimple size={14} weight="duotone" className="sm:hidden text-neutral-700 dark:text-neutral-300" />
+                  <span className="hidden sm:inline">Exportar</span>
+                  <span className="text-[10px] opacity-60 hidden sm:inline">⌵</span>
                 </button>
 
                 {activeDropdown === 'export' && (
                   <div
-                    className="absolute right-0 top-9 z-50 w-56 bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] rounded-3xl shadow-2xl backdrop-blur-2xl p-2 text-xs text-neutral-800 dark:text-neutral-200 animate-in fade-in zoom-in-95 space-y-0.5"
+                    className="fixed right-3 top-12 sm:absolute sm:right-0 sm:top-9 z-50 w-[calc(100vw-24px)] max-w-[240px] sm:w-56 bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] rounded-2xl sm:rounded-3xl shadow-2xl backdrop-blur-2xl p-1.5 sm:p-2 text-[11px] sm:text-xs text-neutral-800 dark:text-neutral-200 animate-in fade-in zoom-in-95 space-y-0.5 max-h-[calc(100vh-60px)] overflow-y-auto custom-scrollbar"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button
@@ -1407,20 +1534,20 @@ function MainApp() {
                         if (currentWorkspace) exportDocumentAsMarkdown(currentWorkspace)
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
+                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
                     >
-                      <DownloadSimple size={15} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
-                      <span>Exportar como Markdown (.md)</span>
+                      <DownloadSimple size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
+                      <span className="truncate">Exportar como Markdown (.md)</span>
                     </button>
                     <button
                       onClick={() => {
                         if (currentWorkspace) exportDocumentAsHtml(currentWorkspace)
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
+                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
                     >
-                      <FileHtml size={15} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
-                      <span>Exportar como HTML (.html)</span>
+                      <FileHtml size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
+                      <span className="truncate">Exportar como HTML (.html)</span>
                     </button>
                     <button
                       onClick={async () => {
@@ -1430,10 +1557,10 @@ function MainApp() {
                         }
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-3 py-2 rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
+                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
                     >
-                      <FileCode size={15} weight="duotone" className="text-neutral-700 dark:text-neutral-300" />
-                      <span>Exportar copia JSON (.json)</span>
+                      <FileCode size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
+                      <span className="truncate">Exportar copia JSON (.json)</span>
                     </button>
                   </div>
                 )}
@@ -1442,10 +1569,10 @@ function MainApp() {
               {/* Milanote Collaborators & Compartir Button */}
               <button
                 onClick={() => setIsShareOpen(true)}
-                className="h-7 px-3 rounded-full bg-white/70 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 border border-black/5 dark:border-white/10 text-xs font-medium text-neutral-700 dark:text-neutral-200 flex items-center gap-2 transition shadow-2xs cursor-pointer active:scale-95 select-none"
+                className="h-7 px-2.5 sm:px-3 rounded-full bg-white/70 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 border border-black/5 dark:border-white/10 text-xs font-medium text-neutral-700 dark:text-neutral-200 flex items-center gap-1.5 sm:gap-2 transition shadow-2xs cursor-pointer active:scale-95 select-none"
                 title="Compartir tablero con colaboradores"
               >
-                <div className="flex items-center -space-x-1.5">
+                <div className="hidden sm:flex items-center -space-x-1.5">
                   <div className="w-4.5 h-4.5 rounded-full bg-amber-500 text-white font-bold text-[9px] flex items-center justify-center ring-1 ring-white dark:ring-neutral-900 shadow-2xs" title="Natali">
                     N
                   </div>
@@ -1453,7 +1580,7 @@ function MainApp() {
                     K
                   </div>
                 </div>
-                <span>Compartir</span>
+                <span className="hidden xs:inline sm:inline">Compartir</span>
                 <ShareNetwork size={14} weight="duotone" className="text-neutral-500 dark:text-neutral-400" />
               </button>
             </div>

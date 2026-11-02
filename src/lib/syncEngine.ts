@@ -8,7 +8,7 @@ import {
   type TagItem
 } from '../db'
 import { getSupabaseClient, getStoredSupabaseConfig, getAuthUser } from './supabase'
-import { getCurrentMember, isUserAdmin } from './teamAuth'
+import { getCurrentMember } from './teamAuth'
 
 export type NetworkStatus = 'online' | 'offline'
 export type SyncEngineState = 'idle' | 'syncing' | 'synced' | 'error' | 'offline' | 'unconfigured'
@@ -219,7 +219,9 @@ class SyncEngine {
           created_at: s.createdAt,
           updated_at: s.updatedAt,
           is_deleted: Boolean(s.isDeleted),
-          ...(authUserId ? { user_id: authUserId } : {})
+          is_private: Boolean(s.isPrivate),
+          owner_member: s.ownerMember || currentMember.id,
+          ...(authUserId ? { user_id: authUserId } : (s.userId ? { user_id: s.userId } : {}))
         }))
         const { error: spError } = await supabase.from('seven_spaces').upsert(payload, { onConflict: 'id' })
         if (spError) throw spError
@@ -392,6 +394,7 @@ class SyncEngine {
       const lastSync = this.lastSyncTime || 0
 
       // Pull Spaces
+      const currentMember = getCurrentMember()
       const { data: remoteSpaces } = await supabase
         .from('seven_spaces')
         .select('*')
@@ -399,6 +402,18 @@ class SyncEngine {
 
       if (remoteSpaces && remoteSpaces.length > 0) {
         for (const rs of remoteSpaces) {
+          // Si el espacio remoto es privado y NO pertenece al miembro actual, NO lo guardamos localmente
+          // Ni los administradores pueden recibir o ver espacios privados ajenos
+          const isSpaceOwner =
+            rs.owner_member === currentMember.id ||
+            (currentMember.email && rs.owner_member?.toLowerCase() === currentMember.email.toLowerCase()) ||
+            rs.user_id === currentMember.id ||
+            (authUserId && rs.user_id === authUserId)
+
+          if (rs.is_private && !isSpaceOwner) {
+            continue
+          }
+
           const local = await db.spaces.get(rs.id)
           if (!local || rs.updated_at > local.updatedAt) {
             await db.spaces.put({
@@ -409,6 +424,9 @@ class SyncEngine {
               createdAt: rs.created_at,
               updatedAt: rs.updated_at,
               isDeleted: rs.is_deleted,
+              isPrivate: Boolean(rs.is_private),
+              ownerMember: rs.owner_member,
+              userId: rs.user_id,
               syncStatus: 'synced'
             })
           }
@@ -416,7 +434,6 @@ class SyncEngine {
       }
 
       // Pull Workspaces
-      const currentMember = getCurrentMember()
       const { data: remoteWorkspaces } = await supabase
         .from('seven_workspaces')
         .select('*')
@@ -424,9 +441,15 @@ class SyncEngine {
 
       if (remoteWorkspaces && remoteWorkspaces.length > 0) {
         for (const rw of remoteWorkspaces) {
-          // Si la nota remota es privada y NO pertenece al miembro actual ni es admin, NO la guardamos localmente
-          const isOwner = rw.owner_member === currentMember.id || rw.user_id === currentMember.id
-          if (rw.is_private && !isOwner && !isUserAdmin(currentMember)) {
+          // Si la nota remota es privada y NO pertenece al miembro actual, NO la guardamos localmente
+          // ¡Ni siquiera el administrador puede recibir o guardar notas privadas de otros usuarios, y viceversa!
+          const isOwner =
+            rw.owner_member === currentMember.id ||
+            (currentMember.email && rw.owner_member?.toLowerCase() === currentMember.email.toLowerCase()) ||
+            rw.user_id === currentMember.id ||
+            (authUserId && rw.user_id === authUserId)
+
+          if (rw.is_private && !isOwner) {
             continue
           }
 

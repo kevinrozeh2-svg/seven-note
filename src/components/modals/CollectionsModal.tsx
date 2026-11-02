@@ -99,10 +99,10 @@ export function CollectionsModal({
   )
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-150">
-      <div className="w-full max-w-3xl rounded-2xl border border-[var(--affine-border-color)] bg-[var(--affine-background-overlay-panel-color)] shadow-[var(--affine-popover-shadow)] overflow-hidden flex flex-col h-[580px] text-[var(--affine-text-primary-color)] font-sans">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-2 sm:p-4 animate-in fade-in duration-150">
+      <div className="w-full max-w-3xl rounded-2xl border border-[var(--affine-border-color)] bg-[var(--affine-background-overlay-panel-color)] shadow-[var(--affine-popover-shadow)] overflow-hidden flex flex-col h-[85vh] sm:h-[580px] max-h-[90vh] text-[var(--affine-text-primary-color)] font-sans">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--affine-border-color)] shrink-0">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-[var(--affine-border-color)] shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-[var(--affine-primary-color)]/10 text-[var(--affine-primary-color)] flex items-center justify-center">
               <FolderIcon className="w-4.5 h-4.5" />
@@ -123,9 +123,9 @@ export function CollectionsModal({
         </div>
 
         {/* Body Split Columns */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex flex-col sm:flex-row overflow-hidden">
           {/* Left Column: Collections list */}
-          <div className="w-64 border-r border-[var(--affine-border-color)] p-3 flex flex-col justify-between shrink-0 bg-[var(--affine-background-secondary-color)]">
+          <div className="w-full sm:w-64 border-b sm:border-b-0 sm:border-r border-[var(--affine-border-color)] p-3 flex flex-col justify-between shrink-0 bg-[var(--affine-background-secondary-color)] max-h-40 sm:max-h-none">
             <div className="overflow-y-auto space-y-1">
               <div className="text-[10px] uppercase font-bold text-[var(--affine-text-secondary-color)] px-2 py-1">
                 Mis Colecciones ({collections.length})
@@ -250,7 +250,7 @@ export function CollectionsModal({
           </div>
 
           {/* Right Column: Collection details & Docs */}
-          <div className="flex-1 p-5 flex flex-col overflow-hidden">
+          <div className="flex-1 p-3 sm:p-5 flex flex-col overflow-hidden">
             {activeCollection ? (
               <>
                 <div className="flex items-center justify-between pb-3 border-b border-[var(--affine-border-color)] mb-4">

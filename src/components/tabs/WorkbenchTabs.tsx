@@ -15,7 +15,8 @@ import {
   Search,
   RotateCcw,
   ArrowRight,
-  X
+  X,
+  PanelLeft
 } from 'lucide-react'
 import { type WorkspaceItem } from '../../db'
 import { AppleEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
@@ -45,6 +46,8 @@ export interface WorkbenchTabsProps {
   onNewTab: () => void
   onTogglePinTab: (tabId: string) => void
   onDuplicateTab: (tabId: string) => void
+  onToggleSidebar?: () => void
+  sidebarOpen?: boolean
 }
 
 export function WorkbenchTabs({
@@ -61,7 +64,9 @@ export function WorkbenchTabs({
   canReopenClosedTab = false,
   onNewTab,
   onTogglePinTab,
-  onDuplicateTab
+  onDuplicateTab,
+  onToggleSidebar,
+  sidebarOpen = true
 }: WorkbenchTabsProps) {
   const [contextMenu, setContextMenu] = useState<{
     x: number
@@ -227,6 +232,19 @@ export function WorkbenchTabs({
 
   return (
     <div className="h-9 border-b border-[var(--app-border)] bg-[var(--app-bg-secondary)] px-1.5 flex items-center justify-between shrink-0 select-none z-15 relative overflow-hidden">
+      {/* Sidebar toggle button (visible on mobile or when sidebar is collapsed) */}
+      {onToggleSidebar && (
+        <button
+          onClick={onToggleSidebar}
+          className={`w-6 h-6 rounded-md hover:bg-[var(--app-hover)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] flex items-center justify-center shrink-0 mr-1 transition cursor-pointer ${
+            sidebarOpen ? 'md:hidden' : ''
+          }`}
+          title="Alternar barra lateral"
+        >
+          <PanelLeft className="w-3.5 h-3.5" />
+        </button>
+      )}
+
       {/* Scroll Left Button if overflow */}
       {canScrollLeft && (
         <button
@@ -242,7 +260,7 @@ export function WorkbenchTabs({
       <div
         ref={tabsContainerRef}
         onWheel={handleWheel}
-        className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 h-full py-1 pr-1"
+        className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 h-full py-1 pr-1 touch-pan-x"
       >
         {tabs.map((tab, index) => {
           const isActive = tab.id === activeTabId
@@ -314,7 +332,7 @@ export function WorkbenchTabs({
                 e.stopPropagation()
                 setContextMenu({ x: e.clientX, y: e.clientY, tabId: tab.id })
               }}
-              className={`group flex items-center gap-1.5 px-2.5 h-7 rounded-md text-xs cursor-pointer transition select-none min-w-[90px] max-w-[190px] flex-1 border ${
+              className={`group flex items-center gap-1.5 px-2 sm:px-2.5 h-7 rounded-md text-xs cursor-pointer transition select-none min-w-[75px] sm:min-w-[90px] max-w-[130px] sm:max-w-[190px] flex-1 border ${
                 isDragging ? 'opacity-40 scale-[0.98]' : 'opacity-100'
               } ${
                 isOver && dragPosition === 'left'
@@ -408,10 +426,10 @@ export function WorkbenchTabs({
         {isTabSearchOpen && (
           <div
             onClick={(e) => e.stopPropagation()}
-            className="absolute right-0 top-8 w-72 max-h-96 rounded-xl bg-[var(--app-bg-overlay)] border border-[var(--app-border)] shadow-[var(--app-shadow-popover)] p-2 z-50 animate-in fade-in zoom-in-95 flex flex-col text-xs text-[var(--app-text-primary)]"
+            className="absolute right-0 top-8 w-[calc(100vw-24px)] sm:w-72 max-h-[min(380px,75vh)] rounded-xl bg-[var(--app-bg-overlay)] border border-[var(--app-border)] shadow-[var(--app-shadow-popover)] p-1.5 sm:p-2 z-50 animate-in fade-in zoom-in-95 flex flex-col text-[11px] sm:text-xs text-[var(--app-text-primary)]"
           >
             {/* Search Input */}
-            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-[var(--app-bg-secondary)] border border-[var(--app-border)] mb-2">
+            <div className="flex items-center gap-2 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-lg bg-[var(--app-bg-secondary)] border border-[var(--app-border)] mb-1.5 sm:mb-2">
               <Search className="w-3.5 h-3.5 text-[var(--app-text-secondary)] shrink-0" />
               <input
                 type="text"
@@ -503,8 +521,11 @@ export function WorkbenchTabs({
       {/* Tab Context Menu (Right Click) */}
       {contextMenu && (
         <div
-          style={{ top: contextMenu.y, left: contextMenu.x }}
-          className="fixed z-50 w-56 bg-[var(--app-bg-overlay)] border border-[var(--app-border)] rounded-xl shadow-[var(--app-shadow-popover)] p-1.5 text-xs text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 duration-100 space-y-0.5"
+          style={{
+            top: typeof window !== 'undefined' ? Math.max(12, Math.min(contextMenu.y, window.innerHeight - 250)) : contextMenu.y,
+            left: typeof window !== 'undefined' ? Math.max(12, Math.min(contextMenu.x, window.innerWidth - 220)) : contextMenu.x
+          }}
+          className="fixed z-50 w-[calc(100vw-32px)] max-w-[210px] sm:w-56 bg-[var(--app-bg-overlay)] border border-[var(--app-border)] rounded-xl shadow-[var(--app-shadow-popover)] p-1 sm:p-1.5 text-[11px] sm:text-xs text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 duration-100 space-y-0.5 max-h-[min(340px,75vh)] overflow-y-auto custom-scrollbar"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Nueva pestaña */}
@@ -513,13 +534,13 @@ export function WorkbenchTabs({
               onNewTab()
               setContextMenu(null)
             }}
-            className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-[var(--app-hover)] flex items-center justify-between transition cursor-pointer"
+            className="w-full text-left px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md sm:rounded-lg hover:bg-[var(--app-hover)] flex items-center justify-between transition cursor-pointer"
           >
             <div className="flex items-center gap-2">
               <PlusIcon className="w-3.5 h-3.5" />
               <span>Nueva pestaña</span>
             </div>
-            <kbd className="text-[10px] text-[var(--app-text-secondary)] font-mono">Ctrl+T</kbd>
+            <kbd className="text-[9px] sm:text-[10px] text-[var(--app-text-secondary)] font-mono">Ctrl+T</kbd>
           </button>
 
           {/* Fijar pestaña */}
@@ -528,7 +549,7 @@ export function WorkbenchTabs({
               onTogglePinTab(contextMenu.tabId)
               setContextMenu(null)
             }}
-            className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-[var(--app-hover)] flex items-center gap-2 transition cursor-pointer"
+            className="w-full text-left px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md sm:rounded-lg hover:bg-[var(--app-hover)] flex items-center gap-2 transition cursor-pointer"
           >
             <PinIcon className="w-3.5 h-3.5 text-[var(--app-accent)]" />
             <span>
@@ -544,13 +565,13 @@ export function WorkbenchTabs({
               onDuplicateTab(contextMenu.tabId)
               setContextMenu(null)
             }}
-            className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-[var(--app-hover)] flex items-center gap-2 transition cursor-pointer"
+            className="w-full text-left px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md sm:rounded-lg hover:bg-[var(--app-hover)] flex items-center gap-2 transition cursor-pointer"
           >
             <CopyIcon className="w-3.5 h-3.5" />
             <span>Duplicar pestaña</span>
           </button>
 
-          <div className="h-[1px] bg-[var(--app-divider)] my-1" />
+          <div className="h-[1px] bg-[var(--app-divider)] my-0.5 sm:my-1" />
 
           {/* Reabrir pestaña cerrada */}
           {onReopenClosedTab && (
@@ -560,7 +581,7 @@ export function WorkbenchTabs({
                 onReopenClosedTab()
                 setContextMenu(null)
               }}
-              className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between transition ${
+              className={`w-full text-left px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md sm:rounded-lg flex items-center justify-between transition ${
                 canReopenClosedTab
                   ? 'hover:bg-[var(--app-hover)] cursor-pointer'
                   : 'opacity-40 cursor-not-allowed'
@@ -570,7 +591,7 @@ export function WorkbenchTabs({
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>Reabrir pestaña cerrada</span>
               </div>
-              <kbd className="text-[10px] text-[var(--app-text-secondary)] font-mono">Ctrl+Shift+T</kbd>
+              <kbd className="text-[9px] sm:text-[10px] text-[var(--app-text-secondary)] font-mono">Ctrl+Shift+T</kbd>
             </button>
           )}
 
@@ -581,7 +602,7 @@ export function WorkbenchTabs({
                 onCloseTabsToRight(contextMenu.tabId)
                 setContextMenu(null)
               }}
-              className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-[var(--app-hover)] flex items-center gap-2 transition cursor-pointer"
+              className="w-full text-left px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md sm:rounded-lg hover:bg-[var(--app-hover)] flex items-center gap-2 transition cursor-pointer"
             >
               <ArrowRight className="w-3.5 h-3.5 text-[var(--app-text-secondary)]" />
               <span>Cerrar pestañas a la derecha</span>
@@ -594,13 +615,13 @@ export function WorkbenchTabs({
               onCloseOtherTabs(contextMenu.tabId)
               setContextMenu(null)
             }}
-            className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-[var(--app-hover)] flex items-center gap-2 transition cursor-pointer"
+            className="w-full text-left px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md sm:rounded-lg hover:bg-[var(--app-hover)] flex items-center gap-2 transition cursor-pointer"
           >
             <CloseIcon className="w-3.5 h-3.5" />
             <span>Cerrar otras pestañas</span>
           </button>
 
-          <div className="h-[1px] bg-[var(--app-divider)] my-1" />
+          <div className="h-[1px] bg-[var(--app-divider)] my-0.5 sm:my-1" />
 
           {/* Cerrar pestaña */}
           <button
@@ -608,7 +629,7 @@ export function WorkbenchTabs({
               onCloseTab(contextMenu.tabId)
               setContextMenu(null)
             }}
-            className="w-full text-left px-2.5 py-1.5 rounded-lg hover:bg-rose-500/10 text-rose-500 flex items-center justify-between transition cursor-pointer"
+            className="w-full text-left px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-md sm:rounded-lg hover:bg-rose-500/10 text-rose-500 flex items-center justify-between transition cursor-pointer"
           >
             <div className="flex items-center gap-2">
               <DeleteIcon className="w-3.5 h-3.5" />

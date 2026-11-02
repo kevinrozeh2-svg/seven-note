@@ -101,19 +101,19 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = ({
   return (
     <div className="flex-1 flex flex-col h-full bg-[#18181b] text-neutral-200 select-none overflow-hidden">
       {/* Header */}
-      <header className="h-14 px-8 border-b border-neutral-800 flex items-center justify-between shrink-0 bg-[#18181b] z-10">
+      <header className="h-auto min-h-14 py-2 px-4 sm:px-8 border-b border-neutral-800 flex items-center justify-between shrink-0 bg-[#18181b] z-10 gap-2">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center shrink-0">
             <Network className="w-4 h-4" />
           </div>
           <div>
             <h2 className="text-sm font-semibold text-white">Grafo de Conocimiento</h2>
-            <p className="text-[11px] text-neutral-400">
+            <p className="text-[11px] text-neutral-400 hidden sm:block">
               Visualiza relaciones, menciones y enlaces bidireccionales entre tus páginas
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 text-xs text-neutral-400 font-mono">
+        <div className="flex items-center gap-2 text-xs text-neutral-400 font-mono shrink-0">
           <span>{activeDocs.length} nodos</span>
           <span>·</span>
           <span>{edges.length} conexiones</span>
@@ -126,6 +126,7 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = ({
           nodes={nodes}
           edges={edges}
           fitView
+          zoomOnPinch={true}
           attributionPosition="bottom-left"
           minZoom={0.2}
           maxZoom={2}

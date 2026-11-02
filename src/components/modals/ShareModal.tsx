@@ -245,35 +245,35 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-150">
       <div
-        className="rounded-xl max-w-md w-full border border-[var(--app-border)] shadow-[var(--app-shadow-modal)] overflow-hidden flex flex-col bg-[var(--app-bg-overlay)] text-[var(--app-text-primary)]"
+        className="rounded-xl max-w-md w-full max-h-[90vh] border border-[var(--app-border)] shadow-[var(--app-shadow-modal)] overflow-hidden flex flex-col bg-[var(--app-bg-overlay)] text-[var(--app-text-primary)]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-5 py-3.5 border-b border-[var(--app-border)] flex items-center justify-between shrink-0">
+        <div className="px-4 sm:px-5 py-3.5 border-b border-[var(--app-border)] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 rounded-md flex items-center justify-center bg-[var(--app-hover)] text-[var(--app-text-primary)]">
+            <div className="w-7 h-7 rounded-md flex items-center justify-center bg-[var(--app-hover)] text-[var(--app-text-primary)] shrink-0">
               <ShareIcon style={{ width: 16, height: 16 }} />
             </div>
-            <div>
-              <h3 className="text-sm font-semibold text-[var(--app-text-primary)]">
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-[var(--app-text-primary)] truncate">
                 Compartir y Exportar
               </h3>
-              <p className="text-[11px] text-[var(--app-text-secondary)]">
+              <p className="text-[11px] text-[var(--app-text-secondary)] truncate">
                 Enlace web y formatos compatibles con Notion y Markdown
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1 rounded-md text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition"
+            className="p-1 rounded-md text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition shrink-0"
           >
             <CloseIcon style={{ width: 16, height: 16 }} />
           </button>
         </div>
 
-        <div className="p-5 space-y-4 text-xs">
+        <div className="p-4 sm:p-5 space-y-4 text-xs overflow-y-auto custom-scrollbar">
           {/* Document summary and Privacy Badge */}
           <div className="p-3 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)] flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0 flex-1">

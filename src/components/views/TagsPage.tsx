@@ -74,14 +74,14 @@ export const TagsPage: React.FC<TagsPageProps> = ({
   return (
     <div className="flex-1 flex flex-col h-full bg-[#18181b] text-neutral-200 select-none overflow-hidden">
       {/* Header */}
-      <header className="h-14 px-8 border-b border-neutral-800 flex items-center justify-between shrink-0 bg-[#18181b]">
+      <header className="h-14 px-4 sm:px-8 border-b border-neutral-800 flex items-center justify-between shrink-0 bg-[#18181b]">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-sky-500/10 text-sky-400 flex items-center justify-center">
             <TagIcon className="w-4 h-4" />
           </div>
           <div>
             <h2 className="text-sm font-semibold text-white">Etiquetas</h2>
-            <p className="text-[11px] text-neutral-400">
+            <p className="text-[11px] text-neutral-400 hidden sm:block">
               Organiza páginas mediante etiquetas transversales
             </p>
           </div>
@@ -89,7 +89,7 @@ export const TagsPage: React.FC<TagsPageProps> = ({
 
         <button
           onClick={() => setIsCreating(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-medium border border-neutral-700 transition"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 text-white text-xs font-medium border border-neutral-700 transition cursor-pointer"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>Nueva etiqueta</span>
@@ -97,9 +97,9 @@ export const TagsPage: React.FC<TagsPageProps> = ({
       </header>
 
       {/* Main split */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {/* Tags list pane */}
-        <div className="w-72 border-r border-neutral-800 bg-neutral-900/30 p-4 space-y-2 overflow-y-auto custom-scrollbar">
+        <div className="w-full md:w-72 border-b md:border-b-0 md:border-r border-neutral-800 bg-neutral-900/30 p-3 sm:p-4 space-y-2 overflow-y-auto max-h-44 md:max-h-none shrink-0 custom-scrollbar">
           {isCreating && (
             <div className="p-3 rounded-lg bg-neutral-800 border border-neutral-700 space-y-2 mb-3">
               <input
@@ -174,7 +174,7 @@ export const TagsPage: React.FC<TagsPageProps> = ({
         </div>
 
         {/* Right Pane: Tagged Docs */}
-        <div className="flex-1 p-8 overflow-y-auto max-w-4xl custom-scrollbar">
+        <div className="flex-1 p-4 sm:p-8 overflow-y-auto max-w-4xl custom-scrollbar">
           {activeTagName ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between border-b border-neutral-800 pb-3">

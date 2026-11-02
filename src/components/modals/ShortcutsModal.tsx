@@ -124,7 +124,7 @@ export function ShortcutsModal({ isOpen, onClose }: ShortcutsModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
@@ -139,12 +139,12 @@ export function ShortcutsModal({ isOpen, onClose }: ShortcutsModalProps) {
       >
         {/* Header */}
         <div
-          className="px-5 py-3.5 border-b flex items-center justify-between shrink-0"
+          className="px-4 sm:px-5 py-3.5 border-b flex items-center justify-between shrink-0"
           style={{ borderColor: 'var(--affine-border-color)' }}
         >
           <div className="flex items-center gap-2.5">
             <div
-              className="w-7 h-7 rounded-lg flex items-center justify-center"
+              className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
               style={{
                 backgroundColor: 'rgba(30, 150, 235, 0.1)',
                 color: '#1e96eb'
@@ -152,18 +152,18 @@ export function ShortcutsModal({ isOpen, onClose }: ShortcutsModalProps) {
             >
               <SettingsIcon style={{ width: 16, height: 16 }} />
             </div>
-            <div>
-              <h3 className="text-sm font-semibold" style={{ color: 'var(--affine-text-primary-color)' }}>
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold truncate" style={{ color: 'var(--affine-text-primary-color)' }}>
                 Atajos de Teclado (AFFiNE Canary)
               </h3>
-              <p className="text-[11px]" style={{ color: 'var(--affine-text-secondary-color)' }}>
+              <p className="text-[11px] truncate" style={{ color: 'var(--affine-text-secondary-color)' }}>
                 Referencia rápida de productividad para lienzo y editor
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg transition"
+            className="p-1.5 rounded-lg transition shrink-0"
             style={{ color: 'var(--affine-text-secondary-color)' }}
             onMouseEnter={(e) => {
               e.currentTarget.style.backgroundColor = 'var(--affine-hover-color)'
@@ -218,10 +218,10 @@ export function ShortcutsModal({ isOpen, onClose }: ShortcutsModalProps) {
 
         {/* Main tabs or search results */}
         {!searchQuery.trim() ? (
-          <div className="flex flex-1 min-h-0">
+          <div className="flex flex-col sm:flex-row flex-1 min-h-0">
             {/* Category tabs sidebar */}
             <div
-              className="w-48 border-r p-2 space-y-1 shrink-0"
+              className="w-full sm:w-48 border-b sm:border-b-0 sm:border-r p-2 flex sm:flex-col overflow-x-auto sm:overflow-x-visible shrink-0 gap-1 space-y-0 sm:space-y-1 no-scrollbar"
               style={{
                 borderColor: 'var(--affine-border-color)',
                 backgroundColor: 'var(--affine-background-secondary-color)'
@@ -234,7 +234,7 @@ export function ShortcutsModal({ isOpen, onClose }: ShortcutsModalProps) {
                   <button
                     key={cat.id}
                     onClick={() => setActiveTab(cat.id)}
-                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-left transition"
+                    className="flex items-center gap-2 px-3 py-1.5 sm:py-2 rounded-lg text-xs font-medium text-left transition whitespace-nowrap shrink-0 sm:w-full"
                     style={{
                       backgroundColor: isActive ? 'var(--affine-hover-color)' : 'transparent',
                       color: isActive ? '#1e96eb' : 'var(--affine-text-secondary-color)',
@@ -261,7 +261,7 @@ export function ShortcutsModal({ isOpen, onClose }: ShortcutsModalProps) {
             </div>
 
             {/* Category items list */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+            <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2">
               <h4
                 className="text-xs font-semibold uppercase tracking-wider mb-3"
                 style={{ color: 'var(--affine-text-secondary-color)' }}

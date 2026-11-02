@@ -222,10 +222,10 @@ export const FrameNode = memo(({ id, data, selected }: any) => {
 
           {showOptionsPopover && (
             <div
-              className="absolute left-0 top-7 w-64 bg-[#18181c] border border-zinc-700/80 rounded-xl shadow-2xl p-2.5 z-50 text-xs space-y-2.5 backdrop-blur-md animate-in fade-in zoom-in-95"
+              className="fixed inset-x-3 bottom-16 sm:absolute sm:inset-x-auto sm:left-0 sm:top-7 w-auto max-w-[260px] mx-auto sm:w-64 bg-[#18181c] border border-zinc-700/80 rounded-xl shadow-2xl p-2 sm:p-2.5 z-50 text-[11px] sm:text-xs space-y-2 sm:space-y-2.5 backdrop-blur-md animate-in fade-in zoom-in-95 max-h-[65vh] overflow-y-auto custom-scrollbar"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
+              <div className="text-[9px] sm:text-[10px] font-bold text-zinc-400 uppercase tracking-wider">
                 Proporción de Diapositiva
               </div>
               <div className="flex gap-1.5">
@@ -349,19 +349,19 @@ export const FrameNode = memo(({ id, data, selected }: any) => {
 
           {showNotesPopover && (
             <div
-              className="absolute left-0 top-7 w-64 bg-[#18181c] border border-zinc-700 rounded-xl shadow-2xl p-2.5 z-50 text-xs space-y-2 animate-in fade-in zoom-in-95"
+              className="fixed inset-x-3 bottom-16 sm:absolute sm:inset-x-auto sm:left-0 sm:top-7 w-auto max-w-[280px] mx-auto sm:w-64 bg-[#18181c] border border-zinc-700 rounded-xl shadow-2xl p-2 sm:p-2.5 z-50 text-[11px] sm:text-xs space-y-1.5 sm:space-y-2 animate-in fade-in zoom-in-95 max-h-[65vh] overflow-y-auto custom-scrollbar"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="text-[10px] font-bold text-amber-400 uppercase tracking-wider flex items-center justify-between">
+              <div className="text-[9px] sm:text-[10px] font-bold text-amber-400 uppercase tracking-wider flex items-center justify-between">
                 <span>Notas del Orador</span>
-                <span className="text-[9px] text-zinc-500">Visible al presentar</span>
+                <span className="text-[8px] sm:text-[9px] text-zinc-500">Visible al presentar</span>
               </div>
               <textarea
                 value={speakerNotes}
                 onChange={(e) => setSpeakerNotes(e.target.value)}
                 onBlur={() => save({ speakerNotes })}
                 placeholder="Escribe notas o recordatorios que solo tú verás al presentar..."
-                className="w-full h-24 bg-zinc-900 border border-zinc-700/80 rounded-lg p-2 text-xs text-zinc-200 outline-none resize-none leading-relaxed"
+                className="w-full h-20 sm:h-24 bg-zinc-900 border border-zinc-700/80 rounded-lg p-2 text-xs text-zinc-200 outline-none resize-none leading-relaxed"
               />
             </div>
           )}

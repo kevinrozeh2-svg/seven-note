@@ -116,12 +116,12 @@ export function EmojiPickerPopover({
       : 'left-0'
 
   const layoutClasses = isModal
-    ? 'relative z-50 w-[94vw] max-w-[360px] sm:max-w-[390px] mx-auto'
-    : `absolute top-12 ${alignClasses} z-50 w-80 sm:w-88 max-w-[95vw]`
+    ? 'relative z-50 w-[calc(100vw-24px)] max-w-[350px] sm:max-w-[390px] mx-auto'
+    : `fixed inset-x-3 top-16 mx-auto sm:mx-0 sm:absolute sm:inset-x-auto sm:top-12 ${alignClasses} z-50 w-[calc(100vw-24px)] max-w-[350px] sm:w-88 sm:max-w-none`
 
   return (
     <div
-      className={`${layoutClasses} rounded-2xl border p-3 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-xl shadow-2xl flex flex-col`}
+      className={`${layoutClasses} rounded-2xl border p-2.5 sm:p-3 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-xl shadow-2xl flex flex-col max-h-[min(500px,85vh)] overflow-hidden`}
       style={{
         backgroundColor: 'var(--affine-background-overlay-panel-color, rgba(255, 255, 255, 0.95))',
         borderColor: 'var(--affine-border-color, rgba(0, 0, 0, 0.1))',
@@ -206,7 +206,7 @@ export function EmojiPickerPopover({
 
       {/* Categories Bar */}
       {!search.trim() && (
-        <div className="flex items-center gap-1 overflow-x-auto pb-1.5 scrollbar-none mb-1.5">
+        <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-1.5 scrollbar-none mb-1 sm:mb-1.5">
           {EMOJI_CATEGORIES.map((cat) => {
             const isActive = activeCategory === cat.id
             return (
@@ -214,9 +214,9 @@ export function EmojiPickerPopover({
                 key={cat.id}
                 type="button"
                 onClick={() => setActiveCategory(cat.id)}
-                className={`text-[11px] px-2 py-1 rounded-lg transition font-medium shrink-0 flex items-center gap-1 ${
+                className={`text-[10px] sm:text-[11px] px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-lg transition font-medium shrink-0 flex items-center gap-1 ${
                   isActive
-                    ? 'bg-blue-600 text-white shadow-xs'
+                    ? 'bg-blue-600 text-white shadow-xs font-semibold'
                     : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/[0.04] dark:hover:bg-white/[0.06]'
                 }`}
                 title={cat.name}
@@ -230,7 +230,7 @@ export function EmojiPickerPopover({
       )}
 
       {/* Grid of Apple Emojis */}
-      <div className="grid grid-cols-7 sm:grid-cols-8 gap-1 max-h-56 overflow-y-auto p-1 custom-scrollbar min-h-[160px]">
+      <div className="grid grid-cols-7 sm:grid-cols-8 gap-0.5 sm:gap-1 max-h-44 sm:max-h-56 overflow-y-auto p-0.5 sm:p-1 custom-scrollbar min-h-[140px] sm:min-h-[160px]">
         {displayedEmojis.length === 0 ? (
           <div className="col-span-full py-8 text-center text-xs text-neutral-400">
             No se encontraron emojis para &ldquo;{search}&rdquo;
@@ -247,12 +247,12 @@ export function EmojiPickerPopover({
                   onClose()
                 }}
                 onMouseEnter={() => setHoveredEmoji(item)}
-                className={`h-9 w-9 rounded-xl hover:scale-120 active:scale-95 transition-all flex items-center justify-center relative group cursor-pointer ${
+                className={`h-8 w-8 sm:h-9 sm:w-9 rounded-lg sm:rounded-xl hover:scale-115 active:scale-95 transition-all flex items-center justify-center relative group cursor-pointer ${
                   isHovered ? 'bg-blue-500/10' : 'hover:bg-black/[0.05] dark:hover:bg-white/[0.08]'
                 }`}
                 title={item.name}
               >
-                <AppleEmoji emoji={item.emoji} size={22} />
+                <AppleEmoji emoji={item.emoji} size={20} />
               </button>
             )
           })

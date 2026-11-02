@@ -177,8 +177,13 @@ create table if not exists public.seven_spaces (
   color text default '#1e96eb',
   created_at bigint not null,
   updated_at bigint not null,
-  is_deleted boolean not null default false
+  is_deleted boolean not null default false,
+  is_private boolean not null default false,
+  owner_member text
 );
+
+alter table public.seven_spaces add column if not exists is_private boolean not null default false;
+alter table public.seven_spaces add column if not exists owner_member text;
 
 -- Tabla de Páginas / Documentos / Tableros
 create table if not exists public.seven_workspaces (
@@ -289,6 +294,8 @@ create index if not exists idx_seven_canvas_nodes_updated on public.seven_canvas
 create index if not exists idx_seven_canvas_edges_workspace on public.seven_canvas_edges(workspace_id);
 create index if not exists idx_seven_canvas_edges_updated on public.seven_canvas_edges(updated_at);
 create index if not exists idx_seven_spaces_updated on public.seven_spaces(updated_at);
+create index if not exists idx_seven_spaces_private on public.seven_spaces(is_private, user_id);
+create index if not exists idx_seven_spaces_private_owner on public.seven_spaces(is_private, owner_member);
 create index if not exists idx_seven_collections_updated on public.seven_collections(updated_at);
 
 -- ========================================================
@@ -362,7 +369,13 @@ drop policy if exists "Acceso total a seven_spaces" on public.seven_spaces;
 drop policy if exists "Lectura de seven_spaces" on public.seven_spaces;
 create policy "Lectura de seven_spaces" on public.seven_spaces
   for select to authenticated
-  using (public.is_user_active(auth.uid()));
+  using (
+    public.is_user_active(auth.uid())
+    and (
+      is_private = false
+      or user_id = auth.uid()
+    )
+  );
 
 drop policy if exists "Modificacion de seven_spaces" on public.seven_spaces;
 create policy "Modificacion de seven_spaces" on public.seven_spaces
@@ -372,15 +385,36 @@ create policy "Modificacion de seven_spaces" on public.seven_spaces
 drop policy if exists "Actualizacion de seven_spaces" on public.seven_spaces;
 create policy "Actualizacion de seven_spaces" on public.seven_spaces
   for update to authenticated
-  using (public.is_user_active(auth.uid()) and public.get_my_role() != 'viewer')
-  with check (public.is_user_active(auth.uid()) and public.get_my_role() != 'viewer');
+  using (
+    public.is_user_active(auth.uid())
+    and public.get_my_role() != 'viewer'
+    and (
+      is_private = false
+      or user_id = auth.uid()
+    )
+  )
+  with check (
+    public.is_user_active(auth.uid())
+    and public.get_my_role() != 'viewer'
+    and (
+      is_private = false
+      or user_id = auth.uid()
+    )
+  );
 
 drop policy if exists "Eliminacion de seven_spaces" on public.seven_spaces;
 create policy "Eliminacion de seven_spaces" on public.seven_spaces
   for delete to authenticated
-  using (public.is_admin(auth.uid()));
+  using (
+    public.is_user_active(auth.uid())
+    and (
+      user_id = auth.uid()
+      or (is_private = false and public.is_admin(auth.uid()))
+    )
+  );
 
 -- D) DOCUMENTOS Y PÁGINAS (SEVEN_WORKSPACES)
+-- Modo Privado Estricto: ni los administradores pueden ver notas privadas de otros usuarios, y viceversa.
 drop policy if exists "Lectura de workspaces" on public.seven_workspaces;
 drop policy if exists "Acceso total a seven_workspaces" on public.seven_workspaces;
 create policy "Lectura de workspaces" on public.seven_workspaces
@@ -392,7 +426,6 @@ create policy "Lectura de workspaces" on public.seven_workspaces
       and (
         is_private = false
         or user_id = auth.uid()
-        or public.is_admin(auth.uid())
       )
     )
   );
@@ -416,7 +449,6 @@ create policy "Actualizacion de workspaces" on public.seven_workspaces
       and (
         is_private = false
         or user_id = auth.uid()
-        or public.is_admin(auth.uid())
       )
     )
   )
@@ -429,7 +461,6 @@ create policy "Actualizacion de workspaces" on public.seven_workspaces
       and (
         is_private = false
         or user_id = auth.uid()
-        or public.is_admin(auth.uid())
       )
     )
   );
@@ -439,7 +470,10 @@ create policy "Eliminacion de workspaces" on public.seven_workspaces
   for delete to authenticated
   using (
     public.is_user_active(auth.uid())
-    and (user_id = auth.uid() or public.is_admin(auth.uid()))
+    and (
+      user_id = auth.uid()
+      or (is_private = false and public.is_admin(auth.uid()))
+    )
   );
 
 -- E) CANVAS NODES & EDGES (Protegidos estrictamente por el Workspace padre)
@@ -454,7 +488,7 @@ create policy "Acceso seguro a seven_canvas_nodes" on public.seven_canvas_nodes
         or (
           auth.role() = 'authenticated'
           and public.is_user_active(auth.uid())
-          and (w.is_private = false or w.user_id = auth.uid() or public.is_admin(auth.uid()))
+          and (w.is_private = false or w.user_id = auth.uid())
         )
       )
     )
@@ -469,7 +503,7 @@ create policy "Acceso seguro a seven_canvas_nodes" on public.seven_canvas_nodes
           auth.role() = 'authenticated'
           and public.is_user_active(auth.uid())
           and public.get_my_role() != 'viewer'
-          and (w.is_private = false or w.user_id = auth.uid() or public.is_admin(auth.uid()))
+          and (w.is_private = false or w.user_id = auth.uid())
         )
       )
     )
@@ -486,7 +520,7 @@ create policy "Acceso seguro a seven_canvas_edges" on public.seven_canvas_edges
         or (
           auth.role() = 'authenticated'
           and public.is_user_active(auth.uid())
-          and (w.is_private = false or w.user_id = auth.uid() or public.is_admin(auth.uid()))
+          and (w.is_private = false or w.user_id = auth.uid())
         )
       )
     )
@@ -501,7 +535,7 @@ create policy "Acceso seguro a seven_canvas_edges" on public.seven_canvas_edges
           auth.role() = 'authenticated'
           and public.is_user_active(auth.uid())
           and public.get_my_role() != 'viewer'
-          and (w.is_private = false or w.user_id = auth.uid() or public.is_admin(auth.uid()))
+          and (w.is_private = false or w.user_id = auth.uid())
         )
       )
     )

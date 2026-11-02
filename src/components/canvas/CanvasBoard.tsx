@@ -151,7 +151,7 @@ const CanvasZoomBar = memo(function CanvasZoomBar({ showMiniMap, onToggleMiniMap
   const zoom = useStore((s) => s.transform[2])
 
   return (
-    <Panel position="bottom-right" className="mr-4 mb-4 z-20">
+    <Panel position="bottom-right" className="mr-2 sm:mr-4 mb-2 sm:mb-4 z-20">
       <div className="flex items-center gap-1 px-2 py-1.5 rounded-full bg-white/85 dark:bg-[#1a1b1e]/85 backdrop-blur-xl border border-black/[0.08] dark:border-white/[0.1] shadow-2xl text-[var(--app-text-primary)]">
         <button
           onClick={() => reactFlowInstance.zoomOut()}
@@ -2015,6 +2015,7 @@ function CanvasBoardInner({
         }}
         proOptions={{ hideAttribution: true }}
         nodeDragThreshold={8}
+        zoomOnPinch={true}
         panOnDrag={activeTool === 'pan' ? true : !isDrawingTool}
         nodesDraggable={!readOnly && activeTool !== 'pan' && activeTool !== 'connector' && !isDrawingTool}
         nodesConnectable={!readOnly}
@@ -2133,23 +2134,24 @@ function CanvasBoardInner({
         )}
 
         {/* Bottom Left Floating "..." Menu Button */}
-        <Panel position="bottom-left" className="ml-4 mb-4 z-20">
+        <Panel position="bottom-left" className="ml-2 sm:ml-4 mb-2 sm:mb-4 z-20">
           <div className="relative">
             <button
               onClick={() => setShowCanvasMenu(!showCanvasMenu)}
-              className="p-2.5 rounded-full bg-white/85 dark:bg-[#1a1b1e]/85 hover:bg-white dark:hover:bg-[#25262b] text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white border border-black/[0.08] dark:border-white/[0.1] shadow-xl transition flex items-center justify-center backdrop-blur-xl active:scale-95 cursor-pointer"
+              className="p-2 sm:p-2.5 rounded-full bg-white/85 dark:bg-[#1a1b1e]/85 hover:bg-white dark:hover:bg-[#25262b] text-neutral-600 dark:text-neutral-300 hover:text-neutral-900 dark:hover:text-white border border-black/[0.08] dark:border-white/[0.1] shadow-xl transition flex items-center justify-center backdrop-blur-xl active:scale-95 cursor-pointer"
               title="Opciones del lienzo edgeless"
             >
-              <DotsThree size={20} weight="bold" />
+              <DotsThree size={18} weight="bold" className="sm:hidden" />
+              <DotsThree size={20} weight="bold" className="hidden sm:block" />
             </button>
 
             {/* Canvas Menu Popover */}
             {showCanvasMenu && (
               <div
-                className="absolute left-0 bottom-14 z-30 w-64 bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] rounded-3xl shadow-2xl p-2.5 text-xs text-neutral-800 dark:text-neutral-200 backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-100 space-y-0.5"
+                className="absolute left-0 bottom-11 sm:bottom-14 z-30 w-[calc(100vw-24px)] max-w-[260px] sm:w-64 bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] rounded-2xl sm:rounded-3xl shadow-2xl p-1.5 sm:p-2.5 text-[11px] sm:text-xs text-neutral-800 dark:text-neutral-200 backdrop-blur-2xl animate-in fade-in zoom-in-95 duration-100 space-y-0.5 max-h-[calc(100vh-80px)] overflow-y-auto custom-scrollbar"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
+                <div className="px-2.5 py-0.5 sm:px-3 sm:py-1 text-[9px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500">
                   Herramientas de Lienzo
                 </div>
 
@@ -2158,9 +2160,9 @@ function CanvasBoardInner({
                     reactFlowInstance.zoomIn()
                     setShowCanvasMenu(false)
                   }}
-                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
+                  className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
                 >
-                  <MagnifyingGlassPlus size={16} weight="duotone" className="text-neutral-600 dark:text-neutral-400" />
+                  <MagnifyingGlassPlus size={15} weight="duotone" className="shrink-0 text-neutral-600 dark:text-neutral-400" />
                   <span>Acercar (+)</span>
                 </button>
 
@@ -2169,9 +2171,9 @@ function CanvasBoardInner({
                     reactFlowInstance.zoomOut()
                     setShowCanvasMenu(false)
                   }}
-                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
+                  className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
                 >
-                  <MagnifyingGlassMinus size={16} weight="duotone" className="text-neutral-600 dark:text-neutral-400" />
+                  <MagnifyingGlassMinus size={15} weight="duotone" className="shrink-0 text-neutral-600 dark:text-neutral-400" />
                   <span>Alejar (-)</span>
                 </button>
 
@@ -2180,9 +2182,9 @@ function CanvasBoardInner({
                     reactFlowInstance.fitView({ padding: 0.3, duration: 400 })
                     setShowCanvasMenu(false)
                   }}
-                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
+                  className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
                 >
-                  <ArrowsOutSimple size={16} weight="duotone" className="text-neutral-600 dark:text-neutral-400" />
+                  <ArrowsOutSimple size={15} weight="duotone" className="shrink-0 text-neutral-600 dark:text-neutral-400" />
                   <span>Ajustar a la vista</span>
                 </button>
 
@@ -2191,23 +2193,23 @@ function CanvasBoardInner({
                     setShowMiniMap(!showMiniMap)
                     setShowCanvasMenu(false)
                   }}
-                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
+                  className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
                 >
-                  <MapTrifold size={16} weight="duotone" className="text-neutral-600 dark:text-neutral-400" />
+                  <MapTrifold size={15} weight="duotone" className="shrink-0 text-neutral-600 dark:text-neutral-400" />
                   <span>{showMiniMap ? 'Ocultar minimapa' : 'Mostrar minimapa'}</span>
                 </button>
 
-                <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-1" />
+                <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-0.5 sm:my-1" />
 
                 {/* Grid variant switcher */}
-                <div className="px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 flex items-center gap-1.5">
-                  <GridFour size={14} weight="duotone" />
+                <div className="px-2.5 py-0.5 sm:px-3 sm:py-1 text-[9px] sm:text-[11px] font-bold uppercase tracking-wider text-neutral-400 dark:text-neutral-500 flex items-center gap-1.5">
+                  <GridFour size={13} weight="duotone" />
                   <span>Estilo de Cuadrícula</span>
                 </div>
-                <div className="flex p-1 rounded-full bg-black/[0.04] dark:bg-white/[0.06] gap-1">
+                <div className="flex p-0.5 sm:p-1 rounded-full bg-black/[0.04] dark:bg-white/[0.06] gap-1">
                   <button
                     onClick={() => handleSetGridVariant(BackgroundVariant.Dots)}
-                    className={`flex-1 py-1 rounded-full text-[11px] font-semibold transition text-center cursor-pointer ${
+                    className={`flex-1 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-[11px] font-semibold transition text-center cursor-pointer ${
                       gridVariant === BackgroundVariant.Dots
                         ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs'
                         : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
@@ -2217,7 +2219,7 @@ function CanvasBoardInner({
                   </button>
                   <button
                     onClick={() => handleSetGridVariant(BackgroundVariant.Lines)}
-                    className={`flex-1 py-1 rounded-full text-[11px] font-semibold transition text-center cursor-pointer ${
+                    className={`flex-1 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-[11px] font-semibold transition text-center cursor-pointer ${
                       gridVariant === BackgroundVariant.Lines
                         ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs'
                         : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
@@ -2227,7 +2229,7 @@ function CanvasBoardInner({
                   </button>
                   <button
                     onClick={() => handleSetGridVariant('none')}
-                    className={`flex-1 py-1 rounded-full text-[11px] font-semibold transition text-center cursor-pointer ${
+                    className={`flex-1 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-[11px] font-semibold transition text-center cursor-pointer ${
                       gridVariant === 'none'
                         ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs'
                         : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
@@ -2237,85 +2239,85 @@ function CanvasBoardInner({
                   </button>
                 </div>
 
-                <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-1" />
+                <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-0.5 sm:my-1" />
 
                 {/* Alignment actions */}
                 <button
                   onClick={() => setShowAlignMenu(!showAlignMenu)}
-                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center justify-between font-medium transition active:scale-[0.98] cursor-pointer"
+                  className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center justify-between font-medium transition active:scale-[0.98] cursor-pointer"
                 >
-                  <div className="flex items-center gap-2.5">
-                    <AlignLeft size={16} weight="duotone" className="text-neutral-600 dark:text-neutral-400" />
+                  <div className="flex items-center gap-2 sm:gap-2.5">
+                    <AlignLeft size={15} weight="duotone" className="shrink-0 text-neutral-600 dark:text-neutral-400" />
                     <span>Alinear seleccionados</span>
                   </div>
                   <CaretRight size={12} weight="bold" className={`text-neutral-400 transition-transform ${showAlignMenu ? 'rotate-90' : ''}`} />
                 </button>
 
                 {showAlignMenu && (
-                  <div className="p-2.5 rounded-2xl bg-black/[0.03] dark:bg-white/[0.05] space-y-2 border border-black/[0.04] dark:border-white/[0.06]">
+                  <div className="p-1.5 sm:p-2.5 rounded-xl sm:rounded-2xl bg-black/[0.03] dark:bg-white/[0.05] space-y-1.5 sm:space-y-2 border border-black/[0.04] dark:border-white/[0.06]">
                     <div>
-                      <span className="text-[10px] text-neutral-400 uppercase font-bold block mb-1">Horizontal</span>
+                      <span className="text-[9px] sm:text-[10px] text-neutral-400 uppercase font-bold block mb-1">Horizontal</span>
                       <div className="flex gap-1">
                         <button
                           onClick={() => alignSelectedNodes('left')}
-                          className="flex-1 p-1.5 rounded-xl bg-white dark:bg-[#25262b] hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-200 text-[10px] flex items-center justify-center border border-black/[0.06] dark:border-white/[0.08] shadow-2xs active:scale-95 cursor-pointer"
+                          className="flex-1 p-1 sm:p-1.5 rounded-lg sm:rounded-xl bg-white dark:bg-[#25262b] hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-200 text-[9px] sm:text-[10px] flex items-center justify-center border border-black/[0.06] dark:border-white/[0.08] shadow-2xs active:scale-95 cursor-pointer"
                           title="Alinear a la izquierda"
                         >
-                          <AlignLeft size={14} weight="duotone" />
+                          <AlignLeft size={13} weight="duotone" />
                         </button>
                         <button
                           onClick={() => alignSelectedNodes('center')}
-                          className="flex-1 p-1.5 rounded-xl bg-white dark:bg-[#25262b] hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-200 text-[10px] flex items-center justify-center border border-black/[0.06] dark:border-white/[0.08] shadow-2xs active:scale-95 cursor-pointer"
+                          className="flex-1 p-1 sm:p-1.5 rounded-lg sm:rounded-xl bg-white dark:bg-[#25262b] hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-200 text-[9px] sm:text-[10px] flex items-center justify-center border border-black/[0.06] dark:border-white/[0.08] shadow-2xs active:scale-95 cursor-pointer"
                           title="Alinear al centro"
                         >
-                          <AlignCenterHorizontal size={14} weight="duotone" />
+                          <AlignCenterHorizontal size={13} weight="duotone" />
                         </button>
                         <button
                           onClick={() => alignSelectedNodes('right')}
-                          className="flex-1 p-1.5 rounded-xl bg-white dark:bg-[#25262b] hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-200 text-[10px] flex items-center justify-center border border-black/[0.06] dark:border-white/[0.08] shadow-2xs active:scale-95 cursor-pointer"
+                          className="flex-1 p-1 sm:p-1.5 rounded-lg sm:rounded-xl bg-white dark:bg-[#25262b] hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-200 text-[9px] sm:text-[10px] flex items-center justify-center border border-black/[0.06] dark:border-white/[0.08] shadow-2xs active:scale-95 cursor-pointer"
                           title="Alinear a la derecha"
                         >
-                          <AlignRight size={14} weight="duotone" />
+                          <AlignRight size={13} weight="duotone" />
                         </button>
                         <button
                           onClick={() => alignSelectedNodes('distribute-h')}
-                          className="flex-1 p-1.5 rounded-xl bg-white dark:bg-[#25262b] hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-200 text-[10px] flex items-center justify-center border border-black/[0.06] dark:border-white/[0.08] shadow-2xs active:scale-95 cursor-pointer"
+                          className="flex-1 p-1 sm:p-1.5 rounded-lg sm:rounded-xl bg-white dark:bg-[#25262b] hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-200 text-[9px] sm:text-[10px] flex items-center justify-center border border-black/[0.06] dark:border-white/[0.08] shadow-2xs active:scale-95 cursor-pointer"
                           title="Distribuir horizontalmente"
                         >
-                          <Columns size={14} weight="duotone" />
+                          <Columns size={13} weight="duotone" />
                         </button>
                       </div>
                     </div>
                     <div>
-                      <span className="text-[10px] text-neutral-400 uppercase font-bold block mb-1">Vertical</span>
+                      <span className="text-[9px] sm:text-[10px] text-neutral-400 uppercase font-bold block mb-1">Vertical</span>
                       <div className="flex gap-1">
                         <button
                           onClick={() => alignSelectedNodes('top')}
-                          className="flex-1 p-1.5 rounded-xl bg-white dark:bg-[#25262b] hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-200 text-[10px] flex items-center justify-center border border-black/[0.06] dark:border-white/[0.08] shadow-2xs active:scale-95 cursor-pointer"
+                          className="flex-1 p-1 sm:p-1.5 rounded-lg sm:rounded-xl bg-white dark:bg-[#25262b] hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-200 text-[9px] sm:text-[10px] flex items-center justify-center border border-black/[0.06] dark:border-white/[0.08] shadow-2xs active:scale-95 cursor-pointer"
                           title="Alinear arriba"
                         >
-                          <AlignTop size={14} weight="duotone" />
+                          <AlignTop size={13} weight="duotone" />
                         </button>
                         <button
                           onClick={() => alignSelectedNodes('middle')}
-                          className="flex-1 p-1.5 rounded-xl bg-white dark:bg-[#25262b] hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-200 text-[10px] flex items-center justify-center border border-black/[0.06] dark:border-white/[0.08] shadow-2xs active:scale-95 cursor-pointer"
+                          className="flex-1 p-1 sm:p-1.5 rounded-lg sm:rounded-xl bg-white dark:bg-[#25262b] hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-200 text-[9px] sm:text-[10px] flex items-center justify-center border border-black/[0.06] dark:border-white/[0.08] shadow-2xs active:scale-95 cursor-pointer"
                           title="Alinear al medio"
                         >
-                          <AlignCenterVertical size={14} weight="duotone" />
+                          <AlignCenterVertical size={13} weight="duotone" />
                         </button>
                         <button
                           onClick={() => alignSelectedNodes('bottom')}
-                          className="flex-1 p-1.5 rounded-xl bg-white dark:bg-[#25262b] hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-200 text-[10px] flex items-center justify-center border border-black/[0.06] dark:border-white/[0.08] shadow-2xs active:scale-95 cursor-pointer"
+                          className="flex-1 p-1 sm:p-1.5 rounded-lg sm:rounded-xl bg-white dark:bg-[#25262b] hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-200 text-[9px] sm:text-[10px] flex items-center justify-center border border-black/[0.06] dark:border-white/[0.08] shadow-2xs active:scale-95 cursor-pointer"
                           title="Alinear abajo"
                         >
-                          <AlignBottom size={14} weight="duotone" />
+                          <AlignBottom size={13} weight="duotone" />
                         </button>
                         <button
                           onClick={() => alignSelectedNodes('distribute-v')}
-                          className="flex-1 p-1.5 rounded-xl bg-white dark:bg-[#25262b] hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-200 text-[10px] flex items-center justify-center border border-black/[0.06] dark:border-white/[0.08] shadow-2xs active:scale-95 cursor-pointer"
+                          className="flex-1 p-1 sm:p-1.5 rounded-lg sm:rounded-xl bg-white dark:bg-[#25262b] hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-200 text-[9px] sm:text-[10px] flex items-center justify-center border border-black/[0.06] dark:border-white/[0.08] shadow-2xs active:scale-95 cursor-pointer"
                           title="Distribuir verticalmente"
                         >
-                          <Rows size={14} weight="duotone" />
+                          <Rows size={13} weight="duotone" />
                         </button>
                       </div>
                     </div>
@@ -2325,61 +2327,61 @@ function CanvasBoardInner({
                 {/* Auto layout mindmap / tree */}
                 <button
                   onClick={handleAutoLayoutNodes}
-                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center justify-between font-medium transition active:scale-[0.98] cursor-pointer"
+                  className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center justify-between font-medium transition active:scale-[0.98] cursor-pointer"
                 >
-                  <div className="flex items-center gap-2.5">
-                    <TreeStructure size={16} weight="duotone" className="text-neutral-600 dark:text-neutral-400" />
+                  <div className="flex items-center gap-2 sm:gap-2.5">
+                    <TreeStructure size={15} weight="duotone" className="shrink-0 text-neutral-600 dark:text-neutral-400" />
                     <span>Auto-organizar diagrama</span>
                   </div>
-                  <span className="text-[10px] text-emerald-500 font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10">Árbol</span>
+                  <span className="text-[9px] sm:text-[10px] text-emerald-500 font-semibold px-1.5 sm:px-2 py-0.5 rounded-full bg-emerald-500/10">Árbol</span>
                 </button>
 
                 {/* Duplicate selected */}
                 <button
                   onClick={duplicateSelectedNodes}
-                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center justify-between font-medium transition active:scale-[0.98] cursor-pointer"
+                  className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center justify-between font-medium transition active:scale-[0.98] cursor-pointer"
                 >
-                  <div className="flex items-center gap-2.5">
-                    <Copy size={16} weight="duotone" className="text-neutral-600 dark:text-neutral-400" />
+                  <div className="flex items-center gap-2 sm:gap-2.5">
+                    <Copy size={15} weight="duotone" className="shrink-0 text-neutral-600 dark:text-neutral-400" />
                     <span>Duplicar elemento</span>
                   </div>
-                  <span className="text-[10px] text-neutral-400 font-mono">Ctrl+D</span>
+                  <span className="text-[9px] sm:text-[10px] text-neutral-400 font-mono">Ctrl+D</span>
                 </button>
 
                 {/* Milanote special cards */}
                 <button
                   onClick={() => addNewNode('colorPalette')}
-                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
+                  className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
                 >
-                  <Palette size={16} weight="duotone" className="text-neutral-600 dark:text-neutral-400" />
+                  <Palette size={15} weight="duotone" className="shrink-0 text-neutral-600 dark:text-neutral-400" />
                   <span>Añadir Paleta de Color</span>
                 </button>
 
                 {/* Obsidian Canvas Import / Export */}
                 <button
                   onClick={() => exportToObsidianCanvas(workspaceId, currentWorkspace?.title || 'canvas')}
-                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
+                  className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
                 >
-                  <DownloadSimple size={16} weight="duotone" className="text-neutral-600 dark:text-neutral-400" />
+                  <DownloadSimple size={15} weight="duotone" className="shrink-0 text-neutral-600 dark:text-neutral-400" />
                   <span>Exportar Obsidian .canvas</span>
                 </button>
 
                 {/* Export Canvas as PNG */}
                 <button
                   onClick={handleExportCanvasPNG}
-                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
+                  className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
                 >
-                  <PhosphorImage size={16} weight="duotone" className="text-neutral-600 dark:text-neutral-400" />
+                  <PhosphorImage size={15} weight="duotone" className="shrink-0 text-neutral-600 dark:text-neutral-400" />
                   <span>Exportar lienzo como PNG</span>
                 </button>
 
-                <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-1" />
+                <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-0.5 sm:my-1" />
 
                 <button
                   onClick={handleClearBoard}
-                  className="w-full text-left px-3 py-2 rounded-xl hover:bg-rose-500/10 text-rose-500 flex items-center gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
+                  className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl hover:bg-rose-500/10 text-rose-500 flex items-center gap-2 sm:gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
                 >
-                  <Trash size={16} weight="duotone" className="text-rose-500" />
+                  <Trash size={15} weight="duotone" className="shrink-0 text-rose-500" />
                   <span>Vaciar lienzo</span>
                 </button>
               </div>
@@ -2394,8 +2396,8 @@ function CanvasBoardInner({
         />
 
         {/* Bottom Center Floating Edgeless Tool Dock (Milanote Physical Palette) */}
-        <Panel position="bottom-center" className="mb-4 z-20">
-          <div className="flex items-center px-2 py-1 rounded-full bg-white/85 dark:bg-[#1a1b1e]/85 border border-black/[0.08] dark:border-white/[0.1] shadow-2xl shadow-black/10 dark:shadow-black/40 text-[var(--app-text-primary)] h-14 backdrop-blur-2xl select-none">
+        <Panel position="bottom-center" className="mb-2 sm:mb-4 z-20 max-w-[calc(100vw-24px)]">
+          <div className="flex items-center px-2 py-1 rounded-full bg-white/85 dark:bg-[#1a1b1e]/85 border border-black/[0.08] dark:border-white/[0.1] shadow-2xl shadow-black/10 dark:shadow-black/40 text-[var(--app-text-primary)] h-12 sm:h-14 backdrop-blur-2xl select-none max-w-full overflow-x-auto no-scrollbar">
             {/* Quick Tools (Left Section: 32px buttons) */}
             <div className="flex items-center gap-1 pr-1">
               {/* Tool 1: Pointer / Select */}

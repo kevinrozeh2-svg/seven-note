@@ -155,7 +155,7 @@ export function ImportModal({ isOpen, onClose, onWorkspaceImported, currentSpace
   return (
     <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
       <div
-        className="rounded-2xl max-w-md w-full border shadow-2xl overflow-hidden flex flex-col"
+        className="rounded-2xl max-w-md w-full border shadow-2xl overflow-hidden flex flex-col max-h-[90vh] overflow-y-auto"
         style={{
           backgroundColor: 'var(--affine-background-overlay-panel-color)',
           borderColor: 'var(--affine-border-color)',

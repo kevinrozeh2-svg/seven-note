@@ -198,33 +198,33 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-2 sm:p-4 animate-in fade-in duration-150">
       <div className="w-full max-w-xl rounded-3xl border border-black/[0.08] dark:border-white/[0.1] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] bg-white/95 dark:bg-[#1a1b1e]/95 backdrop-blur-2xl text-[var(--app-text-primary)]">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-black/[0.06] dark:border-white/[0.08] shrink-0">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-black/[0.06] dark:border-white/[0.08] shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center bg-black/[0.05] dark:bg-white/[0.08] text-[var(--app-text-primary)] shadow-2xs">
+            <div className="w-8 h-8 rounded-full flex items-center justify-center bg-black/[0.05] dark:bg-white/[0.08] text-[var(--app-text-primary)] shadow-2xs shrink-0">
               <SettingsIcon style={{ width: 16, height: 16 }} />
             </div>
-            <div>
-              <h2 className="text-sm font-bold text-[var(--app-text-primary)]">
+            <div className="min-w-0">
+              <h2 className="text-sm font-bold text-[var(--app-text-primary)] truncate">
                 Configuración y Sincronización
               </h2>
-              <p className="text-[11px] text-neutral-400">
+              <p className="text-[11px] text-neutral-400 truncate">
                 Gestión de nube Supabase y copias de seguridad locales
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-full text-neutral-400 hover:text-neutral-800 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer"
+            className="p-1.5 rounded-full text-neutral-400 hover:text-neutral-800 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer shrink-0"
           >
             <CloseIcon style={{ width: 16, height: 16 }} />
           </button>
         </div>
 
         {/* Modal Content */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5 text-xs custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5 text-xs custom-scrollbar">
           {/* UI Scale / Zoom Section */}
           <div className="space-y-3 p-4 rounded-3xl border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.02]">
             <div className="flex items-center justify-between">
@@ -538,7 +538,7 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-3 border-t border-black/[0.06] dark:border-white/[0.08] text-xs flex items-center justify-between shrink-0 bg-black/[0.02] dark:bg-white/[0.02] text-neutral-400">
+        <div className="px-4 sm:px-6 py-3 border-t border-black/[0.06] dark:border-white/[0.08] text-xs flex items-center justify-between shrink-0 bg-black/[0.02] dark:bg-white/[0.02] text-neutral-400">
           <span className="font-medium">Seven Note • Milanote & Notion Canvas</span>
           <button
             onClick={onClose}

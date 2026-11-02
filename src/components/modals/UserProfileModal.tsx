@@ -190,7 +190,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-black/[0.06] dark:border-white/[0.08]">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-black/[0.06] dark:border-white/[0.08]">
           <div className="flex items-center gap-3">
             <div
               className="w-10 h-10 rounded-2xl flex items-center justify-center text-white font-bold text-base shadow-2xs"
@@ -200,14 +200,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold truncate max-w-[200px]">
+                <h2 className="text-sm font-bold truncate max-w-[160px] sm:max-w-[200px]">
                   {fullName || currentMember.name}
                 </h2>
                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${roleBadgeStyle}`}>
                   {roleLabel}
                 </span>
               </div>
-              <p className="text-[11px] text-neutral-400 truncate max-w-[250px]">
+              <p className="text-[11px] text-neutral-400 truncate max-w-[200px] sm:max-w-[250px]">
                 {currentMember.email || 'Sin correo asociado'}
               </p>
             </div>
@@ -221,11 +221,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex border-b border-black/[0.06] dark:border-white/[0.08] px-6 pt-2 bg-black/[0.01] dark:bg-white/[0.01]">
+        <div className="flex border-b border-black/[0.06] dark:border-white/[0.08] px-4 sm:px-6 pt-2 bg-black/[0.01] dark:bg-white/[0.01] overflow-x-auto no-scrollbar">
           <button
             type="button"
             onClick={() => setActiveTab('profile')}
-            className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
+            className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
               activeTab === 'profile'
                 ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
                 : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
@@ -238,7 +238,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('security')}
-            className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 cursor-pointer ${
+            className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
               activeTab === 'security'
                 ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
                 : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
@@ -250,7 +250,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-5 text-xs overflow-y-auto max-h-[75vh] custom-scrollbar">
+        <div className="p-4 sm:p-6 space-y-5 text-xs overflow-y-auto max-h-[75vh] custom-scrollbar">
           {activeTab === 'profile' && (
             <form onSubmit={handleSaveProfile} className="space-y-4">
               <div>

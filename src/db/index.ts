@@ -14,6 +14,11 @@ export interface SpaceItem {
   updatedAt: number
   isDeleted?: boolean
   syncStatus?: SyncStatus
+  isPrivate?: boolean
+  ownerMember?: string
+  ownerName?: string
+  userId?: string
+  createdBy?: string
 }
 
 export interface CustomPropertyItem {
@@ -302,6 +307,9 @@ export class SevenNoteDatabase extends Dexie {
       spaces: 'id, name, createdAt, updatedAt, syncStatus',
       collections: 'id, spaceId, name, createdAt, updatedAt, syncStatus',
       tags: 'id, spaceId, name, color, createdAt, syncStatus'
+    })
+    this.version(6).stores({
+      spaces: 'id, name, createdAt, updatedAt, syncStatus, isPrivate, ownerMember, userId'
     })
 
     // Auto-hook: Mark any newly created or modified items as 'pending'
@@ -688,7 +696,11 @@ export async function seedInitialData() {
 export async function createSpace(
   name: string,
   icon: string = '💼',
-  color: string = '#1e96eb'
+  color: string = '#1e96eb',
+  isPrivate: boolean = false,
+  ownerMember?: string,
+  ownerName?: string,
+  userId?: string
 ): Promise<{ space: SpaceItem; initialPageId: string }> {
   const now = Date.now()
   const spaceId = `space-${crypto.randomUUID()}`
@@ -697,11 +709,16 @@ export async function createSpace(
   const space: SpaceItem = {
     id: spaceId,
     name: trimmedName,
-    icon: icon || '💼',
+    icon: icon || (isPrivate ? '🔒' : '💼'),
     color: color || '#1e96eb',
     createdAt: now,
     updatedAt: now,
-    syncStatus: 'pending'
+    syncStatus: 'pending',
+    isPrivate,
+    ownerMember: ownerMember || undefined,
+    ownerName: ownerName || undefined,
+    userId: userId || undefined,
+    createdBy: ownerName || ownerMember || undefined
   }
 
   await db.spaces.add(space)
@@ -712,16 +729,22 @@ export async function createSpace(
     id: initialPageId,
     parentId: null,
     spaceId: spaceId,
-    title: 'Página inicial',
-    icon: icon || '📄',
+    title: isPrivate ? 'Página inicial privada' : 'Página inicial',
+    icon: isPrivate ? '🔒' : (icon || '📄'),
     color: color || '#1e96eb',
     viewMode: 'doc',
-    docContent: `<h1>✨ ${trimmedName}</h1><p>¡Bienvenido a tu nuevo espacio de trabajo! Puedes empezar a crear notas, diagramas y listas de tareas aquí.</p>`,
+    docContent: isPrivate
+      ? `<h1>🔒 ${trimmedName}</h1><p>¡Bienvenido a tu nuevo espacio de trabajo privado! Este espacio y sus notas son visibles exclusivamente para ti.</p>`
+      : `<h1>✨ ${trimmedName}</h1><p>¡Bienvenido a tu nuevo espacio de trabajo! Puedes empezar a crear notas, diagramas y listas de tareas aquí.</p>`,
     createdAt: now,
     updatedAt: now,
     isFavorite: false,
     isDeleted: false,
     syncStatus: 'pending',
+    isPrivate,
+    ownerMember: ownerMember || undefined,
+    ownerName: ownerName || undefined,
+    createdBy: ownerName || ownerMember || undefined,
     activeProperties: [
       'tags',
       'createdAt',

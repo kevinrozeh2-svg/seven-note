@@ -27,26 +27,26 @@ export const TemplatesPage: React.FC<TemplatesPageProps> = ({ onSelectTemplate }
   return (
     <div className="flex-1 flex flex-col h-full bg-[#18181b] text-neutral-200 select-none overflow-hidden">
       {/* Header */}
-      <header className="h-14 px-8 border-b border-neutral-800 flex items-center justify-between shrink-0 bg-[#18181b]">
+      <header className="h-auto min-h-14 py-2 px-4 sm:px-8 border-b border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between shrink-0 bg-[#18181b] gap-2.5">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-400 flex items-center justify-center shrink-0">
             <LayoutTemplate className="w-4 h-4" />
           </div>
           <div>
             <h2 className="text-sm font-semibold text-white">Galería de Plantillas</h2>
-            <p className="text-[11px] text-neutral-400">
+            <p className="text-[11px] text-neutral-400 hidden sm:block">
               Inicia proyectos con esquemas visuales y documentos predefinidos
             </p>
           </div>
         </div>
 
         {/* Categories */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
           {categories.map((cat) => (
             <button
               key={cat}
               onClick={() => setSelectedCategory(cat)}
-              className={`px-3 py-1 rounded-md text-xs font-medium transition ${
+              className={`px-3 py-1 rounded-md text-xs font-medium transition whitespace-nowrap cursor-pointer ${
                 selectedCategory === cat
                   ? 'bg-neutral-800 text-white border border-neutral-700'
                   : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/40'
@@ -59,7 +59,7 @@ export const TemplatesPage: React.FC<TemplatesPageProps> = ({ onSelectTemplate }
       </header>
 
       {/* Main Grid */}
-      <div className="flex-1 overflow-y-auto px-10 py-8 max-w-6xl w-full mx-auto custom-scrollbar">
+      <div className="flex-1 overflow-y-auto px-3 sm:px-6 md:px-10 py-4 sm:py-8 max-w-6xl w-full mx-auto custom-scrollbar">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((tpl) => (
             <div

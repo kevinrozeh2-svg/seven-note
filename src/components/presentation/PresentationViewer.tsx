@@ -2141,25 +2141,25 @@ export function PresentationViewer({
 
       {/* Top Slide Header with Interactive Tools Bar (Hidden in Fullscreen) */}
       {!isFullscreen && (
-        <div className="h-14 px-6 flex items-center justify-between border-b border-zinc-800/60 bg-[#121215]/90 backdrop-blur-md shrink-0">
+        <div className="h-12 sm:h-14 px-2 sm:px-6 flex items-center justify-between border-b border-zinc-800/60 bg-[#121215]/90 backdrop-blur-md shrink-0 gap-1.5 sm:gap-3">
           {/* Workspace Title & Current Slide Counter */}
-          <div className="flex items-center gap-3">
-            <span className="text-xl">{workspace.icon || '📽️'}</span>
-            <span className="font-semibold text-sm text-zinc-200 truncate max-w-sm">
+          <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 shrink">
+            <span className="text-base sm:text-xl shrink-0">{workspace.icon || '📽️'}</span>
+            <span className="font-semibold text-xs sm:text-sm text-zinc-200 truncate max-w-[90px] sm:max-w-xs hidden xs:inline">
               {workspace.title || 'Untitled'}
             </span>
-            <span className="text-zinc-500 text-xs">•</span>
-            <span className="text-xs text-[#1e96eb] font-medium">
-              Diapositiva {currentSlideIndex + 1} de {slides.length}
+            <span className="text-zinc-500 text-xs hidden xs:inline">•</span>
+            <span className="text-[11px] sm:text-xs text-[#1e96eb] font-medium shrink-0">
+              <span className="hidden sm:inline">Diapositiva </span>{currentSlideIndex + 1}/{slides.length}
             </span>
           </div>
 
           {/* Center Presentation Interactive Tools: Move, Draw, + Text, Laser */}
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-2xl bg-zinc-900/90 border border-zinc-700/80 shadow-lg">
+          <div className="flex items-center gap-0.5 sm:gap-1.5 px-1.5 sm:px-2 py-1 rounded-xl sm:rounded-2xl bg-zinc-900/90 border border-zinc-700/80 shadow-lg shrink-0">
             {/* Mover / Seleccionar Tool */}
             <button
               onClick={() => setEditTool('select')}
-              className={`px-2.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition ${
+              className={`p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-xs font-medium flex items-center gap-1.5 transition ${
                 editTool === 'select'
                   ? 'bg-[#1e96eb] text-white shadow-sm'
                   : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
@@ -2167,13 +2167,13 @@ export function PresentationViewer({
               title="Mover y editar elementos (V)"
             >
               <Move className="w-3.5 h-3.5" />
-              <span>Mover</span>
+              <span className="hidden sm:inline">Mover</span>
             </button>
 
             {/* Pintar / Lápiz Tool */}
             <button
               onClick={() => setEditTool(editTool === 'pen' ? 'select' : 'pen')}
-              className={`px-2.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition ${
+              className={`p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-xs font-medium flex items-center gap-1.5 transition ${
                 editTool === 'pen'
                   ? 'bg-amber-500 text-black font-semibold shadow-sm'
                   : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
@@ -2181,13 +2181,13 @@ export function PresentationViewer({
               title="Pintar / Lápiz sobre diapositiva (P)"
             >
               <Pencil className="w-3.5 h-3.5" />
-              <span>Lápiz</span>
+              <span className="hidden sm:inline">Lápiz</span>
             </button>
 
             {/* Subrayador Tool */}
             <button
               onClick={() => setEditTool(editTool === 'highlighter' ? 'select' : 'highlighter')}
-              className={`px-2.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition ${
+              className={`p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-xs font-medium flex items-center gap-1.5 transition ${
                 editTool === 'highlighter'
                   ? 'bg-yellow-400 text-black font-semibold shadow-sm'
                   : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
@@ -2195,13 +2195,13 @@ export function PresentationViewer({
               title="Subrayador fluorescente (H)"
             >
               <Highlighter className="w-3.5 h-3.5" />
-              <span>Subrayar</span>
+              <span className="hidden sm:inline">Subrayar</span>
             </button>
 
             {/* Borrador Tool */}
             <button
               onClick={() => setEditTool(editTool === 'eraser' ? 'select' : 'eraser')}
-              className={`px-2.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition ${
+              className={`p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-xs font-medium flex items-center gap-1.5 transition ${
                 editTool === 'eraser'
                   ? 'bg-rose-500 text-white shadow-sm'
                   : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
@@ -2209,25 +2209,25 @@ export function PresentationViewer({
               title="Borrador de trazos (E)"
             >
               <Eraser className="w-3.5 h-3.5" />
-              <span>Borrador</span>
+              <span className="hidden sm:inline">Borrador</span>
             </button>
 
-            <div className="w-[1px] h-4 bg-zinc-700/80 mx-1" />
+            <div className="w-[1px] h-4 bg-zinc-700/80 mx-0.5 sm:mx-1" />
 
             {/* Añadir Texto Tool */}
             <button
               onClick={handleAddText}
-              className="px-2.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white transition active:scale-95"
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-xs font-medium flex items-center gap-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white transition active:scale-95"
               title="Añadir texto a la diapositiva (T)"
             >
               <Type className="w-3.5 h-3.5 text-[#1e96eb]" />
-              <span>+ Texto</span>
+              <span className="hidden sm:inline">+ Texto</span>
             </button>
 
             {/* Puntero Láser */}
             <button
               onClick={() => setIsLaserPointerActive(!isLaserPointerActive)}
-              className={`px-2.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 transition ${
+              className={`p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg sm:rounded-xl text-xs font-medium flex items-center gap-1.5 transition ${
                 isLaserPointerActive
                   ? 'bg-red-500/20 text-red-400 border border-red-500/40'
                   : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
@@ -2238,20 +2238,20 @@ export function PresentationViewer({
                 style={{ width: 14, height: 14 }}
                 className={isLaserPointerActive ? 'text-red-400' : ''}
               />
-              <span>Láser</span>
+              <span className="hidden sm:inline">Láser</span>
             </button>
           </div>
 
           {/* Top right actions */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
             {/* Quick Grid Style Switcher (Lienzo / Puntos / Cuadrícula / Liso) */}
             <button
               onClick={handleCycleGridVariant}
-              className="px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white border border-zinc-700/60 transition"
+              className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white border border-zinc-700/60 transition"
               title="Cambiar estilo de fondo del lienzo (Puntos / Cuadrícula / Liso)"
             >
               <Grid className="w-3.5 h-3.5 text-[#1e96eb]" />
-              <span className="capitalize">
+              <span className="capitalize hidden sm:inline">
                 {liveGridVariant === 'lines' ? 'Cuadrícula' : liveGridVariant === 'none' ? 'Liso' : 'Puntos'}
               </span>
             </button>
@@ -2260,7 +2260,7 @@ export function PresentationViewer({
             {currentSlide?.speakerNotes && (
               <button
                 onClick={() => setShowSpeakerNotes(!showSpeakerNotes)}
-                className={`px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition ${
+                className={`p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition ${
                   showSpeakerNotes
                     ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
                     : 'text-zinc-400 hover:text-white hover:bg-zinc-800'
@@ -2268,7 +2268,7 @@ export function PresentationViewer({
                 title="Notas del orador (N)"
               >
                 <FileText className="w-3.5 h-3.5" />
-                <span>Notas</span>
+                <span className="hidden sm:inline">Notas</span>
               </button>
             )}
 
@@ -2288,10 +2288,11 @@ export function PresentationViewer({
             {/* Exit Presentation */}
             <button
               onClick={onClose}
-              className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition"
+              className="p-1.5 sm:px-3 sm:py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium flex items-center gap-1.5 transition"
+              title="Salir (Esc)"
             >
               <CloseIcon style={{ width: 14, height: 14 }} />
-              <span>Salir (Esc)</span>
+              <span className="hidden sm:inline">Salir (Esc)</span>
             </button>
           </div>
         </div>
@@ -2489,17 +2490,17 @@ export function PresentationViewer({
 
       {/* Floating Bottom Presentation Controller Dock (Hidden in Fullscreen) */}
       {!isFullscreen && (
-        <div className="h-16 px-6 border-t border-zinc-800/80 bg-[#121215]/95 backdrop-blur-md flex items-center justify-between shrink-0">
+        <div className="h-14 sm:h-16 px-2 sm:px-6 border-t border-zinc-800/80 bg-[#121215]/95 backdrop-blur-md flex items-center justify-between shrink-0 gap-1.5 sm:gap-4">
           {/* Left: Presentation Timer */}
-          <div className="flex items-center gap-2">
-            <div className="px-2.5 py-1 rounded-lg bg-zinc-800/80 border border-zinc-700 font-mono text-xs text-zinc-300 flex items-center gap-1.5">
+          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+            <div className="px-1.5 sm:px-2.5 py-0.5 sm:py-1 rounded-lg bg-zinc-800/80 border border-zinc-700 font-mono text-[11px] sm:text-xs text-zinc-300 flex items-center gap-1 sm:gap-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <span>{formatTimer(timerSeconds)}</span>
             </div>
 
             <button
               onClick={() => setIsTimerRunning(!isTimerRunning)}
-              className="p-1 rounded text-zinc-400 hover:text-white"
+              className="p-1 rounded text-zinc-400 hover:text-white transition"
               title={isTimerRunning ? 'Pausar cronómetro' : 'Reanudar cronómetro'}
             >
               {isTimerRunning ? (
@@ -2511,7 +2512,7 @@ export function PresentationViewer({
 
             <button
               onClick={() => setTimerSeconds(0)}
-              className="p-1 rounded text-zinc-400 hover:text-white"
+              className="p-1 rounded text-zinc-400 hover:text-white transition"
               title="Reiniciar cronómetro"
             >
               <ResetIcon style={{ width: 14, height: 14 }} />
@@ -2519,17 +2520,17 @@ export function PresentationViewer({
           </div>
 
           {/* Center: Slide Navigation Buttons [ < ] [ 2 / 5 ] [ > ] */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             <button
               disabled={currentSlideIndex === 0}
               onClick={() => setCurrentSlideIndex((prev) => Math.max(0, prev - 1))}
-              className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:hover:bg-zinc-800 text-white transition flex items-center justify-center shadow-md cursor-pointer"
+              className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:hover:bg-zinc-800 text-white transition flex items-center justify-center shadow-md cursor-pointer"
               title="Diapositiva anterior (←)"
             >
-              <ArrowLeftSmallIcon style={{ width: 18, height: 18 }} />
+              <ArrowLeftSmallIcon style={{ width: 16, height: 16 }} />
             </button>
 
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800/60 border border-zinc-700/60 text-xs font-medium">
+            <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg sm:rounded-xl bg-zinc-800/60 border border-zinc-700/60 text-xs font-medium">
               <span className="text-white font-bold">{currentSlideIndex + 1}</span>
               <span className="text-zinc-500">/</span>
               <span className="text-zinc-400">{slides.length}</span>
@@ -2538,31 +2539,32 @@ export function PresentationViewer({
             <button
               disabled={currentSlideIndex === slides.length - 1}
               onClick={() => setCurrentSlideIndex((prev) => Math.min(slides.length - 1, prev + 1))}
-              className="p-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:hover:bg-zinc-800 text-white transition flex items-center justify-center shadow-md cursor-pointer"
+              className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:hover:bg-zinc-800 text-white transition flex items-center justify-center shadow-md cursor-pointer"
               title="Siguiente diapositiva (→ o Espacio)"
             >
-              <ArrowRightSmallIcon style={{ width: 18, height: 18 }} />
+              <ArrowRightSmallIcon style={{ width: 16, height: 16 }} />
             </button>
           </div>
 
           {/* Right: Slide Drawer Toggle */}
-          <div className="relative">
+          <div className="relative shrink-0">
             <button
               onClick={() => setShowThumbnails(!showThumbnails)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition ${
+              className={`px-2 sm:px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition ${
                 showThumbnails
                   ? 'bg-[#1e96eb] text-white'
                   : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
               }`}
+              title="Índice de Diapositivas"
             >
               <AllDocsIcon style={{ width: 14, height: 14 }} />
-              <span>Índice de Diapositivas</span>
+              <span className="hidden sm:inline">Índice de Diapositivas</span>
             </button>
 
             {/* Thumbnails popover */}
             {showThumbnails && (
-              <div className="absolute right-0 bottom-12 w-64 max-h-72 overflow-y-auto bg-[#18181c] border border-zinc-700 rounded-2xl shadow-2xl p-2 space-y-1 z-50">
-                <div className="px-2 py-1 text-[10px] font-bold uppercase text-zinc-500">
+              <div className="fixed right-3 bottom-16 sm:absolute sm:right-0 sm:bottom-12 w-[calc(100vw-24px)] max-w-[260px] sm:w-64 max-h-[min(280px,60vh)] overflow-y-auto bg-[#18181c] border border-zinc-700 rounded-xl sm:rounded-2xl shadow-2xl p-1.5 sm:p-2 space-y-0.5 sm:space-y-1 z-50 custom-scrollbar">
+                <div className="px-2 py-0.5 sm:py-1 text-[9px] sm:text-[10px] font-bold uppercase text-zinc-500">
                   Diapositivas ({slides.length})
                 </div>
                 {slides.map((s, idx) => (
@@ -2572,13 +2574,13 @@ export function PresentationViewer({
                       setCurrentSlideIndex(idx)
                       setShowThumbnails(false)
                     }}
-                    className={`w-full text-left p-2 rounded-xl text-xs flex items-center gap-2 transition ${
+                    className={`w-full text-left p-1.5 sm:p-2 rounded-lg sm:rounded-xl text-[11px] sm:text-xs flex items-center gap-2 transition ${
                       idx === currentSlideIndex
                         ? 'bg-[#1e96eb]/20 text-[#1e96eb] border border-[#1e96eb]/40'
                         : 'hover:bg-zinc-800 text-zinc-300'
                     }`}
                   >
-                    <span className="w-5 h-5 rounded-md bg-zinc-800 text-zinc-400 font-mono text-[10px] flex items-center justify-center shrink-0">
+                    <span className="w-4.5 sm:w-5 h-4.5 sm:h-5 rounded-md bg-zinc-800 text-zinc-400 font-mono text-[9px] sm:text-[10px] flex items-center justify-center shrink-0">
                       {idx + 1}
                     </span>
                     <span className="truncate flex-1 font-medium">{s.title}</span>

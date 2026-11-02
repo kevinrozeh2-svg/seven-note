@@ -211,7 +211,12 @@ export function RightSidebar({
   const headings = extractHeadings()
 
   return (
-    <aside className="w-72 sm:w-80 h-full bg-[var(--app-bg-secondary)] border-l border-[var(--app-border)] flex flex-col shrink-0 select-none text-[var(--app-text-primary)] text-sm z-20">
+    <>
+      <div
+        className="fixed inset-0 bg-black/40 backdrop-blur-xs z-40 md:hidden animate-in fade-in duration-150"
+        onClick={onClose}
+      />
+      <aside className="fixed inset-y-0 right-0 md:relative z-50 md:z-20 w-80 max-w-[85vw] h-full bg-[var(--app-bg-secondary)] border-l border-[var(--app-border)] shadow-2xl md:shadow-none flex flex-col shrink-0 select-none text-[var(--app-text-primary)] text-sm">
       {/* Top Header Icon Tabs (Notion Style) */}
       <div className="h-11 border-b border-[var(--app-border)] flex items-center justify-between px-3 shrink-0">
         <div className="flex items-center gap-1">
@@ -638,5 +643,6 @@ export function RightSidebar({
         </div>
       )}
     </aside>
+    </>
   )
 }

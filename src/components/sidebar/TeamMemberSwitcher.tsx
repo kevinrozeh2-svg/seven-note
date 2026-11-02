@@ -88,14 +88,14 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
             onClick={() => setIsOpen(false)}
           />
           <div
-            className="absolute left-0 right-0 top-12 z-50 w-full min-w-[220px] bg-white dark:bg-[#1e1f23] border border-black/[0.08] dark:border-white/[0.1] rounded-2xl shadow-2xl p-2.5 animate-in fade-in zoom-in-95 duration-100 flex flex-col gap-2 font-sans text-xs"
+            className="absolute left-0 right-0 top-12 z-50 w-full min-w-[200px] sm:min-w-[220px] bg-white dark:bg-[#1e1f23] border border-black/[0.08] dark:border-white/[0.1] rounded-xl sm:rounded-2xl shadow-2xl p-2 sm:p-2.5 animate-in fade-in zoom-in-95 duration-100 flex flex-col gap-1.5 sm:gap-2 font-sans text-xs max-h-[min(380px,70vh)] overflow-y-auto custom-scrollbar"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-1">
-              <span className="text-[10px] uppercase font-bold text-neutral-400 tracking-wider">
+              <span className="text-[9px] sm:text-[10px] uppercase font-bold text-neutral-400 tracking-wider">
                 Mi Cuenta
               </span>
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+              <span className={`text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
                 authUser
                   ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
                   : 'bg-black/5 dark:bg-white/10 text-neutral-500'
@@ -105,9 +105,9 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
             </div>
 
             {/* Tarjeta de la cuenta conectada */}
-            <div className="p-2.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.04] dark:border-white/[0.06] flex items-center gap-2.5">
+            <div className="p-2 sm:p-2.5 rounded-lg sm:rounded-xl bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.04] dark:border-white/[0.06] flex items-center gap-2 sm:gap-2.5">
               <div
-                className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-2xs"
+                className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center text-white font-bold text-xs sm:text-sm shrink-0 shadow-2xs"
                 style={{ backgroundColor: currentMember.color || '#2563eb' }}
               >
                 {displayName.charAt(0).toUpperCase()}
@@ -117,7 +117,7 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
                   {displayName}
                 </div>
                 {displayEmail && (
-                  <div className="text-[11px] text-neutral-400 truncate">
+                  <div className="text-[10px] sm:text-[11px] text-neutral-400 truncate">
                     {displayEmail}
                   </div>
                 )}
@@ -125,7 +125,7 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
             </div>
 
             {/* Acciones de Cuenta */}
-            <div className="space-y-1 pt-1">
+            <div className="space-y-0.5 sm:space-y-1 pt-0.5 sm:pt-1">
               {authUser ? (
                 <>
                   <button
@@ -134,9 +134,9 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
                       setIsOpen(false)
                       onOpenProfileModal?.()
                     }}
-                    className="w-full py-1.5 px-2.5 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-300 text-xs font-medium transition flex items-center gap-2 cursor-pointer"
+                    className="w-full py-1 sm:py-1.5 px-2 sm:px-2.5 rounded-lg sm:rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-300 text-[11px] sm:text-xs font-medium transition flex items-center gap-2 cursor-pointer"
                   >
-                    <User className="w-3.5 h-3.5 text-blue-500" />
+                    <User className="w-3.5 h-3.5 text-blue-500 shrink-0" />
                     <span>Mi Perfil &amp; Seguridad</span>
                   </button>
 
