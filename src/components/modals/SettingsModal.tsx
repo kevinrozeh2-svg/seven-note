@@ -18,8 +18,6 @@ import {
 } from '../../lib/supabase'
 import { syncEngine, type SyncEngineStatus } from '../../lib/syncEngine'
 import { db } from '../../db'
-import { optimizeExistingLocalImages, formatBytes } from '../../lib/imageOptimizer'
-import { ImageIcon } from '@blocksuite/icons/rc'
 import schemaSql from '../../supabase_schema.sql?raw'
 import { toast } from 'sonner'
 
@@ -40,8 +38,6 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null)
   const [copiedSql, setCopiedSql] = useState(false)
   const [manualSyncing, setManualSyncing] = useState(false)
-  const [isOptimizing, setIsOptimizing] = useState(false)
-  const [optimizeResult, setOptimizeResult] = useState<string | null>(null)
   const [installPrompt, setInstallPrompt] = useState<any>(null)
   const [isStandalone, setIsStandalone] = useState(false)
 
@@ -105,27 +101,6 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
     setManualSyncing(true)
     await syncEngine.triggerSync()
     setManualSyncing(false)
-  }
-
-  const handleOptimizeExistingImages = async () => {
-    setIsOptimizing(true)
-    setOptimizeResult(null)
-    try {
-      const res = await optimizeExistingLocalImages()
-      if (res.processedCount === 0) {
-        setOptimizeResult('¡Todas las fotos ya están optimizadas y en formato ligero!')
-      } else {
-        const saved = Math.max(0, res.totalOriginalBytes - res.totalCompressedBytes)
-        setOptimizeResult(
-          `¡Optimización completada! ${res.processedCount} foto(s) reducida(s), ahorraste ${formatBytes(saved)} de almacenamiento.`
-        )
-        syncEngine.scheduleSync(1000)
-      }
-    } catch (err: any) {
-      setOptimizeResult('Error durante la optimización: ' + (err?.message || 'Error desconocido'))
-    } finally {
-      setIsOptimizing(false)
-    }
   }
 
   const copySqlSchema = async () => {
@@ -299,37 +274,8 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
             </div>
 
             <div className="space-y-3 p-4 rounded-3xl border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.02]">
-              {/* Credenciales de Supabase */}
-              <div className="space-y-2">
-                <div>
-                  <label className="block text-[11px] font-semibold text-[var(--app-text-primary)] mb-1">
-                    URL del Proyecto Supabase
-                  </label>
-                  <input
-                    type="url"
-                    value={url}
-                    onChange={(e) => setUrl(e.target.value)}
-                    placeholder="https://xyzcompany.supabase.co"
-                    className="w-full px-3 py-1.5 rounded-xl border border-black/[0.08] dark:border-white/[0.1] bg-white dark:bg-[#121214] text-xs outline-none focus:border-blue-500 transition"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-[var(--app-text-primary)] mb-1">
-                    Anon Public Key
-                  </label>
-                  <input
-                    type="password"
-                    value={anonKey}
-                    onChange={(e) => setAnonKey(e.target.value)}
-                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                    className="w-full px-3 py-1.5 rounded-xl border border-black/[0.08] dark:border-white/[0.1] bg-white dark:bg-[#121214] text-xs outline-none focus:border-blue-500 transition"
-                  />
-                </div>
-              </div>
-
               {/* Intervalo de sincronización periódica */}
-              <div className="flex items-center justify-between pt-1">
+              <div className="flex items-center justify-between">
                 <div>
                   <label className="block text-xs font-semibold text-[var(--app-text-primary)]">
                     Frecuencia de sincronización automática
@@ -431,47 +377,6 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
               />
               <span>Sincronizar ahora</span>
             </button>
-          </div>
-
-          {/* Storage & Image Optimization Section */}
-          <div className="p-4 rounded-3xl border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.02] space-y-3">
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full flex items-center justify-center bg-blue-500/10 text-blue-500 shrink-0">
-                  <ImageIcon style={{ width: 16, height: 16 }} />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-[var(--app-text-primary)]">
-                    Ahorro y Optimización de Fotos (WebP & Supabase Storage)
-                  </div>
-                  <div className="text-[11px] text-neutral-400">
-                    Las fotos se comprimen automáticamente hasta un 95% en WebP y se guardan en el bucket <code className="font-mono text-[10px] bg-black/5 dark:bg-white/10 px-1 py-0.5 rounded">attachments</code> de Storage para no agotar los 500 MB de tu base de datos.
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleOptimizeExistingImages}
-                disabled={isOptimizing}
-                className="px-3.5 py-1.5 rounded-full text-xs font-semibold border border-black/[0.08] dark:border-white/[0.1] bg-white dark:bg-[#1a1b1e] hover:bg-black/5 dark:hover:bg-white/10 text-[var(--app-text-primary)] transition flex items-center gap-1.5 disabled:opacity-50 cursor-pointer active:scale-95 shadow-2xs shrink-0"
-              >
-                <ResetIcon
-                  style={{
-                    width: 14,
-                    height: 14,
-                    animation: isOptimizing ? 'spin 1s linear infinite' : 'none'
-                  }}
-                />
-                <span>{isOptimizing ? 'Optimizando...' : 'Comprimir fotos existentes'}</span>
-              </button>
-            </div>
-
-            {optimizeResult && (
-              <div className="p-2.5 rounded-xl bg-blue-500/10 border border-blue-500/20 text-[11px] text-blue-700 dark:text-blue-300">
-                {optimizeResult}
-              </div>
-            )}
           </div>
 
           {/* Local Backups (Offline First) */}

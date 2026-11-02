@@ -14,6 +14,7 @@ export const ImageNode = memo(({ id, data, selected }: any) => {
   const [urlInput, setUrlInput] = useState('')
   const [width, setWidth] = useState<number>(data.width || 280)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [hasImageError, setHasImageError] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const isConnectorActive = Boolean(data?.isConnectorActive)
   const isConnectSource = Boolean(data?.isConnectSource)
@@ -50,6 +51,7 @@ export const ImageNode = memo(({ id, data, selected }: any) => {
 
       const result = await processAndUploadImage(file)
       setImageUrl(result.url)
+      setHasImageError(false)
       const newCaption = caption || file.name.replace(/\.[^/.]+$/, '')
       setCaption(newCaption)
       await save({ imageUrl: result.url, caption: newCaption })
@@ -73,6 +75,7 @@ export const ImageNode = memo(({ id, data, selected }: any) => {
   const handleSaveUrl = () => {
     if (urlInput.trim()) {
       setImageUrl(urlInput.trim())
+      setHasImageError(false)
       save({ imageUrl: urlInput.trim() })
       setShowUrlInput(false)
       setUrlInput('')
@@ -160,14 +163,38 @@ export const ImageNode = memo(({ id, data, selected }: any) => {
         />
 
         {/* Pure Image completely flat without shadow */}
-        <div className={`overflow-hidden rounded-xl transition-all ${selected ? 'ring-2 ring-[#1e96eb] ring-offset-2 ring-offset-transparent' : ''}`}>
-          <img
-            src={imageUrl}
-            alt={caption || 'Foto'}
-            className="w-full h-auto block select-none pointer-events-none"
-            draggable={false}
-          />
-        </div>
+        {hasImageError ? (
+          <div
+            className={`p-6 rounded-xl border border-dashed flex flex-col items-center justify-center gap-2 text-center select-none bg-black/[0.03] dark:bg-white/[0.05] border-black/15 dark:border-white/15 text-neutral-500 ${
+              selected ? 'ring-2 ring-[#1e96eb] ring-offset-2 ring-offset-transparent' : ''
+            }`}
+          >
+            <ImageIcon style={{ width: 26, height: 26 }} className="opacity-60" />
+            <span className="text-xs font-medium text-neutral-700 dark:text-neutral-300">
+              {caption || 'Imagen remota'}
+            </span>
+            <span className="text-[10px] opacity-75">
+              No disponible sin conexión
+            </span>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="mt-1 px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-[#1e96eb] text-white hover:bg-[#1880ca] transition cursor-pointer"
+            >
+              Reemplazar con foto local
+            </button>
+          </div>
+        ) : (
+          <div className={`overflow-hidden rounded-xl transition-all ${selected ? 'ring-2 ring-[#1e96eb] ring-offset-2 ring-offset-transparent' : ''}`}>
+            <img
+              src={imageUrl}
+              alt={caption || 'Foto'}
+              className="w-full h-auto block select-none pointer-events-none"
+              draggable={false}
+              onError={() => setHasImageError(true)}
+            />
+          </div>
+        )}
 
         {/* Optional clean caption below (only if user adds text) */}
         {(caption || selected) && (

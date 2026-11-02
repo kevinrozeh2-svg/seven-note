@@ -408,35 +408,19 @@ export function Sidebar({
 
   return (
     <aside className="w-72 sm:w-64 h-full flex flex-col bg-[#fbfbfa] dark:bg-[#161619] border-r border-black/[0.05] dark:border-white/[0.06] text-neutral-800 dark:text-neutral-200 select-none shrink-0 text-xs transition-colors duration-200 font-sans shadow-2xl md:shadow-none">
-      {/* 1. Header: Space Switcher & Controls */}
-      <div className="h-12 px-3 flex items-center justify-between shrink-0 border-b border-black/[0.04] dark:border-white/[0.06] relative">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <button
-            type="button"
-            onClick={() => setShowSpaceMenu(!showSpaceMenu)}
-            className="flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-black/[0.04] dark:hover:bg-white/[0.06] cursor-pointer transition min-w-0 flex-1 text-left group"
-            title="Cambiar espacio de trabajo"
-          >
-            <div
-              className="w-5 h-5 rounded-lg flex items-center justify-center text-white shrink-0 shadow-2xs font-semibold text-[11px] transition-transform"
-              style={{ backgroundColor: currentSpace.color || '#1e96eb' }}
-            >
-              <AppleEmoji emoji={currentSpace.icon || currentSpace.name.charAt(0) || '✦'} size={13} />
-            </div>
-            <span className="font-semibold text-neutral-900 dark:text-neutral-100 truncate text-xs flex-1">
-              {currentSpace.name}
-            </span>
-            {isCurrentSpacePrivate && (
-              <span className="text-amber-500 shrink-0" title="Espacio privado: Solo visible para ti">
-                <Lock size={12} weight="bold" />
-              </span>
-            )}
-            <CaretDown size={14} className="text-neutral-400 group-hover:text-neutral-700 dark:group-hover:text-neutral-200 transition shrink-0" />
-          </button>
+      {/* 1. Header: Brand & Collapse Sidebar */}
+      <div className="h-10 px-3 pt-2 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="w-5 h-5 rounded-md bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 flex items-center justify-center font-bold text-xs shadow-xs">
+            7
+          </div>
+          <span className="font-semibold text-xs tracking-tight text-neutral-800 dark:text-neutral-200">
+            Seven Note
+          </span>
         </div>
 
         {/* Right buttons: Collapse on desktop, Close on mobile */}
-        <div className="flex items-center gap-0.5 shrink-0 ml-1">
+        <div className="flex items-center gap-0.5 shrink-0">
           <button
             onClick={onToggleSidebar}
             className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-black/[0.04] dark:hover:bg-white/[0.06] transition cursor-pointer"
@@ -446,6 +430,41 @@ export function Sidebar({
             <SidebarSimple size={15} weight="duotone" className="hidden md:block" />
           </button>
         </div>
+      </div>
+
+      {/* 2. Workspace Bar (Arriba de Nueva Nota) */}
+      <div className="px-3 pt-2 pb-1 relative">
+        <button
+          type="button"
+          onClick={() => setShowSpaceMenu(!showSpaceMenu)}
+          className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl border border-black/[0.06] dark:border-white/[0.08] hover:border-black/[0.12] dark:hover:border-white/[0.15] bg-black/[0.02] dark:bg-white/[0.03] hover:bg-black/[0.05] dark:hover:bg-white/[0.06] cursor-pointer transition text-left group shadow-2xs"
+          title="Cambiar espacio de trabajo"
+        >
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <div
+              className="w-5 h-5 rounded-lg flex items-center justify-center text-white shrink-0 shadow-2xs font-semibold text-[11px] transition-transform group-hover:scale-105"
+              style={{ backgroundColor: currentSpace.color || '#1e96eb' }}
+            >
+              <AppleEmoji emoji={currentSpace.icon || currentSpace.name.charAt(0) || '✦'} size={13} />
+            </div>
+            <div className="flex flex-col min-w-0 flex-1 leading-tight">
+              <div className="flex items-center gap-1 min-w-0">
+                <span className="font-semibold text-neutral-900 dark:text-neutral-100 truncate text-xs">
+                  {currentSpace.name}
+                </span>
+                {isCurrentSpacePrivate && (
+                  <span className="text-amber-500 shrink-0" title="Espacio privado: Solo visible para ti">
+                    <Lock size={11} weight="bold" />
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] text-neutral-400 dark:text-neutral-500 truncate">
+                {isCurrentSpacePrivate ? 'Espacio privado' : 'Espacio de trabajo'}
+              </span>
+            </div>
+          </div>
+          <CaretDown size={14} className="text-neutral-400 group-hover:text-neutral-700 dark:group-hover:text-neutral-200 transition shrink-0 ml-1.5" />
+        </button>
 
         {/* Space Switcher Popover Dropdown */}
         {showSpaceMenu && (
@@ -458,7 +477,7 @@ export function Sidebar({
               }}
             />
             <div
-              className="absolute left-2.5 right-2.5 top-11 z-50 bg-white dark:bg-[#1e1f23] border border-black/[0.08] dark:border-white/[0.1] rounded-xl sm:rounded-2xl shadow-2xl p-1.5 sm:p-2 animate-in fade-in zoom-in-95 duration-100 flex flex-col gap-1 max-h-[60vh] overflow-y-auto custom-scrollbar"
+              className="absolute left-3 right-3 top-12 z-50 bg-white dark:bg-[#1e1f23] border border-black/[0.08] dark:border-white/[0.1] rounded-xl sm:rounded-2xl shadow-2xl p-1.5 sm:p-2 animate-in fade-in zoom-in-95 duration-100 flex flex-col gap-1 max-h-[60vh] overflow-y-auto custom-scrollbar"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-center justify-between px-2.5 py-1">
@@ -637,21 +656,7 @@ export function Sidebar({
         )}
       </div>
 
-      {/* 2. Team Member Switcher (Kevin, Maikol, Marcos) */}
-      <div className="px-3 pt-2.5 pb-1">
-        <TeamMemberSwitcher
-          currentMember={activeMember}
-          onSelectMember={(id) => onSelectMember && onSelectMember(id)}
-          privateNotesCount={privateDocs.length}
-          authUser={authUser}
-          onOpenAuthModal={onOpenAuthModal}
-          onOpenProfileModal={onOpenProfileModal}
-          onOpenUserManagementModal={onOpenUserManagementModal}
-          onSignOut={onSignOut}
-        />
-      </div>
-
-      {/* 3. Tactile Pill Button: "+ Nueva Nota / Página" */}
+      {/* 2. Tactile Pill Button: "+ Nueva Nota / Página" */}
       <div className="px-3 py-2">
         <button
           onClick={() => handleCreateWorkspace(null, null, 'doc', isCurrentSpacePrivate)}
@@ -1289,18 +1294,32 @@ export function Sidebar({
           </span>
         </div>
 
-        {/* Controls: Dark mode & Settings */}
-        <div className="flex items-center gap-1">
+        {/* Controls: Dark mode, Account & Settings */}
+        <div className="flex items-center gap-1.5">
           <button
             onClick={onToggleDarkMode}
-            className="p-1.5 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] text-neutral-600 dark:text-neutral-300 transition cursor-pointer"
+            className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-black/[0.05] dark:hover:bg-white/[0.08] text-neutral-600 dark:text-neutral-300 transition cursor-pointer"
             title={darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
           >
             {darkMode ? <Sun size={15} weight="duotone" /> : <Moon size={15} weight="duotone" />}
           </button>
+
+          <TeamMemberSwitcher
+            variant="circular"
+            popoverDirection="up"
+            currentMember={activeMember}
+            onSelectMember={(id) => onSelectMember && onSelectMember(id)}
+            privateNotesCount={privateDocs.length}
+            authUser={authUser}
+            onOpenAuthModal={onOpenAuthModal}
+            onOpenProfileModal={onOpenProfileModal}
+            onOpenUserManagementModal={onOpenUserManagementModal}
+            onSignOut={onSignOut}
+          />
+
           <button
             onClick={onOpenSettings}
-            className="p-1.5 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] text-neutral-600 dark:text-neutral-300 transition cursor-pointer"
+            className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-black/[0.05] dark:hover:bg-white/[0.08] text-neutral-600 dark:text-neutral-300 transition cursor-pointer"
             title="Ajustes de la aplicación"
           >
             <Gear size={15} weight="duotone" />

@@ -10,7 +10,17 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
+      devOptions: {
+        enabled: true
+      },
+      includeAssets: [
+        'favicon.svg',
+        'apple-touch-icon.png',
+        'icons.svg',
+        'noise.avif',
+        'pwa-192x192.png',
+        'pwa-512x512.png'
+      ],
       manifest: {
         name: 'Seven Note - Offline Notion & Milanote Hybrid',
         short_name: 'Seven Note',
@@ -36,8 +46,66 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,avif,webp}'],
+        maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
+        runtimeCaching: [
+          {
+            // Apple Emoji CDN - Cache-First so loaded emojis stay available offline
+            urlPattern: /^https:\/\/cdn\.jsdelivr\.net\/npm\/emoji-datasource-apple@.+/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'apple-emojis-cache',
+              expiration: {
+                maxEntries: 3000,
+                maxAgeSeconds: 365 * 24 * 60 * 60 // 1 year
+              },
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
+          },
+          {
+            // Google Fonts Stylesheets - Stale-While-Revalidate
+            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+            handler: 'StaleWhileRevalidate',
+            options: {
+              cacheName: 'google-fonts-stylesheets',
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
+          },
+          {
+            // Google Fonts Webfont files (.woff2) - Cache-First
+            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-webfonts',
+              expiration: {
+                maxEntries: 120,
+                maxAgeSeconds: 365 * 24 * 60 * 60 // 1 year
+              },
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
+          },
+          {
+            // Unsplash Images (Used in Templates & Moodboards) - Cache-First
+            urlPattern: /^https:\/\/images\.unsplash\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'unsplash-images-cache',
+              expiration: {
+                maxEntries: 100,
+                maxAgeSeconds: 30 * 24 * 60 * 60 // 30 days
+              },
+              cacheableResponse: {
+                statuses: [0, 200]
+              }
+            }
+          }
+        ]
       }
     })
   ]

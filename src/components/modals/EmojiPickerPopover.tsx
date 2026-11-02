@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import { CloseIcon, DeleteIcon, ResetIcon, SearchIcon } from '@blocksuite/icons/rc'
 import { Copy, Check } from 'lucide-react'
 import { toast } from 'sonner'
-import { AppleEmoji } from '../ui/AppleEmoji'
+import { AppleEmoji, useIsOnline } from '../ui/AppleEmoji'
 import {
   EMOJI_CATEGORIES,
   EMOJIS_BY_CATEGORY,
@@ -35,6 +35,7 @@ export function EmojiPickerPopover({
   align = 'left',
   isModal = false
 }: EmojiPickerPopoverProps) {
+  const isOnline = useIsOnline()
   const [activeCategory, setActiveCategory] = useState<string>('people')
   const [search, setSearch] = useState('')
   const [hoveredEmoji, setHoveredEmoji] = useState<IndexedEmojiEntry | null>(null)
@@ -139,8 +140,10 @@ export function EmojiPickerPopover({
           <span className="text-xs font-semibold tracking-tight truncate">
             {title}
           </span>
-          <span className="text-[10px] py-0.5 px-1.5 rounded-full bg-blue-500/10 text-blue-500 dark:text-blue-400 font-semibold shrink-0">
-            {ALL_EMOJIS.length} Apple
+          <span className={`text-[10px] py-0.5 px-1.5 rounded-full font-semibold shrink-0 ${
+            isOnline ? 'bg-blue-500/10 text-blue-500 dark:text-blue-400' : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+          }`}>
+            {ALL_EMOJIS.length} {isOnline ? 'Apple' : 'Offline'}
           </span>
         </div>
         <div className="flex items-center gap-1 shrink-0">

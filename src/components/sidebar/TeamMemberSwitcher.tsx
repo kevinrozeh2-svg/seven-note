@@ -11,6 +11,8 @@ interface TeamMemberSwitcherProps {
   onOpenProfileModal?: () => void
   onOpenUserManagementModal?: () => void
   onSignOut?: () => void
+  variant?: 'full' | 'circular'
+  popoverDirection?: 'up' | 'down'
 }
 
 export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
@@ -20,7 +22,9 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
   onOpenAuthModal,
   onOpenProfileModal,
   onOpenUserManagementModal,
-  onSignOut
+  onSignOut,
+  variant = 'circular',
+  popoverDirection = 'up'
 }) => {
   const [isOpen, setIsOpen] = useState(false)
 
@@ -46,40 +50,66 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
 
   return (
     <div className="relative">
-      <button
-        type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl hover:bg-black/[0.04] dark:hover:bg-white/[0.06] border border-black/[0.04] dark:border-white/[0.06] transition text-left group cursor-pointer"
-        title="Opciones de cuenta y usuario"
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          <div
-            className="w-6 h-6 rounded-lg flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-2xs transition-transform group-hover:scale-105"
-            style={{ backgroundColor: currentMember.color || '#2563eb' }}
-          >
-            {displayName.charAt(0).toUpperCase()}
-          </div>
-          <div className="min-w-0 flex-1 leading-tight">
-            <div className="flex items-center gap-1.5">
-              <span className="font-semibold text-neutral-900 dark:text-neutral-100 text-xs truncate">
-                {displayName}
-              </span>
-              {authUser && (
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" title="Sesión activa" />
-              )}
+      {variant === 'circular' ? (
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="relative w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-xs hover:scale-105 active:scale-95 transition-all cursor-pointer ring-1 ring-black/10 dark:ring-white/15"
+          style={{ backgroundColor: currentMember.color || '#2563eb' }}
+          title={`Mi Cuenta: ${displayName} (${roleLabel})`}
+        >
+          {currentMember.avatarUrl ? (
+            <img
+              src={currentMember.avatarUrl}
+              alt={displayName}
+              className="w-full h-full rounded-full object-cover"
+            />
+          ) : (
+            <span>{displayName.charAt(0).toUpperCase()}</span>
+          )}
+          {authUser && (
+            <span
+              className="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#161619] absolute -bottom-0.5 -right-0.5"
+              title="Sesión activa"
+            />
+          )}
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setIsOpen(!isOpen)}
+          className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl hover:bg-black/[0.04] dark:hover:bg-white/[0.06] border border-black/[0.04] dark:border-white/[0.06] transition text-left group cursor-pointer"
+          title="Opciones de cuenta y usuario"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <div
+              className="w-6 h-6 rounded-lg flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-2xs transition-transform group-hover:scale-105"
+              style={{ backgroundColor: currentMember.color || '#2563eb' }}
+            >
+              {displayName.charAt(0).toUpperCase()}
             </div>
-            <div className="text-[10px] text-neutral-400 dark:text-neutral-500 flex items-center gap-1">
-              <Shield className="w-2.5 h-2.5 text-blue-500 shrink-0" />
-              <span>{roleLabel}</span>
-              <span className="text-[9px] text-neutral-400 truncate max-w-[85px]">
-                • {privateNotesCount} priv.
-              </span>
+            <div className="min-w-0 flex-1 leading-tight">
+              <div className="flex items-center gap-1.5">
+                <span className="font-semibold text-neutral-900 dark:text-neutral-100 text-xs truncate">
+                  {displayName}
+                </span>
+                {authUser && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" title="Sesión activa" />
+                )}
+              </div>
+              <div className="text-[10px] text-neutral-400 dark:text-neutral-500 flex items-center gap-1">
+                <Shield className="w-2.5 h-2.5 text-blue-500 shrink-0" />
+                <span>{roleLabel}</span>
+                <span className="text-[9px] text-neutral-400 truncate max-w-[85px]">
+                  • {privateNotesCount} priv.
+                </span>
+              </div>
             </div>
           </div>
-        </div>
 
-        <ChevronDown className="w-3.5 h-3.5 text-neutral-400 group-hover:text-neutral-700 dark:group-hover:text-neutral-200 transition shrink-0" />
-      </button>
+          <ChevronDown className="w-3.5 h-3.5 text-neutral-400 group-hover:text-neutral-700 dark:group-hover:text-neutral-200 transition shrink-0" />
+        </button>
+      )}
 
       {isOpen && (
         <>
@@ -88,7 +118,11 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
             onClick={() => setIsOpen(false)}
           />
           <div
-            className="absolute left-0 right-0 top-12 z-50 w-full min-w-[200px] sm:min-w-[220px] bg-white dark:bg-[#1e1f23] border border-black/[0.08] dark:border-white/[0.1] rounded-xl sm:rounded-2xl shadow-2xl p-2 sm:p-2.5 animate-in fade-in zoom-in-95 duration-100 flex flex-col gap-1.5 sm:gap-2 font-sans text-xs max-h-[min(380px,70vh)] overflow-y-auto custom-scrollbar"
+            className={`absolute z-50 bg-white dark:bg-[#1e1f23] border border-black/[0.08] dark:border-white/[0.1] rounded-2xl shadow-2xl p-2.5 animate-in fade-in zoom-in-95 duration-100 flex flex-col gap-1.5 sm:gap-2 font-sans text-xs max-h-[min(380px,70vh)] overflow-y-auto custom-scrollbar ${
+              popoverDirection === 'up'
+                ? 'bottom-full mb-2 right-0 w-64'
+                : 'left-0 right-0 top-12 w-full min-w-[200px] sm:min-w-[220px]'
+            }`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-1">

@@ -9,6 +9,7 @@ export const LinkNode = memo(({ id, data, selected }: any) => {
   const [url] = useState(data.url ?? 'https://designmuseum.dk/en/')
   const [description] = useState(data.description ?? '')
   const [imageUrl] = useState(data.imageUrl ?? '')
+  const [hasImageError, setHasImageError] = useState(false)
   const [isVideo] = useState(data.isVideo ?? (url.includes('youtube') || url.includes('youtu.be')))
 
   const save = async (updates: any) => {
@@ -73,12 +74,13 @@ export const LinkNode = memo(({ id, data, selected }: any) => {
       </button>
 
       {/* Media / Image Thumbnail Banner */}
-      {imageUrl && (
+      {imageUrl && !hasImageError && (
         <div className="relative w-full h-36 bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
           <img
             src={imageUrl}
             alt={title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+            onError={() => setHasImageError(true)}
           />
           {isVideo && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/20">

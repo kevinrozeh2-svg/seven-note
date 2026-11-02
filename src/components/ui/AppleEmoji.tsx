@@ -13,6 +13,37 @@ export const EMOJI_MATCH_REGEX =
 export const HAS_EMOJI_REGEX =
   /(?:\p{Regional_Indicator}{2}|[0-9#*]\uFE0F?\u20E3|\p{Extended_Pictographic}(?:[\uFE0E\uFE0F\u200D\u{1F3FB}-\u{1F3FF}]|\p{Extended_Pictographic})*)/u
 
+// Global connection state tracking for zero-lag offline detection
+let isNetworkOnline = typeof navigator !== 'undefined' ? navigator.onLine : true
+const onlineListeners = new Set<(online: boolean) => void>()
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('online', () => {
+    isNetworkOnline = true
+    onlineListeners.forEach((listener) => listener(true))
+  })
+  window.addEventListener('offline', () => {
+    isNetworkOnline = false
+    onlineListeners.forEach((listener) => listener(false))
+  })
+}
+
+export function useIsOnline(): boolean {
+  const [online, setOnline] = useState<boolean>(isNetworkOnline)
+  useEffect(() => {
+    const handler = (status: boolean) => setOnline(status)
+    onlineListeners.add(handler)
+    return () => {
+      onlineListeners.delete(handler)
+    }
+  }, [])
+  return online
+}
+
+// Module-level cache tracking for instant lookup without network delays
+const loadedEmojiUrls = new Set<string>()
+const failedEmojiUrls = new Set<string>()
+
 /**
  * Checks if a value contains any emoji / pictograph
  */
@@ -58,8 +89,9 @@ export interface AppleEmojiProps {
 }
 
 /**
- * AppleEmoji renders authentic Apple / iOS emoji images everywhere (including Windows & Linux).
- * If the image fails to load or offline, it gracefully falls back to the native Unicode character.
+ * AppleEmoji renders authentic Apple / iOS emoji images everywhere.
+ * When offline or if an image fails to load, it seamlessly and instantly falls back
+ * to the crisp native Unicode emoji, guaranteeing 100% offline functionality without broken icons.
  */
 export function AppleEmoji({
   emoji,
@@ -68,10 +100,11 @@ export function AppleEmoji({
   style,
   alt
 }: AppleEmojiProps) {
-  const [retryStep, setRetryStep] = useState<0 | 1 | 2>(0)
+  const isOnline = useIsOnline()
+  const [hasFailed, setHasFailed] = useState<boolean>(false)
 
   useEffect(() => {
-    setRetryStep(0)
+    setHasFailed(false)
   }, [emoji])
 
   // If not a valid emoji string, render directly
@@ -85,35 +118,45 @@ export function AppleEmoji({
     return <>{renderWithAppleEmoji(emoji, size, className)}</>
   }
 
-  // Fallback to native emoji if CDN image failed on both tries
-  if (retryStep === 2) {
-    return (
-      <span
-        className={cn('inline-block align-middle select-none', className)}
-        style={{
-          fontSize: typeof size === 'number' ? `${size * 0.9}px` : size,
-          lineHeight: 1,
-          ...style
-        }}
-      >
-        {emoji}
-      </span>
-    )
-  }
-
-  // Calculate image URL
   const initialUrl = getAppleEmojiUrl(emoji)
-  const hasFe0f = initialUrl.includes('fe0f')
-  const src =
-    retryStep === 1
-      ? getAppleEmojiUrl(emoji, hasFe0f ? 'without-fe0f' : 'with-fe0f')
-      : initialUrl
+  const isKnownFailed = failedEmojiUrls.has(initialUrl)
+  const isKnownLoaded = loadedEmojiUrls.has(initialUrl)
 
   const pixelSize = typeof size === 'number' ? `${size}px` : size
+  const fontSize = typeof size === 'number' ? `${Math.round(size * 0.9)}px` : size
+
+  // Native Unicode Emoji Fallback (Works 100% offline with zero dependencies)
+  const renderNativeFallback = () => (
+    <span
+      className={cn(
+        'inline-flex items-center justify-center align-middle select-none shrink-0 font-emoji',
+        className
+      )}
+      style={{
+        width: pixelSize,
+        height: pixelSize,
+        fontSize: fontSize,
+        lineHeight: 1,
+        fontFamily:
+          '"Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Segoe UI Symbol", "Android Emoji", emoji, sans-serif',
+        ...style
+      }}
+      role="img"
+      aria-label={typeof alt === 'string' ? alt : emoji}
+    >
+      {emoji}
+    </span>
+  )
+
+  // If we are currently offline and the image hasn't already been confirmed cached/loaded,
+  // or if it previously failed, display the native emoji immediately (zero lag, zero broken boxes)
+  if ((!isOnline && !isKnownLoaded) || hasFailed || isKnownFailed) {
+    return renderNativeFallback()
+  }
 
   return (
     <img
-      src={src}
+      src={initialUrl}
       alt={alt || emoji}
       loading="lazy"
       draggable={false}
@@ -126,8 +169,12 @@ export function AppleEmoji({
         height: pixelSize,
         ...style
       }}
+      onLoad={() => {
+        loadedEmojiUrls.add(initialUrl)
+      }}
       onError={() => {
-        setRetryStep((prev) => (prev === 0 ? 1 : 2))
+        failedEmojiUrls.add(initialUrl)
+        setHasFailed(true)
       }}
     />
   )
