@@ -249,16 +249,19 @@ export function canUserEdit(member?: TeamMember | UserProfile | null): boolean {
  */
 export function isWorkspaceVisible(
   workspace: { isPrivate?: boolean; ownerMember?: string; user_id?: string },
-  currentMemberIdOrMember: string | TeamMember
+  currentMemberOrId?: string | TeamMember | null
 ): boolean {
-  if (!workspace.isPrivate) return true
+  if (!workspace || !workspace.isPrivate) return true
+  if (!currentMemberOrId) return false
 
-  const memberId = typeof currentMemberIdOrMember === 'string'
-    ? currentMemberIdOrMember
-    : currentMemberIdOrMember.id
+  const member = typeof currentMemberOrId === 'string'
+    ? TEAM_MEMBERS.find((m: TeamMember) => m.id === currentMemberOrId) || getCurrentMember()
+    : currentMemberOrId
 
-  const isAdmin = typeof currentMemberIdOrMember !== 'string' && isUserAdmin(currentMemberIdOrMember)
+  const memberId = typeof currentMemberOrId === 'string' ? currentMemberOrId : currentMemberOrId.id
+  const isAdmin = member ? isUserAdmin(member) : false
 
   // Si es privada, visible para su autor o admin
-  return workspace.ownerMember === memberId || (workspace.user_id && workspace.user_id === memberId) || isAdmin
+  return workspace.ownerMember === memberId || (workspace.user_id !== undefined && workspace.user_id === memberId) || isAdmin
 }
+

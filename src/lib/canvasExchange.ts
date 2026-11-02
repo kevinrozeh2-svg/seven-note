@@ -119,6 +119,7 @@ export async function importObsidianCanvas(workspaceId: string, file: File): Pro
 
   const now = Date.now()
   let importedCount = 0
+  const nodeIdMap = new Map<string, string>()
 
   for (const node of parsed.nodes) {
     let nodeType: any = 'note'
@@ -140,8 +141,11 @@ export async function importObsidianCanvas(workspaceId: string, file: File): Pro
       data.content = node.text || ''
     }
 
+    const newNodeId = crypto.randomUUID()
+    nodeIdMap.set(node.id, newNodeId)
+
     await db.canvasNodes.put({
-      id: node.id,
+      id: newNodeId,
       workspaceId,
       type: nodeType,
       positionX: node.x,
@@ -152,18 +156,20 @@ export async function importObsidianCanvas(workspaceId: string, file: File): Pro
       createdAt: now,
       updatedAt: now,
       isDeleted: false,
-      syncStatus: 'synced'
+      syncStatus: 'pending'
     })
     importedCount++
   }
 
   if (parsed.edges && Array.isArray(parsed.edges)) {
     for (const edge of parsed.edges) {
+      const sourceId = nodeIdMap.get(edge.fromNode) || edge.fromNode
+      const targetId = nodeIdMap.get(edge.toNode) || edge.toNode
       await db.canvasEdges.put({
-        id: edge.id,
+        id: crypto.randomUUID(),
         workspaceId,
-        source: edge.fromNode,
-        target: edge.toNode,
+        source: sourceId,
+        target: targetId,
         label: edge.label,
         color: edge.color,
         animated: false,
@@ -172,7 +178,7 @@ export async function importObsidianCanvas(workspaceId: string, file: File): Pro
         createdAt: now,
         updatedAt: now,
         isDeleted: false,
-        syncStatus: 'synced'
+        syncStatus: 'pending'
       })
     }
   }

@@ -319,6 +319,31 @@ create policy "Actualizacion propia de perfil" on public.user_profiles
   using (auth.uid() = id)
   with check (auth.uid() = id);
 
+-- Trigger de seguridad para evitar escalación de privilegios en user_profiles
+create or replace function public.check_user_profile_update()
+returns trigger
+language plpgsql
+security definer
+as $$
+begin
+  -- Solo administradores pueden cambiar roles y estados de cuenta
+  if not public.is_admin(auth.uid()) then
+    if new.role is distinct from old.role then
+      raise exception 'No tienes permisos para modificar tu rol de usuario.';
+    end if;
+    if new.status is distinct from old.status then
+      raise exception 'No tienes permisos para modificar el estado de tu cuenta.';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists tr_check_user_profile_update on public.user_profiles;
+create trigger tr_check_user_profile_update
+  before update on public.user_profiles
+  for each row execute function public.check_user_profile_update();
+
 drop policy if exists "Admin gestion total de perfiles" on public.user_profiles;
 create policy "Admin gestion total de perfiles" on public.user_profiles
   for all to authenticated
@@ -503,10 +528,26 @@ values ('attachments', 'attachments', true)
 on conflict (id) do nothing;
 
 drop policy if exists "Permitir subida y lectura pública en attachments" on storage.objects;
-create policy "Permitir subida y lectura pública en attachments"
-  on storage.objects for all
-  using (bucket_id = 'attachments')
+drop policy if exists "Lectura pública de attachments" on storage.objects;
+create policy "Lectura pública de attachments"
+  on storage.objects for select
+  using (bucket_id = 'attachments');
+
+drop policy if exists "Subida de attachments para usuarios autenticados" on storage.objects;
+create policy "Subida de attachments para usuarios autenticados"
+  on storage.objects for insert to authenticated
+  with check (bucket_id = 'attachments' and public.is_user_active(auth.uid()));
+
+drop policy if exists "Actualización de attachments propios" on storage.objects;
+create policy "Actualización de attachments propios"
+  on storage.objects for update to authenticated
+  using (bucket_id = 'attachments' and (owner = auth.uid() or public.is_admin(auth.uid())))
   with check (bucket_id = 'attachments');
+
+drop policy if exists "Eliminación de attachments propios" on storage.objects;
+create policy "Eliminación de attachments propios"
+  on storage.objects for delete to authenticated
+  using (bucket_id = 'attachments' and (owner = auth.uid() or public.is_admin(auth.uid())));
 
 -- ========================================================
 -- 11. HABILITACIÓN DE SUPABASE REALTIME

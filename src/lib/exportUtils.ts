@@ -6,8 +6,9 @@ import { type WorkspaceItem, type CanvasNodeItem, type CanvasEdgeItem } from '..
  */
 export function htmlToMarkdown(html: string): string {
   if (!html) return ''
-  const div = document.createElement('div')
-  div.innerHTML = html
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(html, 'text/html')
+  const root = doc.body
 
   function convertNode(node: Node): string {
     if (node.nodeType === Node.TEXT_NODE) {
@@ -87,7 +88,7 @@ export function htmlToMarkdown(html: string): string {
     }
   }
 
-  return convertNode(div).trim().replace(/\n{3,}/g, '\n\n')
+  return convertNode(root).trim().replace(/\n{3,}/g, '\n\n')
 }
 
 /**
@@ -209,9 +210,10 @@ export function exportDocumentAsJson(
  * Copy document content as clean plain text
  */
 export function copyAsPlainText(html: string) {
-  const div = document.createElement('div')
-  div.innerHTML = html
-  const text = div.textContent || div.innerText || ''
+  if (!html) return
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(html, 'text/html')
+  const text = doc.body.textContent || ''
   navigator.clipboard.writeText(text.trim())
   toast.success('Texto plano copiado al portapapeles')
 }

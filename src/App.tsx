@@ -22,6 +22,7 @@ import {
 } from '@phosphor-icons/react'
 import {
   db,
+  clearLocalUserData,
   seedInitialData,
   type ViewMode,
   type WorkspaceItem,
@@ -61,7 +62,7 @@ import { CollectionsPage } from './components/views/CollectionsPage'
 import { TagsPage } from './components/views/TagsPage'
 import { ExternalShareView } from './components/views/ExternalShareView'
 import { type AppTemplate } from './lib/templates'
-import { getCurrentMember, setCurrentMember, subscribeToMemberChanges, mapSupabaseUserToMember, type TeamMember } from './lib/teamAuth'
+import { getCurrentMember, setCurrentMember, subscribeToMemberChanges, mapSupabaseUserToMember, type TeamMember, isWorkspaceVisible } from './lib/teamAuth'
 import { getAuthUser, onAuthChange, signOutUser, fetchUserProfile } from './lib/supabase'
 import {
   exportDocumentAsMarkdown,
@@ -71,15 +72,7 @@ import {
 } from './lib/exportUtils'
 import { Toaster, toast } from 'sonner'
 
-export default function App() {
-  // 1. Detectar si la página se está abriendo mediante enlace compartido externo: ?share=<id>&token=<token>
-  const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
-  const externalShareId = urlParams?.get('share')
-  const externalToken = urlParams?.get('token')
-
-  if (externalShareId && externalToken) {
-    return <ExternalShareView workspaceId={externalShareId} token={externalToken} />
-  }
+function MainApp() {
 
   // Miembro activo del equipo
   const [currentMember, setCurrentMemberState] = useState<TeamMember>(() => getCurrentMember())
@@ -149,6 +142,12 @@ export default function App() {
 
   const handleSignOut = async () => {
     await signOutUser()
+    await clearLocalUserData()
+    localStorage.removeItem('seven_note_workbench_tabs')
+    localStorage.removeItem('seven_note_workbench_active_tab')
+    localStorage.removeItem('seven_note_active_space_id')
+    localStorage.removeItem('seven_note_current_member')
+    localStorage.removeItem('seven_note_current_profile')
     setAuthUser(null)
     toast.info('Sesión cerrada correctamente')
   }
@@ -670,7 +669,7 @@ export default function App() {
   const currentSpaceWorkspaces = workspaces.filter(
     (w) =>
       (w.spaceId || DEFAULT_SPACE_ID) === currentSpaceId &&
-      (!w.isPrivate || w.ownerMember === currentMember.id)
+      isWorkspaceVisible(w, currentMember)
   )
   const activeWorkspaces = currentSpaceWorkspaces.filter((w) => !w.isDeleted)
   const currentWorkspace: WorkspaceItem | undefined =
@@ -1797,3 +1796,16 @@ export default function App() {
     </div>
   )
 }
+
+export default function App() {
+  const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
+  const externalShareId = urlParams?.get('share')
+  const externalToken = urlParams?.get('token')
+
+  if (externalShareId && externalToken) {
+    return <ExternalShareView workspaceId={externalShareId} token={externalToken} />
+  }
+
+  return <MainApp />
+}
+

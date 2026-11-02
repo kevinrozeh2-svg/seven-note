@@ -1,4 +1,5 @@
 import { memo, useState, useEffect } from 'react'
+import DOMPurify from 'dompurify'
 import { Trash2, Type } from 'lucide-react'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
@@ -437,7 +438,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
         <div className="text-[13px] leading-relaxed relative z-10">
           {data.hasHtmlHighlight ? (
             <div
-              dangerouslySetInnerHTML={{ __html: content }}
+              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(content) }}
               className="nodrag select-text leading-relaxed text-zinc-800 dark:text-zinc-200"
             />
           ) : isEditingContent ? (

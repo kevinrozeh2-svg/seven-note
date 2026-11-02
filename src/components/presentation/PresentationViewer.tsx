@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
+import DOMPurify from 'dompurify'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
   CloseIcon,
@@ -1094,7 +1095,7 @@ export function PresentationViewer({
               ) : n.data?.hasHtmlHighlight ? (
                 <div
                   onDoubleClick={() => setEditingNodeId(n.id)}
-                  dangerouslySetInnerHTML={{ __html: n.data.content || '' }}
+                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(n.data.content || '') }}
                   className="leading-relaxed text-zinc-200 cursor-text"
                 />
               ) : (
@@ -2443,7 +2444,7 @@ export function PresentationViewer({
             {currentSlide.contentHtml ? (
               <div className="flex-1 overflow-y-auto">
                 <div
-                  dangerouslySetInnerHTML={{ __html: currentSlide.contentHtml }}
+                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(currentSlide.contentHtml) }}
                   className="prose prose-invert max-w-none text-zinc-300 leading-relaxed"
                 />
               </div>

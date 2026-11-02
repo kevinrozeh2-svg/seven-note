@@ -101,6 +101,7 @@ interface CanvasBoardProps {
   onSwitchToDoc?: () => void
   darkMode?: boolean
   hideChrome?: boolean
+  readOnly?: boolean
 }
 
 type ActiveTool =
@@ -230,7 +231,8 @@ function CanvasBoardInner({
   currentWorkspace,
   onSwitchToDoc,
   darkMode,
-  hideChrome
+  hideChrome,
+  readOnly = false
 }: CanvasBoardProps) {
   const reactFlowInstance = useReactFlow()
 
@@ -1980,15 +1982,15 @@ function CanvasBoardInner({
         colorMode={darkMode ? 'dark' : 'light'}
         nodes={nodes}
         edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        onNodeDragStop={onNodeDragStop}
-        onSelectionDragStop={onSelectionDragStop}
-        onNodesDelete={onNodesDelete}
-        onEdgesDelete={onEdgesDelete}
+        onNodesChange={readOnly ? undefined : onNodesChange}
+        onEdgesChange={readOnly ? undefined : onEdgesChange}
+        onNodeDragStop={readOnly ? undefined : onNodeDragStop}
+        onSelectionDragStop={readOnly ? undefined : onSelectionDragStop}
+        onNodesDelete={readOnly ? undefined : onNodesDelete}
+        onEdgesDelete={readOnly ? undefined : onEdgesDelete}
         onNodeClick={onNodeClick}
-        onConnect={onConnect}
-        onConnectEnd={onConnectEnd}
+        onConnect={readOnly ? undefined : onConnect}
+        onConnectEnd={readOnly ? undefined : onConnectEnd}
         connectionLineStyle={{ stroke: connectorColor, strokeWidth: 2 }}
         connectionLineType={
           connectorRouting === 'smoothstep'
@@ -2014,9 +2016,10 @@ function CanvasBoardInner({
         proOptions={{ hideAttribution: true }}
         nodeDragThreshold={8}
         panOnDrag={activeTool === 'pan' ? true : !isDrawingTool}
-        nodesDraggable={activeTool !== 'pan' && activeTool !== 'connector' && !isDrawingTool}
+        nodesDraggable={!readOnly && activeTool !== 'pan' && activeTool !== 'connector' && !isDrawingTool}
+        nodesConnectable={!readOnly}
         selectionOnDrag={activeTool === 'select'}
-        deleteKeyCode={['Backspace', 'Delete']}
+        deleteKeyCode={readOnly ? null : ['Backspace', 'Delete']}
       >
         {/* Background Grid (Dots, Lines or None) */}
         {gridVariant !== 'none' && (
@@ -2095,7 +2098,7 @@ function CanvasBoardInner({
         )}
 
         {/* Card Floating Context Toolbar & Popovers (Matches User Screenshots 1 & 2) */}
-        {singleSelectedNode && singleSelectedNode.type !== 'text' && (
+        {!readOnly && singleSelectedNode && singleSelectedNode.type !== 'text' && (
           <CardEditToolbar
             node={singleSelectedNode}
             onUpdateNode={handleUpdateNodeData}
@@ -2117,15 +2120,17 @@ function CanvasBoardInner({
         )}
 
         {/* Milanote Left Tool Palette (Phosphor Icons Dock) */}
-        <Panel position="top-left" className="ml-3 mt-3 z-30">
-          <MilanoteToolbar
-            onAddNode={addNewNode}
-            onToggleTool={(t: string) => setActiveTool(activeTool === t ? 'select' : (t as any))}
-            activeTool={activeTool}
-            onOpenTemplates={() => setTemplatesOpen(true)}
-            onUploadImage={() => imageFileInputRef.current?.click()}
-          />
-        </Panel>
+        {!readOnly && (
+          <Panel position="top-left" className="ml-3 mt-3 z-30">
+            <MilanoteToolbar
+              onAddNode={addNewNode}
+              onToggleTool={(t: string) => setActiveTool(activeTool === t ? 'select' : (t as any))}
+              activeTool={activeTool}
+              onOpenTemplates={() => setTemplatesOpen(true)}
+              onUploadImage={() => imageFileInputRef.current?.click()}
+            />
+          </Panel>
+        )}
 
         {/* Bottom Left Floating "..." Menu Button */}
         <Panel position="bottom-left" className="ml-4 mb-4 z-20">

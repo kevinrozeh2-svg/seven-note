@@ -14,7 +14,7 @@ import { TableRow } from '@tiptap/extension-table-row'
 import { TableHeader } from '@tiptap/extension-table-header'
 import { TableCell } from '@tiptap/extension-table-cell'
 import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight'
-import { all, createLowlight } from 'lowlight'
+import { common, createLowlight } from 'lowlight'
 import { toast } from 'sonner'
 import confetti from 'canvas-confetti'
 import { Lock, Unlock, Globe, ChevronDown } from 'lucide-react'
@@ -60,7 +60,22 @@ import {
   NotionGalleryIcon
 } from './NotionIcons'
 
-const lowlight = createLowlight(all)
+const lowlight = createLowlight(common)
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+function sanitizeUrl(url: string): string {
+  const trimmed = url.trim()
+  if (/^(https?:|\/|#)/i.test(trimmed)) return trimmed
+  return '#'
+}
 
 interface DocEditorProps {
   workspace: WorkspaceItem
@@ -69,6 +84,7 @@ interface DocEditorProps {
   onTitleChange?: (newTitle: string) => void
   onToggleViewMode?: () => void
   onOpenTemplatesModal?: () => void
+  readOnly?: boolean
 }
 
 export function DocEditor({
@@ -77,7 +93,8 @@ export function DocEditor({
   onSelectWorkspace,
   onTitleChange,
   onToggleViewMode,
-  onOpenTemplatesModal
+  onOpenTemplatesModal,
+  readOnly = false
 }: DocEditorProps) {
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved')
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false)
@@ -145,6 +162,7 @@ export function DocEditor({
   }
 
   const editor = useEditor({
+    editable: !readOnly,
     extensions: [
       StarterKit.configure({
         bulletList: { keepMarks: true, keepAttributes: false },
@@ -357,6 +375,12 @@ export function DocEditor({
     editor
   ])
 
+  useEffect(() => {
+    if (editor) {
+      editor.setEditable(!readOnly)
+    }
+  }, [editor, readOnly])
+
   // Save Notion Database Data
   const handleSaveDatabaseData = async (newData: NotionDatabaseData) => {
     setDatabaseData(newData)
@@ -450,8 +474,11 @@ export function DocEditor({
   )
 
   const handleInsertLinkToNote = (targetNote: WorkspaceItem) => {
-    if (!editor) return
-    const linkHtml = `<p>🔗 <a href="#note=${targetNote.id}" class="text-blue-400 underline font-medium">${targetNote.icon || '📄'} ${targetNote.title || 'Untitled'}</a></p>`
+    if (!editor || readOnly) return
+    const safeTitle = escapeHtml(targetNote.title || 'Untitled')
+    const safeIcon = escapeHtml(targetNote.icon || '📄')
+    const safeId = encodeURIComponent(targetNote.id)
+    const linkHtml = `<p>🔗 <a href="#note=${safeId}" class="text-blue-400 underline font-medium">${safeIcon} ${safeTitle}</a></p>`
     editor.commands.insertContent(linkHtml)
     setShowLinkSelector(false)
   }
@@ -580,7 +607,7 @@ export function DocEditor({
   )
 
   const handleInsertBookmark = () => {
-    if (!editor || !bookmarkUrl) return
+    if (!editor || !bookmarkUrl || readOnly) return
     let hostname = 'enlace-web.com'
     try {
       const parsed = new URL(bookmarkUrl.startsWith('http') ? bookmarkUrl : `https://${bookmarkUrl}`)
@@ -588,9 +615,10 @@ export function DocEditor({
     } catch {
       hostname = bookmarkUrl
     }
-    const finalTitle = bookmarkTitle.trim() || hostname
-    const finalDesc = bookmarkDesc.trim() || `Enlace directo hacia ${hostname}`
-    const finalUrl = bookmarkUrl.startsWith('http') ? bookmarkUrl : `https://${bookmarkUrl}`
+    const finalTitle = escapeHtml(bookmarkTitle.trim() || hostname)
+    const finalDesc = escapeHtml(bookmarkDesc.trim() || `Enlace directo hacia ${hostname}`)
+    const finalUrl = sanitizeUrl(bookmarkUrl.startsWith('http') ? bookmarkUrl : `https://${bookmarkUrl}`)
+    const safeHost = escapeHtml(hostname)
 
     const html = `
       <div class="affine-bookmark-card my-3 p-3.5 rounded-2xl bg-zinc-900/80 border border-zinc-700/60 hover:border-[#1e96eb] transition group flex items-start gap-3.5 shadow-sm select-none" contenteditable="false">
@@ -601,7 +629,7 @@ export function DocEditor({
             <span class="text-xs text-zinc-500">↗</span>
           </a>
           <p class="text-xs text-zinc-400 mt-1 line-clamp-2 leading-relaxed">${finalDesc}</p>
-          <span class="inline-block mt-2 text-[10px] px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-400 font-mono">${hostname}</span>
+          <span class="inline-block mt-2 text-[10px] px-2 py-0.5 rounded-md bg-zinc-800 text-zinc-400 font-mono">${safeHost}</span>
         </div>
       </div><p></p>
     `
@@ -614,18 +642,21 @@ export function DocEditor({
   }
 
   const handleInsertEmbedDoc = (targetNote: WorkspaceItem) => {
-    if (!editor) return
-    const desc = targetNote.informationContent?.slice(0, 70) || 'Documento incrustado de Seven Note'
+    if (!editor || readOnly) return
+    const desc = escapeHtml(targetNote.informationContent?.slice(0, 70) || 'Documento incrustado de Seven Note')
+    const safeTitle = escapeHtml(targetNote.title || 'Untitled')
+    const safeIcon = escapeHtml(targetNote.icon || '📄')
+    const safeId = encodeURIComponent(targetNote.id)
     const html = `
-      <div class="affine-embed-doc my-3 p-3.5 rounded-2xl bg-indigo-950/25 border border-indigo-500/40 hover:border-indigo-500 transition group flex items-center justify-between cursor-pointer shadow-sm select-none" data-note-id="${targetNote.id}" contenteditable="false">
+      <div class="affine-embed-doc my-3 p-3.5 rounded-2xl bg-indigo-950/25 border border-indigo-500/40 hover:border-indigo-500 transition group flex items-center justify-between cursor-pointer shadow-sm select-none" data-note-id="${safeId}" contenteditable="false">
         <div class="flex items-center gap-3 min-w-0">
-          <span class="text-2xl">${targetNote.icon || '📄'}</span>
+          <span class="text-2xl">${safeIcon}</span>
           <div class="min-w-0">
-            <div class="font-semibold text-sm text-zinc-100 group-hover:text-indigo-400 transition truncate">${targetNote.title || 'Untitled'}</div>
+            <div class="font-semibold text-sm text-zinc-100 group-hover:text-indigo-400 transition truncate">${safeTitle}</div>
             <div class="text-[11px] text-zinc-400 truncate">${desc}</div>
           </div>
         </div>
-        <a href="#note=${targetNote.id}" class="text-xs text-indigo-400 font-medium px-2.5 py-1 rounded-lg bg-indigo-500/15 border border-indigo-500/30 group-hover:bg-indigo-500/30 no-underline">Abrir ↗</a>
+        <a href="#note=${safeId}" class="text-xs text-indigo-400 font-medium px-2.5 py-1 rounded-lg bg-indigo-500/15 border border-indigo-500/30 group-hover:bg-indigo-500/30 no-underline">Abrir ↗</a>
       </div><p></p>
     `
     editor.commands.insertContent(html)
@@ -635,8 +666,8 @@ export function DocEditor({
   }
 
   const handleInsertMath = () => {
-    if (!editor) return
-    const formula = mathFormula.trim() || 'E = mc^2'
+    if (!editor || readOnly) return
+    const formula = escapeHtml(mathFormula.trim() || 'E = mc^2')
     const html = `
       <div class="my-4 p-3.5 rounded-2xl bg-zinc-900/90 border border-zinc-700/60 font-mono text-xs text-indigo-300 flex items-center justify-between shadow-sm select-none" contenteditable="false">
         <div class="flex items-center gap-2">
@@ -1406,19 +1437,21 @@ export function DocEditor({
           />
         </div>
 
-        {/* Big Title */}
-        <div className="mb-6">
-          <input
-            type="text"
-            value={workspace.title === 'Untitled' ? '' : workspace.title}
-            onChange={(e) => {
-              const val = e.target.value
-              onTitleChange?.(val || 'Untitled')
-            }}
-            placeholder="Title"
-            className="w-full text-4xl font-bold tracking-tight text-[var(--affine-text-primary-color)] placeholder:text-[var(--affine-placeholder-color)] bg-transparent border-none outline-none focus:outline-none"
-          />
-        </div>
+          {/* Big Title */}
+          <div className="mb-6">
+            <input
+              type="text"
+              value={workspace.title === 'Untitled' ? '' : workspace.title}
+              onChange={(e) => {
+                if (readOnly) return
+                const val = e.target.value
+                onTitleChange?.(val || 'Untitled')
+              }}
+              readOnly={readOnly}
+              placeholder="Title"
+              className={`w-full text-4xl font-bold tracking-tight text-[var(--affine-text-primary-color)] placeholder:text-[var(--affine-placeholder-color)] bg-transparent border-none outline-none focus:outline-none ${readOnly ? 'cursor-default' : ''}`}
+            />
+          </div>
 
         {/* Collapsible: "Información" */}
         <div className="mb-8">

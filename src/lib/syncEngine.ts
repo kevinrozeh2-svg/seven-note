@@ -289,6 +289,7 @@ class SyncEngine {
       if (pendingNodes.length > 0) {
         const payload = pendingNodes.map((n: CanvasNodeItem) => ({
           id: n.id,
+          user_id: authUserId,
           workspace_id: n.workspaceId,
           type: n.type,
           position_x: n.positionX,
@@ -316,6 +317,7 @@ class SyncEngine {
       if (pendingEdges.length > 0) {
         const payload = pendingEdges.map((e: CanvasEdgeItem) => ({
           id: e.id,
+          user_id: authUserId,
           workspace_id: e.workspaceId,
           source: e.source,
           target: e.target,
@@ -346,6 +348,7 @@ class SyncEngine {
       if (pendingCollections.length > 0) {
         const payload = pendingCollections.map((c: CollectionItem) => ({
           id: c.id,
+          user_id: authUserId,
           space_id: c.spaceId,
           name: c.name,
           icon: c.icon,
@@ -369,6 +372,7 @@ class SyncEngine {
       if (pendingTags.length > 0) {
         const payload = pendingTags.map((t: TagItem) => ({
           id: t.id,
+          user_id: authUserId,
           space_id: t.spaceId,
           name: t.name,
           color: t.color,
@@ -556,16 +560,15 @@ class SyncEngine {
         }
       }
 
-      // Pull Tags
+      // Pull Tags (incluyendo actualizaciones y eliminaciones)
       const { data: remoteTags } = await supabase
         .from('seven_tags')
         .select('*')
-        .gt('created_at', lastSync)
 
       if (remoteTags && remoteTags.length > 0) {
         for (const rt of remoteTags) {
           const local = await db.tags.get(rt.id)
-          if (!local) {
+          if (!local || local.syncStatus !== 'pending') {
             await db.tags.put({
               id: rt.id,
               spaceId: rt.space_id,

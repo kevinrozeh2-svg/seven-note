@@ -49,7 +49,7 @@ import { type SyncEngineStatus } from '../../lib/syncEngine'
 import { TeamMemberSwitcher } from './TeamMemberSwitcher'
 import { AppleEmoji, isEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
 import { EmojiPickerPopover } from '../modals/EmojiPickerPopover'
-import { getCurrentMember, type TeamMember } from '../../lib/teamAuth'
+import { getCurrentMember, type TeamMember, isWorkspaceVisible } from '../../lib/teamAuth'
 
 export interface SidebarProps {
   spaces?: SpaceItem[]
@@ -376,7 +376,7 @@ export function Sidebar({
     (w) =>
       !w.isDeleted &&
       (w.spaceId || DEFAULT_SPACE_ID) === currentSpace.id &&
-      (!w.isPrivate || w.ownerMember === activeMember.id)
+      isWorkspaceVisible(w, activeMember)
   )
   const privateDocs = activeWorkspaces.filter((w) => w.isPrivate)
   const teamDocs = activeWorkspaces.filter((w) => !w.isPrivate)

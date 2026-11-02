@@ -274,12 +274,14 @@ export const ExternalShareView: React.FC<ExternalShareViewProps> = ({ workspaceI
             workspace={workspace}
             allWorkspaces={[workspace]}
             onTitleChange={isReadOnly ? undefined : handleTitleChange}
+            readOnly={isReadOnly}
           />
         ) : (
           <CanvasBoard
             workspaceId={workspace.id}
             currentWorkspace={workspace}
             darkMode={false}
+            readOnly={isReadOnly}
           />
         )}
       </main>

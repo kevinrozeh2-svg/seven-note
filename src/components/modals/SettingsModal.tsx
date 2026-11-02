@@ -20,6 +20,8 @@ import { syncEngine, type SyncEngineStatus } from '../../lib/syncEngine'
 import { db } from '../../db'
 import { optimizeExistingLocalImages, formatBytes } from '../../lib/imageOptimizer'
 import { ImageIcon } from '@blocksuite/icons/rc'
+import schemaSql from '../../supabase_schema.sql?raw'
+import { toast } from 'sonner'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -40,6 +42,36 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
   const [manualSyncing, setManualSyncing] = useState(false)
   const [isOptimizing, setIsOptimizing] = useState(false)
   const [optimizeResult, setOptimizeResult] = useState<string | null>(null)
+  const [installPrompt, setInstallPrompt] = useState<any>(null)
+  const [isStandalone, setIsStandalone] = useState(false)
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const isApp = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone
+      setIsStandalone(Boolean(isApp))
+
+      const handleBeforeInstall = (e: Event) => {
+        e.preventDefault()
+        setInstallPrompt(e)
+      }
+      window.addEventListener('beforeinstallprompt', handleBeforeInstall)
+      return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall)
+    }
+  }, [])
+
+  const handleInstallApp = async () => {
+    if (installPrompt) {
+      installPrompt.prompt()
+      const { outcome } = await installPrompt.userChoice
+      if (outcome === 'accepted') {
+        setInstallPrompt(null)
+        setIsStandalone(true)
+        toast.success('¡Seven Note instalada con éxito!')
+      }
+    } else {
+      toast.info('Para instalar, pulsa el botón de instalación (📥) en la barra de tu navegador o "Añadir a pantalla de inicio" en móviles.')
+    }
+  }
 
   useEffect(() => {
     if (isOpen) {
@@ -97,158 +129,7 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
   }
 
   const copySqlSchema = async () => {
-    const sqlText = `-- ========================================================
--- SEVEN NOTE: ESQUEMA COMPLETO Y ACTUALIZADO PARA SUPABASE
--- ========================================================
-create extension if not exists "uuid-ossp";
-
-create table if not exists public.seven_spaces (
-  id text primary key,
-  user_id uuid references auth.users(id) on delete cascade default auth.uid(),
-  name text not null default 'Workspace',
-  icon text default '💼',
-  color text default '#1e96eb',
-  created_at bigint not null,
-  updated_at bigint not null,
-  is_deleted boolean not null default false
-);
-
-create table if not exists public.seven_workspaces (
-  id text primary key,
-  user_id uuid references auth.users(id) on delete cascade default auth.uid(),
-  parent_id text,
-  space_id text default 'default-workspace',
-  folder text,
-  title text not null default 'Sin título',
-  icon text default '📄',
-  color text default '#6366f1',
-  view_mode text not null default 'doc',
-  doc_content text not null default '',
-  created_at bigint not null,
-  updated_at bigint not null,
-  is_favorite boolean not null default false,
-  is_deleted boolean not null default false,
-  metadata jsonb not null default '{}'::jsonb,
-  is_private boolean not null default false,
-  owner_member text default 'kevin',
-  is_public_shared boolean not null default false,
-  share_token text,
-  share_permission text default 'view'
-);
-
-alter table public.seven_workspaces add column if not exists is_private boolean not null default false;
-alter table public.seven_workspaces add column if not exists owner_member text default 'kevin';
-alter table public.seven_workspaces add column if not exists is_public_shared boolean not null default false;
-alter table public.seven_workspaces add column if not exists share_token text;
-alter table public.seven_workspaces add column if not exists share_permission text default 'view';
-
-create table if not exists public.seven_canvas_nodes (
-  id text primary key,
-  workspace_id text not null,
-  user_id uuid references auth.users(id) on delete cascade default auth.uid(),
-  type text not null default 'note',
-  position_x double precision not null default 0,
-  position_y double precision not null default 0,
-  width double precision,
-  height double precision,
-  data jsonb not null default '{}'::jsonb,
-  created_at bigint not null,
-  updated_at bigint not null,
-  is_deleted boolean not null default false
-);
-
-create table if not exists public.seven_canvas_edges (
-  id text primary key,
-  workspace_id text not null,
-  user_id uuid references auth.users(id) on delete cascade default auth.uid(),
-  source text not null,
-  target text not null,
-  source_handle text,
-  target_handle text,
-  label text,
-  animated boolean default false,
-  color text default '#6366f1',
-  edge_type text default 'default',
-  marker_end_type text default 'arrow',
-  created_at bigint not null,
-  updated_at bigint not null,
-  is_deleted boolean not null default false
-);
-
-create table if not exists public.seven_collections (
-  id text primary key,
-  space_id text not null,
-  user_id uuid references auth.users(id) on delete cascade default auth.uid(),
-  name text not null,
-  icon text default '📁',
-  color text default '#1e96eb',
-  doc_ids jsonb not null default '[]'::jsonb,
-  created_at bigint not null,
-  updated_at bigint not null,
-  is_deleted boolean not null default false
-);
-
-create table if not exists public.seven_tags (
-  id text primary key,
-  space_id text not null,
-  user_id uuid references auth.users(id) on delete cascade default auth.uid(),
-  name text not null,
-  color text not null default '#1e96eb',
-  created_at bigint not null,
-  is_deleted boolean not null default false
-);
-
-alter table public.seven_spaces enable row level security;
-alter table public.seven_workspaces enable row level security;
-alter table public.seven_canvas_nodes enable row level security;
-alter table public.seven_canvas_edges enable row level security;
-alter table public.seven_collections enable row level security;
-alter table public.seven_tags enable row level security;
-
--- Espacios compartidos para el equipo
-drop policy if exists "Acceso total a seven_spaces" on public.seven_spaces;
-create policy "Acceso total a seven_spaces" on public.seven_spaces for all using (true) with check (true);
-
--- Workspaces: privados solo para su autor, y públicos accesibles para todo el equipo
-drop policy if exists "Lectura de workspaces" on public.seven_workspaces;
-drop policy if exists "Acceso total a seven_workspaces" on public.seven_workspaces;
-create policy "Lectura de workspaces" on public.seven_workspaces for select using (
-  is_private = false
-  or is_public_shared = true
-  or auth.uid() = user_id
-  or (auth.jwt() ->> 'email') ilike (owner_member || '%')
-);
-
-drop policy if exists "Modificacion de workspaces" on public.seven_workspaces;
-create policy "Modificacion de workspaces" on public.seven_workspaces for all using (
-  is_private = false
-  or auth.uid() = user_id
-  or (auth.jwt() ->> 'email') ilike (owner_member || '%')
-  or (is_public_shared = true and share_permission = 'edit')
-) with check (
-  is_private = false
-  or auth.uid() = user_id
-  or (auth.jwt() ->> 'email') ilike (owner_member || '%')
-  or (is_public_shared = true and share_permission = 'edit')
-);
-
-create policy "Acceso total a seven_canvas_nodes" on public.seven_canvas_nodes for all using (true) with check (true);
-create policy "Acceso total a seven_canvas_edges" on public.seven_canvas_edges for all using (true) with check (true);
-create policy "Acceso total a seven_collections" on public.seven_collections for all using (true) with check (true);
-create policy "Acceso total a seven_tags" on public.seven_tags for all using (true) with check (true);
-
--- Bucket de almacenamiento para fotos y audios optimizados
-insert into storage.buckets (id, name, public)
-values ('attachments', 'attachments', true)
-on conflict (id) do nothing;
-
-drop policy if exists "Permitir subida y lectura pública en attachments" on storage.objects;
-create policy "Permitir subida y lectura pública en attachments"
-  on storage.objects for all
-  using (bucket_id = 'attachments')
-  with check (bucket_id = 'attachments');
-`
-    await navigator.clipboard.writeText(sqlText)
+    await navigator.clipboard.writeText(schemaSql)
     setCopiedSql(true)
     setTimeout(() => setCopiedSql(false), 2000)
   }
@@ -625,6 +506,34 @@ create policy "Permitir subida y lectura pública en attachments"
                 />
               </label>
             </div>
+          </div>
+
+          {/* PWA / Desktop App Install */}
+          <div className="p-4 rounded-3xl border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.02] flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full flex items-center justify-center bg-indigo-500/10 text-indigo-500 font-bold text-sm">
+                7
+              </div>
+              <div>
+                <div className="text-xs font-bold text-[var(--app-text-primary)]">
+                  Aplicación de Escritorio / PWA
+                </div>
+                <div className="text-[11px] text-neutral-400">
+                  {isStandalone
+                    ? 'Seven Note se está ejecutando en modo standalone (instalada).'
+                    : 'Instala Seven Note en Windows, Mac, iPad o Android para acceso directo y 100% offline.'}
+                </div>
+              </div>
+            </div>
+
+            {!isStandalone && (
+              <button
+                onClick={handleInstallApp}
+                className="px-4 py-1.5 rounded-full text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition shadow-xs cursor-pointer active:scale-95 shrink-0"
+              >
+                Instalar App
+              </button>
+            )}
           </div>
         </div>
 
