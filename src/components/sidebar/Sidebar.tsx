@@ -7,6 +7,7 @@ import {
   Star,
   Trash,
   Folder,
+  FolderSimplePlus,
   Gear,
   Sun,
   Moon,
@@ -244,7 +245,9 @@ export function Sidebar({
   const [favoritesOpen, setFavoritesOpen] = useState(true)
   const [privateNotesOpen, setPrivateNotesOpen] = useState(true)
   const [pagesOpen, setPagesOpen] = useState(true)
-  const [firstFolderOpen, setFirstFolderOpen] = useState(true)
+  const [folderOpenMap, setFolderOpenMap] = useState<Record<string, boolean>>({ 'First Folder': true })
+  const [isCreatingFolder, setIsCreatingFolder] = useState(false)
+  const [newFolderName, setNewFolderName] = useState('')
   const [collectionsOpen, setCollectionsOpen] = useState(false)
   const [tagsOpen, setTagsOpen] = useState(false)
   const [toolsOpen, setToolsOpen] = useState(false)
@@ -299,7 +302,7 @@ export function Sidebar({
         title: isPrivate
           ? (viewMode === 'canvas' ? 'Tablero privado sin título' : 'Nota privada sin título')
           : (viewMode === 'canvas' ? 'Tablero sin título' : 'Nota sin título'),
-        icon: isPrivate ? '🔒' : (viewMode === 'canvas' ? '🎨' : '📝'),
+        icon: '',
         color: isPrivate ? activeMember.color : '#1e96eb',
         viewMode,
         docContent: '<p></p>',
@@ -399,12 +402,86 @@ export function Sidebar({
     ])
   ).filter(Boolean)
 
-  const firstFolderDocs = teamDocs.filter(
-    (w) => w.folder === 'First Folder' || w.parentId === 'folder-first'
+  const allFolders = Array.from(
+    new Set(
+      teamDocs
+        .map((w) => w.folder?.trim())
+        .filter((f): f is string => Boolean(f))
+    )
   )
+
   const rootPages = teamDocs.filter(
-    (w) => !w.parentId && w.folder !== 'First Folder'
+    (w) => !w.parentId && (!w.folder || !w.folder.trim())
   )
+
+  const toggleFolder = (folderName: string) => {
+    setFolderOpenMap((prev) => ({
+      ...prev,
+      [folderName]: prev[folderName] === undefined ? false : !prev[folderName]
+    }))
+  }
+
+  const handleCreateFolder = async (name: string) => {
+    const trimmed = name.trim()
+    if (!trimmed) {
+      setIsCreatingFolder(false)
+      setNewFolderName('')
+      return
+    }
+
+    setFolderOpenMap((prev) => ({ ...prev, [trimmed]: true }))
+    setIsCreatingFolder(false)
+    setNewFolderName('')
+
+    await handleCreateWorkspace(null, trimmed, 'doc', false)
+    toast.success(`Carpeta "${trimmed}" creada`)
+  }
+
+  const handleRenameFolder = async (oldName: string, newName: string) => {
+    const trimmed = newName.trim()
+    if (!trimmed || trimmed === oldName) return
+
+    const docsToUpdate = teamDocs.filter((w) => w.folder === oldName)
+    try {
+      await Promise.all(
+        docsToUpdate.map((w) =>
+          db.workspaces.update(w.id, {
+            folder: trimmed,
+            updatedAt: Date.now(),
+            syncStatus: 'pending'
+          })
+        )
+      )
+      setFolderOpenMap((prev) => {
+        const next = { ...prev }
+        next[trimmed] = next[oldName] ?? true
+        delete next[oldName]
+        return next
+      })
+      toast.success(`Carpeta renombrada a "${trimmed}"`)
+    } catch (err) {
+      console.error('Error renaming folder', err)
+    }
+  }
+
+  const handleDeleteFolder = async (folderName: string) => {
+    if (!confirm(`¿Eliminar la carpeta "${folderName}" y mover sus notas a la raíz?`)) return
+    const docsToUpdate = teamDocs.filter((w) => w.folder === folderName)
+    try {
+      await Promise.all(
+        docsToUpdate.map((w) =>
+          db.workspaces.update(w.id, {
+            folder: null,
+            updatedAt: Date.now(),
+            syncStatus: 'pending'
+          })
+        )
+      )
+      toast.success(`Carpeta "${folderName}" eliminada`)
+    } catch (err) {
+      console.error('Error deleting folder', err)
+    }
+  }
 
   return (
     <aside className="w-72 sm:w-64 h-full flex flex-col bg-[#fbfbfa] dark:bg-[#161619] border-r border-black/[0.05] dark:border-white/[0.06] text-neutral-800 dark:text-neutral-200 select-none shrink-0 text-xs transition-colors duration-200 font-sans shadow-2xl md:shadow-none">
@@ -905,101 +982,182 @@ export function Sidebar({
               )}
               <span>Documentos (Equipo)</span>
             </div>
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                handleCreateWorkspace(null, null, 'doc', false)
-              }}
-              className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 transition"
-              title="Añadir nueva página de equipo"
-            >
-              <Plus size={13} />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setIsCreatingFolder(true)
+                  setPagesOpen(true)
+                }}
+                className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 transition"
+                title="Nueva Carpeta"
+              >
+                <FolderSimplePlus size={14} weight="duotone" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleCreateWorkspace(null, null, 'doc', false)
+                }}
+                className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 transition"
+                title="Añadir nueva página de equipo"
+              >
+                <Plus size={13} />
+              </button>
+            </div>
           </div>
 
           {pagesOpen && (
             <div className="mt-1 space-y-0.5">
-              {/* First Folder sub-group */}
-              <div className="mb-1">
-                <div
-                  onClick={() => setFirstFolderOpen(!firstFolderOpen)}
-                  className="group flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-pointer hover:bg-black/[0.03] dark:hover:bg-white/[0.05] text-neutral-600 dark:text-neutral-400 font-medium transition"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <Folder size={15} weight="duotone" className="text-neutral-700 dark:text-neutral-300 shrink-0" />
-                    <span className="truncate text-xs font-semibold">First Folder</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-[10px] text-neutral-400 font-mono">
-                      {firstFolderDocs.length}
-                    </span>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleCreateWorkspace('folder-first', 'First Folder', 'doc')
+              {/* Inline input for creating a new folder */}
+              {isCreatingFolder && (
+                <div className="px-2 py-1 mb-1">
+                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-white dark:bg-[#202024] border border-blue-500/40 shadow-xs">
+                    <Folder size={14} weight="duotone" className="text-blue-500 shrink-0" />
+                    <input
+                      type="text"
+                      value={newFolderName}
+                      onChange={(e) => setNewFolderName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleCreateFolder(newFolderName)
+                        } else if (e.key === 'Escape') {
+                          setIsCreatingFolder(false)
+                          setNewFolderName('')
+                        }
                       }}
-                      className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
-                      title="Crear página dentro de First Folder"
-                    >
-                      <Plus size={12} />
-                    </button>
+                      onBlur={() => {
+                        if (newFolderName.trim()) {
+                          handleCreateFolder(newFolderName)
+                        } else {
+                          setIsCreatingFolder(false)
+                          setNewFolderName('')
+                        }
+                      }}
+                      placeholder="Nombre de la carpeta..."
+                      autoFocus
+                      className="w-full bg-transparent text-xs text-neutral-900 dark:text-neutral-100 outline-none placeholder:text-neutral-400"
+                    />
                   </div>
                 </div>
+              )}
 
-                {firstFolderOpen && firstFolderDocs.length > 0 && (
-                  <div className="pl-4 space-y-0.5 border-l border-black/[0.04] dark:border-white/[0.06] ml-3.5 my-0.5">
-                    {firstFolderDocs.map((doc) => {
-                      const isActive = doc.id === currentWorkspaceId
-                      return (
-                        <div
-                          key={doc.id}
-                          onClick={() => onSelectWorkspace(doc.id)}
-                          className={`group flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-pointer transition ${
-                            isActive
-                              ? 'bg-white dark:bg-[#202024] text-neutral-900 dark:text-neutral-100 font-semibold shadow-xs border border-black/[0.04] dark:border-white/[0.06]'
-                              : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-black/[0.03] dark:hover:bg-white/[0.05] font-medium'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 min-w-0 flex-1">
-                            <DocumentItemIcon
-                              icon={doc.icon}
-                              viewMode={doc.viewMode}
-                              title={doc.title}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setEmojiPickerTarget({ id: doc.id, type: 'doc', currentIcon: doc.icon })
-                              }}
-                            />
-                            <span className="truncate flex-1 text-xs">{renderWithAppleEmoji(doc.title || 'Untitled')}</span>
-                            {(doc.ownerName || doc.createdBy) && (
-                              <span
-                                className="text-[9px] text-neutral-400 dark:text-neutral-500 shrink-0 font-normal truncate max-w-[65px] px-1 py-0.5 rounded bg-black/[0.03] dark:bg-white/[0.04]"
-                                title={`Creado por ${doc.ownerName || doc.createdBy}`}
-                              >
-                                {doc.ownerName || doc.createdBy}
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={(e) => handleToggleFavorite(e, doc)}
-                              className="p-1 rounded text-neutral-400 hover:text-amber-500"
-                            >
-                              <Star size={13} weight={doc.isFavorite ? 'fill' : 'duotone'} className={doc.isFavorite ? 'text-amber-500' : 'text-neutral-400'} />
-                            </button>
-                            <button
-                              onClick={(e) => handleDeleteWorkspace(e, doc.id)}
-                              className="p-1 rounded text-neutral-400 hover:text-rose-500"
-                            >
-                              <Trash size={13} weight="duotone" />
-                            </button>
-                          </div>
+              {/* Dynamic folders list */}
+              {allFolders.map((folderName) => {
+                const folderDocs = teamDocs.filter((w) => w.folder === folderName)
+                const isFolderOpen = folderOpenMap[folderName] !== false
+
+                return (
+                  <div key={`folder-${folderName}`} className="mb-1">
+                    <div
+                      onClick={() => toggleFolder(folderName)}
+                      className="group flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-pointer hover:bg-black/[0.03] dark:hover:bg-white/[0.05] text-neutral-600 dark:text-neutral-400 font-medium transition"
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        {isFolderOpen ? (
+                          <CaretDown size={11} className="text-neutral-400 shrink-0" />
+                        ) : (
+                          <CaretRight size={11} className="text-neutral-400 shrink-0" />
+                        )}
+                        <Folder size={15} weight="duotone" className="text-neutral-700 dark:text-neutral-300 shrink-0" />
+                        <span className="truncate text-xs font-semibold">{folderName}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] text-neutral-400 font-mono">
+                          {folderDocs.length}
+                        </span>
+                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleCreateWorkspace(null, folderName, 'doc', false)
+                            }}
+                            className="p-1 rounded text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
+                            title={`Crear nota en ${folderName}`}
+                          >
+                            <Plus size={12} />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              const newName = prompt(`Renombrar carpeta "${folderName}":`, folderName)
+                              if (newName) handleRenameFolder(folderName, newName)
+                            }}
+                            className="p-1 rounded text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
+                            title="Renombrar carpeta"
+                          >
+                            <PencilSimple size={12} weight="duotone" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteFolder(folderName)
+                            }}
+                            className="p-1 rounded text-neutral-400 hover:text-rose-500"
+                            title="Eliminar carpeta"
+                          >
+                            <Trash size={12} weight="duotone" />
+                          </button>
                         </div>
-                      )
-                    })}
+                      </div>
+                    </div>
+
+                    {isFolderOpen && folderDocs.length > 0 && (
+                      <div className="pl-4 space-y-0.5 border-l border-black/[0.04] dark:border-white/[0.06] ml-3.5 my-0.5">
+                        {folderDocs.map((doc) => {
+                          const isActive = doc.id === currentWorkspaceId
+                          return (
+                            <div
+                              key={doc.id}
+                              onClick={() => onSelectWorkspace(doc.id)}
+                              className={`group flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-pointer transition ${
+                                isActive
+                                  ? 'bg-white dark:bg-[#202024] text-neutral-900 dark:text-neutral-100 font-semibold shadow-xs border border-black/[0.04] dark:border-white/[0.06]'
+                                  : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-black/[0.03] dark:hover:bg-white/[0.05] font-medium'
+                              }`}
+                            >
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <DocumentItemIcon
+                                  icon={doc.icon}
+                                  viewMode={doc.viewMode}
+                                  title={doc.title}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setEmojiPickerTarget({ id: doc.id, type: 'doc', currentIcon: doc.icon })
+                                  }}
+                                />
+                                <span className="truncate flex-1 text-xs">{renderWithAppleEmoji(doc.title || 'Untitled')}</span>
+                                {(doc.ownerName || doc.createdBy) && (
+                                  <span
+                                    className="text-[9px] text-neutral-400 dark:text-neutral-500 shrink-0 font-normal truncate max-w-[65px] px-1 py-0.5 rounded bg-black/[0.03] dark:bg-white/[0.04]"
+                                    title={`Creado por ${doc.ownerName || doc.createdBy}`}
+                                  >
+                                    {doc.ownerName || doc.createdBy}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={(e) => handleToggleFavorite(e, doc)}
+                                  className="p-1 rounded text-neutral-400 hover:text-amber-500"
+                                >
+                                  <Star size={13} weight={doc.isFavorite ? 'fill' : 'duotone'} className={doc.isFavorite ? 'text-amber-500' : 'text-neutral-400'} />
+                                </button>
+                                <button
+                                  onClick={(e) => handleDeleteWorkspace(e, doc.id)}
+                                  className="p-1 rounded text-neutral-400 hover:text-rose-500"
+                                >
+                                  <Trash size={13} weight="duotone" />
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                )
+              })}
 
               {/* Root pages */}
               {rootPages.map((page) => {

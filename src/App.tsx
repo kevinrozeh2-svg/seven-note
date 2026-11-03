@@ -302,7 +302,7 @@ function MainApp() {
           }
           const currentTitle = t.title || ''
           const realTitle = ws.title || 'Documento sin título'
-          const realIcon = ws.icon || (ws.viewMode === 'canvas' ? '🎨' : '📄')
+          const realIcon = ws.icon || ''
           if (currentTitle !== realTitle || t.icon !== realIcon || t.spaceId !== ws.spaceId) {
             changed = true
             sanitized.push({
@@ -348,7 +348,7 @@ function MainApp() {
         workspaceId: wsId,
         viewType: 'doc',
         title: ws?.title || 'Documento sin título',
-        icon: ws?.icon || (ws?.viewMode === 'canvas' ? '🎨' : '📄'),
+        icon: ws?.icon || '',
         spaceId: ws?.spaceId || currentSpaceId,
         pinned: false
       }
@@ -435,7 +435,7 @@ function MainApp() {
       parentId: null,
       spaceId: currentSpaceId,
       title: 'Untitled',
-      icon: '📄',
+      icon: '',
       color: '#1e96eb',
       viewMode: 'doc',
       docContent: '<p></p>',
@@ -715,7 +715,7 @@ function MainApp() {
         parentId: null,
         spaceId: spaceId,
         title: isSpPrivate ? 'Página inicial privada' : 'Página inicial',
-        icon: isSpPrivate ? '🔒' : (sp?.icon || '📄'),
+        icon: '',
         color: sp?.color || '#1e96eb',
         viewMode: 'doc',
         docContent: isSpPrivate

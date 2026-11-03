@@ -730,7 +730,7 @@ export async function createSpace(
     parentId: null,
     spaceId: spaceId,
     title: isPrivate ? 'Página inicial privada' : 'Página inicial',
-    icon: isPrivate ? '🔒' : (icon || '📄'),
+    icon: '',
     color: color || '#1e96eb',
     viewMode: 'doc',
     docContent: isPrivate
