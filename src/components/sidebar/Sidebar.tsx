@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
-import { useLiveQuery } from 'dexie-react-hooks'
 import {
   MagnifyingGlass,
   Plus,
@@ -78,7 +77,7 @@ export interface SidebarProps {
   onOpenImport: () => void
   onOpenTemplates: () => void
   onOpenShortcuts: () => void
-  onOpenTags?: (tag?: string) => void
+
   onOpenKnowledgeGraph?: () => void
   syncStatus: SyncEngineStatus
   darkMode: boolean
@@ -230,7 +229,6 @@ export function Sidebar({
   onOpenImport,
   onOpenTemplates,
   onOpenShortcuts,
-  onOpenTags,
   onOpenKnowledgeGraph,
   syncStatus,
   darkMode,
@@ -245,7 +243,6 @@ export function Sidebar({
   const [folderOpenMap, setFolderOpenMap] = useState<Record<string, boolean>>({ 'First Folder': true })
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
-  const [tagsOpen, setTagsOpen] = useState(false)
   const [toolsOpen, setToolsOpen] = useState(false)
 
   const activeMember = currentMember || getCurrentMember()
@@ -301,11 +298,6 @@ export function Sidebar({
     }
   }, [currentSpace.id])
 
-  // Live queries for tags in current space
-  const dbTags = useLiveQuery(
-    () => db.tags.where('spaceId').equals(currentSpace.id).toArray(),
-    [currentSpace.id]
-  ) ?? []
 
   // Create new page inside current workspace (can be private for activeMember or team document)
   const handleCreateWorkspace = async (
@@ -428,12 +420,6 @@ export function Sidebar({
   const teamDocs = activeWorkspaces.filter((w) => !w.isPrivate)
   const favorites = activeWorkspaces.filter((w) => w.isFavorite)
 
-  const allTags = Array.from(
-    new Set([
-      ...dbTags.map((t) => t.name),
-      ...activeWorkspaces.flatMap((w) => w.tags || [])
-    ])
-  ).filter(Boolean)
 
   const allFolders = Array.from(
     new Set(
@@ -1774,46 +1760,6 @@ export function Sidebar({
           )}
         </div>
 
-        {/* TAGS */}
-        <div>
-          <div
-            onClick={() => setTagsOpen(!tagsOpen)}
-            className="flex items-center justify-between px-2.5 py-1 text-[11px] font-semibold tracking-wider uppercase text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 cursor-pointer transition group"
-          >
-            <div className="flex items-center gap-1.5">
-              {tagsOpen ? (
-                <CaretDown size={13} className="text-neutral-400 transition-transform" />
-              ) : (
-                <CaretRight size={13} className="text-neutral-400 transition-transform" />
-              )}
-              <span>Etiquetas</span>
-            </div>
-            {allTags.length > 0 && (
-              <span className="text-[10px] font-mono text-neutral-400">
-                {allTags.length}
-              </span>
-            )}
-          </div>
-
-          {tagsOpen && (
-            <div className="mt-1 flex flex-wrap gap-1 px-2 py-1">
-              {allTags.length === 0 ? (
-                <span className="text-[11px] text-neutral-400 italic">Sin etiquetas</span>
-              ) : (
-                allTags.map((tag) => (
-                  <button
-                    key={tag}
-                    onClick={() => onOpenTags && onOpenTags(tag)}
-                    className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.06] hover:bg-black/[0.08] dark:hover:bg-white/[0.1] text-[11px] font-medium text-neutral-700 dark:text-neutral-300 transition cursor-pointer"
-                  >
-                    <Tag size={12} weight="duotone" className="text-neutral-500 shrink-0" />
-                    <span>{tag}</span>
-                  </button>
-                ))
-              )}
-            </div>
-          )}
-        </div>
 
         {/* TOOLS & MORE */}
         <div>

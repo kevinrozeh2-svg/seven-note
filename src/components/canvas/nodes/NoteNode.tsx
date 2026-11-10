@@ -6,7 +6,15 @@ import { syncEngine } from '../../../lib/syncEngine'
 import { areNodePropsEqual, NodeHandles, SourceNodeBadge, getCardCustomStyle, isColorDark, CardSelectionOverlay } from './nodeUtils'
 import { AppleEmoji, renderWithAppleEmoji, isSingleEmoji } from '../../ui/AppleEmoji'
 import { FontPickerPopover } from './FontPickerPopover'
-import { hasHtmlFormatting, cleanPastedHtml, sanitizeHtmlContent } from '../../../lib/pasteUtils'
+import {
+  hasHtmlFormatting,
+  cleanPastedHtml,
+  sanitizeHtmlContent,
+  isPdfHtml,
+  isPdfOrStructuredText,
+  cleanPdfHtml,
+  formatPdfOrStructuredText
+} from '../../../lib/pasteUtils'
 
 interface ColorScheme {
   cardBorder: string
@@ -176,13 +184,21 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
       const html = e.clipboardData?.getData('text/html')
       const text = e.clipboardData?.getData('text/plain')
 
-      if (html && hasHtmlFormatting(html)) {
+      let clean = ''
+      const isPdf = Boolean((html && isPdfHtml(html)) || (text && isPdfOrStructuredText(text)))
+
+      if (isPdf) {
+        clean = html ? cleanPdfHtml(html, text || '') : (text ? formatPdfOrStructuredText(text) : '')
+      } else if (html && hasHtmlFormatting(html)) {
+        clean = cleanPastedHtml(html)
+      }
+
+      if (clean && clean.trim()) {
         e.preventDefault()
-        const clean = cleanPastedHtml(html)
         const updated = content && content.trim() ? `${content}<br/>${clean}` : clean
         setContent(updated)
         save({ content: updated, hasHtmlHighlight: true })
-        toast.success('Formato de texto conservado en la nota')
+        toast.success(isPdf ? 'Texto de PDF pegado con formato' : 'Formato de texto conservado en la nota')
       } else if (text && text.trim()) {
         e.preventDefault()
         const updated = content && content.trim() ? `${content}\n${text}` : text
@@ -200,8 +216,16 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
     const html = e.clipboardData.getData('text/html')
     const text = e.clipboardData.getData('text/plain')
 
-    if (html && hasHtmlFormatting(html)) {
-      const clean = cleanPastedHtml(html)
+    let clean = ''
+    const isPdf = Boolean((html && isPdfHtml(html)) || (text && isPdfOrStructuredText(text)))
+
+    if (isPdf) {
+      clean = html ? cleanPdfHtml(html, text || '') : (text ? formatPdfOrStructuredText(text) : '')
+    } else if (html && hasHtmlFormatting(html)) {
+      clean = cleanPastedHtml(html)
+    }
+
+    if (clean && clean.trim()) {
       document.execCommand('insertHTML', false, clean)
     } else if (text) {
       document.execCommand('insertText', false, text)
@@ -212,7 +236,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
       setContent(htmlVal)
       save({
         content: htmlVal,
-        hasHtmlHighlight: hasHtmlFormatting(htmlVal)
+        hasHtmlHighlight: hasHtmlFormatting(htmlVal) || Boolean(isPdf)
       })
     }
   }

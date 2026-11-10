@@ -45,7 +45,14 @@ import {
   X,
   Kanban
 } from '@phosphor-icons/react'
-import { hasHtmlFormatting, cleanPastedHtml } from '../../lib/pasteUtils'
+import {
+  hasHtmlFormatting,
+  cleanPastedHtml,
+  isPdfHtml,
+  isPdfOrStructuredText,
+  cleanPdfHtml,
+  formatPdfOrStructuredText
+} from '../../lib/pasteUtils'
 import {
   SelectIcon,
   HandIcon,
@@ -1488,15 +1495,21 @@ function CanvasBoardInner({
       const html = e.clipboardData?.getData('text/html')
       const text = e.clipboardData?.getData('text/plain')
 
-      if (html && hasHtmlFormatting(html)) {
-        const clean = cleanPastedHtml(html)
-        if (clean.trim()) {
-          await addNewNode('note', {
-            content: clean,
-            hasHtmlHighlight: true
-          })
-          toast.success('Nota creada con el formato copiado')
-        }
+      let clean = ''
+      const isPdf = Boolean((html && isPdfHtml(html)) || (text && isPdfOrStructuredText(text)))
+
+      if (isPdf) {
+        clean = html ? cleanPdfHtml(html, text || '') : (text ? formatPdfOrStructuredText(text) : '')
+      } else if (html && hasHtmlFormatting(html)) {
+        clean = cleanPastedHtml(html)
+      }
+
+      if (clean && clean.trim()) {
+        await addNewNode('note', {
+          content: clean,
+          hasHtmlHighlight: true
+        })
+        toast.success(isPdf ? 'Nota creada desde PDF con formato' : 'Nota creada con el formato copiado')
       } else if (text && text.trim()) {
         await addNewNode('note', {
           content: text

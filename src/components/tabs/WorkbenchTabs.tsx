@@ -25,7 +25,7 @@ export interface WorkbenchTab {
   id: string
   workspaceId: string
   pinned?: boolean
-  viewType?: 'doc' | 'all-docs' | 'knowledge-graph' | 'trash' | 'templates' | 'tags'
+  viewType?: 'doc' | 'all-docs' | 'knowledge-graph' | 'trash' | 'templates'
   title?: string
   icon?: string
   spaceId?: string
@@ -156,8 +156,6 @@ export function WorkbenchTabs({
       return { title: 'Papelera', icon: '🗑️', viewMode: 'doc' }
     } else if (tab.viewType === 'templates') {
       return { title: 'Plantillas', icon: '📋', viewMode: 'doc' }
-    } else if (tab.viewType === 'tags') {
-      return { title: 'Etiquetas', icon: '🏷️', viewMode: 'doc' }
     }
 
     const ws = (allWorkspaces.length > 0 ? allWorkspaces : workspaces).find(

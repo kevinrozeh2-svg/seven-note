@@ -12,7 +12,15 @@ import { areNodePropsEqual, NodeHandles, SourceNodeBadge } from './nodeUtils'
 import { renderWithAppleEmoji } from '../../ui/AppleEmoji'
 import { FONT_FAMILIES, type FontOption } from '../../../lib/fonts'
 import { FontPickerPopover } from './FontPickerPopover'
-import { hasHtmlFormatting, cleanPastedHtml, sanitizeHtmlContent } from '../../../lib/pasteUtils'
+import {
+  hasHtmlFormatting,
+  cleanPastedHtml,
+  sanitizeHtmlContent,
+  isPdfHtml,
+  isPdfOrStructuredText,
+  cleanPdfHtml,
+  formatPdfOrStructuredText
+} from '../../../lib/pasteUtils'
 
 export { FONT_FAMILIES }
 export type { FontOption }
@@ -96,13 +104,21 @@ export const TextNode = memo(({ id, data, selected }: any) => {
       const html = e.clipboardData?.getData('text/html')
       const text = e.clipboardData?.getData('text/plain')
 
-      if (html && hasHtmlFormatting(html)) {
+      let clean = ''
+      const isPdf = Boolean((html && isPdfHtml(html)) || (text && isPdfOrStructuredText(text)))
+
+      if (isPdf) {
+        clean = html ? cleanPdfHtml(html, text || '') : (text ? formatPdfOrStructuredText(text) : '')
+      } else if (html && hasHtmlFormatting(html)) {
+        clean = cleanPastedHtml(html)
+      }
+
+      if (clean && clean.trim()) {
         e.preventDefault()
-        const clean = cleanPastedHtml(html)
         const updated = content && content.trim() ? `${content}<br/>${clean}` : clean
         setContent(updated)
         save({ content: updated })
-        toast.success('Formato de texto conservado')
+        toast.success(isPdf ? 'Texto de PDF pegado con formato' : 'Formato de texto conservado')
       } else if (text && text.trim()) {
         e.preventDefault()
         const updated = content && content.trim() ? `${content}\n${text}` : text
@@ -120,8 +136,16 @@ export const TextNode = memo(({ id, data, selected }: any) => {
     const html = e.clipboardData.getData('text/html')
     const text = e.clipboardData.getData('text/plain')
 
-    if (html && hasHtmlFormatting(html)) {
-      const clean = cleanPastedHtml(html)
+    let clean = ''
+    const isPdf = Boolean((html && isPdfHtml(html)) || (text && isPdfOrStructuredText(text)))
+
+    if (isPdf) {
+      clean = html ? cleanPdfHtml(html, text || '') : (text ? formatPdfOrStructuredText(text) : '')
+    } else if (html && hasHtmlFormatting(html)) {
+      clean = cleanPastedHtml(html)
+    }
+
+    if (clean && clean.trim()) {
       document.execCommand('insertHTML', false, clean)
     } else if (text) {
       document.execCommand('insertText', false, text)

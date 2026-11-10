@@ -50,7 +50,6 @@ import { AllDocsModal } from './components/modals/AllDocsModal'
 import { ImportModal } from './components/modals/ImportModal'
 import { ShortcutsModal } from './components/modals/ShortcutsModal'
 import { CreateWorkspaceModal } from './components/modals/CreateWorkspaceModal'
-import { TagsModal } from './components/modals/TagsModal'
 import { KnowledgeGraphModal } from './components/modals/KnowledgeGraphModal'
 import { AuthModal, type AuthMode } from './components/modals/AuthModal'
 import { UserProfileModal } from './components/modals/UserProfileModal'
@@ -62,7 +61,6 @@ import { AllDocsPage } from './components/views/AllDocsPage'
 import { KnowledgeGraphPage } from './components/views/KnowledgeGraphPage'
 import { TrashPage } from './components/views/TrashPage'
 import { TemplatesPage } from './components/views/TemplatesPage'
-import { TagsPage } from './components/views/TagsPage'
 import { ExternalShareView } from './components/views/ExternalShareView'
 import { type AppTemplate } from './lib/templates'
 import { getCurrentMember, setCurrentMember, subscribeToMemberChanges, mapSupabaseUserToMember, type TeamMember, isWorkspaceVisible, isSpaceVisible } from './lib/teamAuth'
@@ -209,8 +207,6 @@ function MainApp() {
   const [isAllDocsOpen, setIsAllDocsOpen] = useState(false)
   const [isImportOpen, setIsImportOpen] = useState(false)
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false)
-  const [isTagsOpen, setIsTagsOpen] = useState(false)
-  const [selectedTagForModal, setSelectedTagForModal] = useState<string | null>(null)
   const [isKnowledgeGraphOpen, setIsKnowledgeGraphOpen] = useState(false)
   const [isFindInPageOpen, setIsFindInPageOpen] = useState(false)
   const [activeDropdown, setActiveDropdown] = useState<'info' | 'more' | 'export' | null>(null)
@@ -358,7 +354,7 @@ function MainApp() {
   }
 
   const openSpecialViewTab = (
-    viewType: 'all-docs' | 'knowledge-graph' | 'trash' | 'templates' | 'tags',
+    viewType: 'all-docs' | 'knowledge-graph' | 'trash' | 'templates',
     title: string
   ) => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
@@ -386,7 +382,7 @@ function MainApp() {
     const tab = tabs.find((t) => t.id === tabId)
     if (tab) {
       setActiveTabId(tabId)
-      // 1. Special views (all-docs, knowledge-graph, trash, templates, tags)
+      // 1. Special views (all-docs, knowledge-graph, trash, templates)
       if (tab.viewType && tab.viewType !== 'doc') {
         return
       }
@@ -1034,10 +1030,6 @@ function MainApp() {
               onOpenImport={() => setIsImportOpen(true)}
               onOpenTemplates={() => openSpecialViewTab('templates', 'Plantillas')}
               onOpenShortcuts={() => setIsShortcutsOpen(true)}
-              onOpenTags={(tag) => {
-                setSelectedTagForModal(tag || null)
-                openSpecialViewTab('tags', 'Etiquetas')
-              }}
               onOpenKnowledgeGraph={() => openSpecialViewTab('knowledge-graph', 'Grafo de Conocimiento')}
               syncStatus={syncStatus}
               darkMode={darkMode}
@@ -1682,13 +1674,6 @@ function MainApp() {
                 selectWorkspaceWithTab(currentWorkspace?.id || '')
               }}
             />
-          ) : activeTab?.viewType === 'tags' ? (
-            <TagsPage
-              spaceId={currentSpaceId}
-              workspaces={currentSpaceWorkspaces}
-              onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
-              initialSelectedTag={selectedTagForModal}
-            />
           ) : currentWorkspace ? (
             activeViewMode === 'doc' ? (
               <div className="flex-1 h-full overflow-hidden">
@@ -1903,18 +1888,6 @@ function MainApp() {
       <ShortcutsModal
         isOpen={isShortcutsOpen}
         onClose={() => setIsShortcutsOpen(false)}
-      />
-
-      <TagsModal
-        isOpen={isTagsOpen}
-        onClose={() => {
-          setIsTagsOpen(false)
-          setSelectedTagForModal(null)
-        }}
-        spaceId={currentSpaceId}
-        workspaces={currentSpaceWorkspaces}
-        onSelectWorkspace={selectWorkspaceWithTab}
-        initialSelectedTag={selectedTagForModal}
       />
 
       <KnowledgeGraphModal

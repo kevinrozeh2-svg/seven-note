@@ -11,7 +11,13 @@ import Link from '@tiptap/extension-link'
 import Image from '@tiptap/extension-image'
 import TextAlign from '@tiptap/extension-text-align'
 import { processAndUploadImage } from '../../lib/imageOptimizer'
-import { cleanPastedHtml } from '../../lib/pasteUtils'
+import {
+  cleanPastedHtml,
+  isPdfHtml,
+  isPdfOrStructuredText,
+  cleanPdfHtml,
+  formatPdfOrStructuredText
+} from '../../lib/pasteUtils'
 import { Table } from '@tiptap/extension-table'
 import { TableRow } from '@tiptap/extension-table-row'
 import { TableHeader } from '@tiptap/extension-table-header'
@@ -373,10 +379,21 @@ export function DocEditor({
         return cleanPastedHtml(html)
       },
       handlePaste: (view, event) => {
-        // If the clipboard contains HTML or plain text, do NOT intercept as an image!
-        // Allow ProseMirror to handle the rich formatted paste.
         const html = event.clipboardData?.getData('text/html')
         const text = event.clipboardData?.getData('text/plain')
+
+        // 1. Check if pasted content is from a PDF (either browser PDF viewer or desktop PDF reader like Acrobat)
+        const isPdf = Boolean((html && isPdfHtml(html)) || (text && isPdfOrStructuredText(text)))
+        if (isPdf) {
+          const formatted = html ? cleanPdfHtml(html, text || '') : (text ? formatPdfOrStructuredText(text) : '')
+          if (formatted && formatted.trim()) {
+            editor?.commands.insertContent(formatted)
+            toast.success('Texto de PDF pegado conservando formato')
+            return true
+          }
+        }
+
+        // If the clipboard contains HTML or plain text, allow ProseMirror to handle rich paste
         if ((html && html.trim()) || (text && text.trim())) {
           return false
         }
@@ -1045,9 +1062,16 @@ export function DocEditor({
             <button
               onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
               className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('heading', { level: 2 }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
-              title="Encabezado 2"
+              title="Encabezado 2 (Subtítulo)"
             >
               <Heading2Icon className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('heading', { level: 3 }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
+              title="Encabezado 3 (Sección menor)"
+            >
+              <Heading3Icon className="w-4 h-4" />
             </button>
             <button
               onClick={() => editor.chain().focus().toggleBulletList().run()}
@@ -1230,6 +1254,31 @@ export function DocEditor({
           }}
           className="z-50 flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2.5 py-1 sm:py-1.5 rounded-full bg-white/90 dark:bg-[#1a1b1e]/90 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.1] shadow-2xl animate-in fade-in zoom-in-95 duration-100 max-w-[calc(100vw-24px)] overflow-x-auto"
         >
+          {/* Jerarquía de encabezados: H1, H2, H3 */}
+          <button
+            onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('heading', { level: 1 }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
+            title="Título principal H1 (Ctrl+Alt+1)"
+          >
+            <Heading1Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          </button>
+          <button
+            onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('heading', { level: 2 }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
+            title="Subtítulo H2 (Ctrl+Alt+2)"
+          >
+            <Heading2Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          </button>
+          <button
+            onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('heading', { level: 3 }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
+            title="Subtítulo menor H3 (Ctrl+Alt+3)"
+          >
+            <Heading3Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          </button>
+
+          <div className="w-[1px] h-3.5 bg-black/[0.1] dark:bg-white/[0.2] mx-0.5 shrink-0" />
+
           <button
             onClick={() => editor.chain().focus().toggleBold().run()}
             className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('bold') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
