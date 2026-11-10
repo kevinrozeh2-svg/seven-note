@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react'
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import {
   MagnifyingGlass,
@@ -45,6 +45,7 @@ import {
   DEFAULT_SPACE_ID,
   updateSpace
 } from '../../db'
+import { isItemUnread, NewBadge, NewDot, useUnreadTrigger } from '../../lib/unreadTracker'
 import { type SyncEngineStatus, syncEngine } from '../../lib/syncEngine'
 import { TeamMemberSwitcher } from './TeamMemberSwitcher'
 import { AppleEmoji, isEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
@@ -243,6 +244,8 @@ export function Sidebar({
   const [folderOpenMap, setFolderOpenMap] = useState<Record<string, boolean>>({ 'First Folder': true })
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
+  const [creatingSubfolderParent, setCreatingSubfolderParent] = useState<string | null>(null)
+  const [newSubfolderName, setNewSubfolderName] = useState('')
   const [toolsOpen, setToolsOpen] = useState(false)
 
   // Resizable sidebar state (min: 200px, max: 600px)
@@ -301,6 +304,7 @@ export function Sidebar({
   }, [sidebarWidth])
 
   const activeMember = currentMember || getCurrentMember()
+  useUnreadTrigger()
 
   // Workspace switcher dropdown state
   const [showSpaceMenu, setShowSpaceMenu] = useState(false)
@@ -386,6 +390,9 @@ export function Sidebar({
         ownerMember: activeMember.id,
         ownerName: activeMember.name,
         createdBy: activeMember.name,
+        userId: authUser?.id || undefined,
+        viewedBy: [activeMember.id, activeMember.name, activeMember.email, authUser?.id].filter(Boolean) as string[],
+        isNewItem: true,
         activeProperties: [
           'tags',
           'documentMode',
@@ -477,26 +484,56 @@ export function Sidebar({
   const favorites = activeWorkspaces.filter((w) => w.isFavorite)
 
 
-  const allFolders = Array.from(
-    new Set(
-      teamDocs
-        .map((w) => w.folder?.trim())
-        .filter((f): f is string => Boolean(f))
-    )
-  )
+  const getFolderLeafName = (path: string): string => {
+    const parts = path.split('/')
+    return parts[parts.length - 1] || path
+  }
 
-  const orderedFolders = useMemo(() => {
-    const list = [...allFolders]
-    if (!folderOrder || folderOrder.length === 0) return list
-    return list.sort((a, b) => {
-      const idxA = folderOrder.indexOf(a)
-      const idxB = folderOrder.indexOf(b)
-      if (idxA !== -1 && idxB !== -1) return idxA - idxB
-      if (idxA !== -1) return -1
-      if (idxB !== -1) return 1
-      return a.localeCompare(b)
+  const getParentFolderPath = (path: string): string | null => {
+    const idx = path.lastIndexOf('/')
+    if (idx === -1) return null
+    return path.slice(0, idx)
+  }
+
+  const allFolders = useMemo(() => {
+    const rawList = new Set<string>()
+    teamDocs.forEach((w) => {
+      if (w.folder && w.folder.trim()) {
+        rawList.add(w.folder.trim())
+      }
     })
-  }, [allFolders, folderOrder])
+    if (folderOrder && Array.isArray(folderOrder)) {
+      folderOrder.forEach((f) => {
+        if (f && f.trim()) {
+          rawList.add(f.trim())
+        }
+      })
+    }
+    const fullSet = new Set<string>()
+    rawList.forEach((path) => {
+      const parts = path.split('/')
+      let cur = ''
+      for (const part of parts) {
+        cur = cur ? `${cur}/${part}` : part
+        fullSet.add(cur)
+      }
+    })
+    return Array.from(fullSet)
+  }, [teamDocs, folderOrder])
+
+  const sortFolders = useCallback(
+    (folders: string[]) => {
+      return [...folders].sort((a, b) => {
+        const idxA = folderOrder.indexOf(a)
+        const idxB = folderOrder.indexOf(b)
+        if (idxA !== -1 && idxB !== -1) return idxA - idxB
+        if (idxA !== -1) return -1
+        if (idxB !== -1) return 1
+        return a.localeCompare(b)
+      })
+    },
+    [folderOrder]
+  )
 
   const rootPages = teamDocs
     .filter((w) => !w.parentId && (!w.folder || !w.folder.trim()))
@@ -645,6 +682,75 @@ export function Sidebar({
     }
   }
 
+  // Folder hierarchy move & rename handler
+  const moveOrRenameFolderHierarchy = async (oldPath: string, newPath: string) => {
+    if (oldPath === newPath) return
+
+    // Find all affected docs (either directly in oldPath or in subfolders of oldPath)
+    const affectedDocs = teamDocs.filter(
+      (w) => w.folder === oldPath || w.folder?.startsWith(oldPath + '/')
+    )
+
+    const now = Date.now()
+    const updates = affectedDocs.map((w) => {
+      let updatedFolder = newPath
+      if (w.folder && w.folder !== oldPath && w.folder.startsWith(oldPath + '/')) {
+        const suffix = w.folder.slice(oldPath.length)
+        updatedFolder = `${newPath}${suffix}`
+      }
+      return {
+        key: w.id,
+        changes: {
+          folder: updatedFolder,
+          updatedAt: now,
+          syncStatus: 'pending' as const
+        }
+      }
+    })
+
+    if (updates.length > 0) {
+      await db.workspaces.bulkUpdate(updates)
+      syncEngine.scheduleSync(500)
+    }
+
+    // Update folderOrder in state and localStorage
+    setFolderOrder((prev) => {
+      const next = prev.map((f) => {
+        if (f === oldPath) return newPath
+        if (f.startsWith(oldPath + '/')) {
+          return `${newPath}${f.slice(oldPath.length)}`
+        }
+        return f
+      })
+      if (!next.includes(newPath)) {
+        next.push(newPath)
+      }
+      try {
+        localStorage.setItem(`seven_note_folder_order_${currentSpace.id}`, JSON.stringify(next))
+      } catch (err) {
+        console.warn('Error saving folder order', err)
+      }
+      return next
+    })
+
+    // Update folderOpenMap
+    setFolderOpenMap((prev) => {
+      const next = { ...prev }
+      Object.keys(prev).forEach((key) => {
+        if (key === oldPath) {
+          next[newPath] = prev[oldPath]
+          delete next[oldPath]
+        } else if (key.startsWith(oldPath + '/')) {
+          const mappedKey = `${newPath}${key.slice(oldPath.length)}`
+          next[mappedKey] = prev[key]
+          delete next[key]
+        }
+      })
+      next[newPath] = true
+      return next
+    })
+  }
+
   // Folder header drag and drop handlers
   const handleFolderHeaderDragOver = (e: React.DragEvent, folderName: string) => {
     const currentDraggedDoc = draggedDocIdRef.current || draggedDocId
@@ -663,9 +769,22 @@ export function Sidebar({
         })
       }
     } else if (currentDraggedFolder && currentDraggedFolder !== folderName) {
+      // Disallow dragging a folder into its own descendant
+      if (folderName.startsWith(currentDraggedFolder + '/')) return
+
       const rect = e.currentTarget.getBoundingClientRect()
       const relY = e.clientY - rect.top
-      const position: 'before' | 'after' = relY < rect.height / 2 ? 'before' : 'after'
+      const height = rect.height
+
+      let position: 'before' | 'after' | 'inside'
+      if (relY < height * 0.25) {
+        position = 'before'
+      } else if (relY > height * 0.75) {
+        position = 'after'
+      } else {
+        position = 'inside'
+      }
+
       if (dropTarget?.folder !== folderName || dropTarget?.position !== position) {
         setDropTarget({
           type: 'folder',
@@ -701,8 +820,47 @@ export function Sidebar({
     }, 120)
 
     if (movingFolder && movingFolder !== folderName) {
-      const currentList = [...orderedFolders]
-      const filtered = currentList.filter((f) => f !== movingFolder)
+      // Disallow moving into own descendant
+      if (folderName.startsWith(movingFolder + '/')) return
+
+      if (currentPosition === 'inside') {
+        const leafName = getFolderLeafName(movingFolder)
+        let targetPath = `${folderName}/${leafName}`
+        if (allFolders.includes(targetPath) && targetPath !== movingFolder) {
+          let count = 2
+          while (allFolders.includes(`${targetPath} ${count}`)) {
+            count++
+          }
+          targetPath = `${targetPath} ${count}`
+        }
+        await moveOrRenameFolderHierarchy(movingFolder, targetPath)
+        setFolderOpenMap((prev) => ({ ...prev, [folderName]: true, [targetPath]: true }))
+        toast.success(`Carpeta "${leafName}" movida dentro de "${getFolderLeafName(folderName)}"`)
+        return
+      }
+
+      // Reorder before or after folderName at target folder's level
+      const targetParent = getParentFolderPath(folderName)
+      const movingParent = getParentFolderPath(movingFolder)
+      const leafName = getFolderLeafName(movingFolder)
+
+      let effectiveMovingFolder = movingFolder
+
+      if (targetParent !== movingParent) {
+        let newPath = targetParent ? `${targetParent}/${leafName}` : leafName
+        if (allFolders.includes(newPath) && newPath !== movingFolder) {
+          let count = 2
+          while (allFolders.includes(`${newPath} ${count}`)) {
+            count++
+          }
+          newPath = `${newPath} ${count}`
+        }
+        await moveOrRenameFolderHierarchy(movingFolder, newPath)
+        effectiveMovingFolder = newPath
+      }
+
+      const currentList = [...allFolders]
+      const filtered = currentList.filter((f) => f !== effectiveMovingFolder)
       const toIndex = filtered.indexOf(folderName)
       const insertIndex = toIndex === -1
         ? filtered.length
@@ -710,7 +868,7 @@ export function Sidebar({
           ? toIndex
           : toIndex + 1
 
-      filtered.splice(insertIndex, 0, movingFolder)
+      filtered.splice(insertIndex, 0, effectiveMovingFolder)
       setFolderOrder(filtered)
       try {
         localStorage.setItem(`seven_note_folder_order_${currentSpace.id}`, JSON.stringify(filtered))
@@ -782,7 +940,9 @@ export function Sidebar({
   }
 
   const handleRootHeaderDragOver = (e: React.DragEvent) => {
-    if (!draggedDocIdRef.current && !draggedDocId) return
+    const currentDraggedDoc = draggedDocIdRef.current || draggedDocId
+    const currentDraggedFolder = draggedFolderNameRef.current || draggedFolderName
+    if (!currentDraggedDoc && !currentDraggedFolder) return
     e.preventDefault()
     e.stopPropagation()
     e.dataTransfer.dropEffect = 'move'
@@ -797,37 +957,65 @@ export function Sidebar({
   const handleRootHeaderDrop = async (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
+
+    const movingFolder =
+      draggedFolderNameRef.current ||
+      draggedFolderName ||
+      e.dataTransfer.getData('application/seven-note-folder')
     const movingDocId =
       draggedDocIdRef.current ||
+      draggedDocId ||
       e.dataTransfer.getData('application/seven-note-doc') ||
-      e.dataTransfer.getData('text/plain') ||
-      draggedDocId
+      (!movingFolder ? e.dataTransfer.getData('text/plain') : null)
 
     draggedDocIdRef.current = null
+    draggedFolderNameRef.current = null
     setDraggedDocId(null)
+    setDraggedFolderName(null)
     setDropTarget(null)
-    if (!movingDocId) return
+    setTimeout(() => {
+      hasJustDraggedRef.current = false
+    }, 120)
 
-    const movingDoc = workspaces.find((w) => w.id === movingDocId)
-    if (!movingDoc || (!movingDoc.folder && !movingDoc.parentId)) return
+    if (movingFolder) {
+      if (movingFolder.includes('/')) {
+        const leaf = getFolderLeafName(movingFolder)
+        let newRoot = leaf
+        if (allFolders.some((f) => f === newRoot && f !== movingFolder)) {
+          let c = 2
+          while (allFolders.some((f) => f === `${leaf} ${c}`)) {
+            c++
+          }
+          newRoot = `${leaf} ${c}`
+        }
+        await moveOrRenameFolderHierarchy(movingFolder, newRoot)
+        toast.success(`Carpeta "${leaf}" movida a la raíz`)
+      }
+      return
+    }
 
-    const existingRoot = teamDocs
-      .filter((w) => !w.parentId && (!w.folder || !w.folder.trim()) && w.id !== movingDocId)
-      .sort(sortByOrder)
+    if (movingDocId) {
+      const movingDoc = workspaces.find((w) => w.id === movingDocId)
+      if (!movingDoc || (!movingDoc.folder && !movingDoc.parentId)) return
 
-    const maxOrder = existingRoot.length > 0
-      ? Math.max(...existingRoot.map((w, idx) => (typeof w.sortOrder === 'number' ? w.sortOrder : (idx + 1) * 1000)))
-      : 0
+      const existingRoot = teamDocs
+        .filter((w) => !w.parentId && (!w.folder || !w.folder.trim()) && w.id !== movingDocId)
+        .sort(sortByOrder)
 
-    await db.workspaces.update(movingDocId, {
-      folder: null,
-      parentId: null,
-      sortOrder: maxOrder + 1000,
-      updatedAt: Date.now(),
-      syncStatus: 'pending'
-    })
-    syncEngine.scheduleSync(500)
-    toast.success('Documento movido fuera de la carpeta')
+      const maxOrder = existingRoot.length > 0
+        ? Math.max(...existingRoot.map((w, idx) => (typeof w.sortOrder === 'number' ? w.sortOrder : (idx + 1) * 1000)))
+        : 0
+
+      await db.workspaces.update(movingDocId, {
+        folder: null,
+        parentId: null,
+        sortOrder: maxOrder + 1000,
+        updatedAt: Date.now(),
+        syncStatus: 'pending'
+      })
+      syncEngine.scheduleSync(500)
+      toast.success('Documento movido fuera de la carpeta')
+    }
   }
 
   const toggleFolder = (folderName: string) => {
@@ -849,54 +1037,374 @@ export function Sidebar({
     setIsCreatingFolder(false)
     setNewFolderName('')
 
+    setFolderOrder((prev) => {
+      const next = prev.includes(trimmed) ? prev : [...prev, trimmed]
+      try {
+        localStorage.setItem(`seven_note_folder_order_${currentSpace.id}`, JSON.stringify(next))
+      } catch (err) {
+        console.warn('Error saving folder order', err)
+      }
+      return next
+    })
+
     await handleCreateWorkspace(null, trimmed, 'doc', false)
     toast.success(`Carpeta "${trimmed}" creada`)
   }
 
-  const handleRenameFolder = async (oldName: string, newName: string) => {
-    const trimmed = newName.trim()
-    if (!trimmed || trimmed === oldName) return
-
-    const docsToUpdate = teamDocs.filter((w) => w.folder === oldName)
-    try {
-      await Promise.all(
-        docsToUpdate.map((w) =>
-          db.workspaces.update(w.id, {
-            folder: trimmed,
-            updatedAt: Date.now(),
-            syncStatus: 'pending'
-          })
-        )
-      )
-      setFolderOpenMap((prev) => {
-        const next = { ...prev }
-        next[trimmed] = next[oldName] ?? true
-        delete next[oldName]
-        return next
-      })
-      toast.success(`Carpeta renombrada a "${trimmed}"`)
-    } catch (err) {
-      console.error('Error renaming folder', err)
+  const handleCreateSubfolder = async (parentPath: string, name: string) => {
+    const trimmed = name.trim()
+    if (!trimmed) {
+      setCreatingSubfolderParent(null)
+      setNewSubfolderName('')
+      return
     }
+
+    const fullPath = `${parentPath}/${trimmed}`
+    setFolderOpenMap((prev) => ({ ...prev, [parentPath]: true, [fullPath]: true }))
+    setCreatingSubfolderParent(null)
+    setNewSubfolderName('')
+
+    setFolderOrder((prev) => {
+      const next = prev.includes(fullPath) ? prev : [...prev, fullPath]
+      try {
+        localStorage.setItem(`seven_note_folder_order_${currentSpace.id}`, JSON.stringify(next))
+      } catch (err) {
+        console.warn('Error saving folder order', err)
+      }
+      return next
+    })
+
+    await handleCreateWorkspace(null, fullPath, 'doc', false)
+    toast.success(`Subcarpeta "${trimmed}" creada`)
   }
 
-  const handleDeleteFolder = async (folderName: string) => {
-    if (!confirm(`¿Eliminar la carpeta "${folderName}" y mover sus notas a la raíz?`)) return
-    const docsToUpdate = teamDocs.filter((w) => w.folder === folderName)
+  const handleRenameFolder = async (oldPath: string, newLeafName: string) => {
+    const trimmed = newLeafName.trim()
+    if (!trimmed) return
+    const parent = getParentFolderPath(oldPath)
+    const newPath = parent ? `${parent}/${trimmed}` : trimmed
+    if (newPath === oldPath) return
+
+    await moveOrRenameFolderHierarchy(oldPath, newPath)
+    toast.success(`Carpeta renombrada a "${trimmed}"`)
+  }
+
+  const handleDeleteFolder = async (folderPath: string) => {
+    const leaf = getFolderLeafName(folderPath)
+    if (!confirm(`¿Eliminar la carpeta "${leaf}" y mover sus notas a la raíz?`)) return
+
+    const docsToUpdate = teamDocs.filter(
+      (w) => w.folder === folderPath || w.folder?.startsWith(folderPath + '/')
+    )
+
     try {
-      await Promise.all(
-        docsToUpdate.map((w) =>
-          db.workspaces.update(w.id, {
-            folder: null,
-            updatedAt: Date.now(),
-            syncStatus: 'pending'
-          })
+      if (docsToUpdate.length > 0) {
+        await Promise.all(
+          docsToUpdate.map((w) =>
+            db.workspaces.update(w.id, {
+              folder: null,
+              updatedAt: Date.now(),
+              syncStatus: 'pending'
+            })
+          )
         )
-      )
-      toast.success(`Carpeta "${folderName}" eliminada`)
+        syncEngine.scheduleSync(500)
+      }
+
+      setFolderOrder((prev) => {
+        const next = prev.filter(
+          (f) => f !== folderPath && !f.startsWith(folderPath + '/')
+        )
+        try {
+          localStorage.setItem(`seven_note_folder_order_${currentSpace.id}`, JSON.stringify(next))
+        } catch (err) {
+          console.warn('Error saving folder order', err)
+        }
+        return next
+      })
+
+      setFolderOpenMap((prev) => {
+        const next = { ...prev }
+        Object.keys(next).forEach((k) => {
+          if (k === folderPath || k.startsWith(folderPath + '/')) {
+            delete next[k]
+          }
+        })
+        return next
+      })
+
+      toast.success(`Carpeta "${leaf}" eliminada`)
     } catch (err) {
       console.error('Error deleting folder', err)
     }
+  }
+
+  // Recursive renderer for folders and subfolders
+  const renderFolderItem = (folderPath: string, level = 0): React.ReactNode => {
+    const leafName = getFolderLeafName(folderPath)
+    const folderDocs = teamDocs
+      .filter((w) => w.folder === folderPath)
+      .sort(sortByOrder)
+    const childFolders = sortFolders(allFolders.filter((f) => getParentFolderPath(f) === folderPath))
+    const isFolderOpen = folderOpenMap[folderPath] !== false
+    const isFolderTarget =
+      (dropTarget?.type === 'folderHeader' ||
+        (dropTarget?.type === 'folder' && dropTarget?.position === 'inside')) &&
+      dropTarget?.folder === folderPath
+    const isFolderDropBefore =
+      dropTarget?.type === 'folder' && dropTarget?.folder === folderPath && dropTarget?.position === 'before'
+    const isFolderDropAfter =
+      dropTarget?.type === 'folder' && dropTarget?.folder === folderPath && dropTarget?.position === 'after'
+    const isBeingDraggedFolder = draggedFolderName === folderPath
+    const isInsideDropTarget =
+      dropTarget?.type === 'folder' && dropTarget?.position === 'inside' && dropTarget?.folder === folderPath
+
+    return (
+      <div key={`folder-${folderPath}`} className="mb-0.5 relative">
+        <div
+          draggable={true}
+          onDragStart={(e) => handleFolderDragStart(e, folderPath)}
+          onDragEnd={handleFolderDragEnd}
+          onDragOver={(e) => handleFolderHeaderDragOver(e, folderPath)}
+          onDrop={(e) => handleFolderHeaderDrop(e, folderPath)}
+          onClick={() => {
+            if (hasJustDraggedRef.current) return
+            toggleFolder(folderPath)
+          }}
+          style={{ paddingLeft: `${10 + level * 14}px` }}
+          className={`group relative flex items-center justify-between pr-2.5 py-1.5 rounded-xl cursor-grab active:cursor-grabbing hover:bg-black/[0.03] dark:hover:bg-white/[0.05] text-neutral-600 dark:text-neutral-400 font-medium transition select-none ${
+            isBeingDraggedFolder ? 'opacity-40 bg-black/[0.04] dark:bg-white/[0.04]' : ''
+          } ${
+            isFolderTarget
+              ? 'bg-blue-500/15 dark:bg-blue-500/25 ring-1 ring-blue-500/60 text-blue-600 dark:text-blue-300'
+              : ''
+          }`}
+        >
+          {isFolderDropBefore && (
+            <div className="absolute -top-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
+              <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
+            </div>
+          )}
+          {isFolderDropAfter && (
+            <div className="absolute -bottom-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
+              <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            {isFolderOpen ? (
+              <CaretDown size={11} className="text-neutral-400 shrink-0" />
+            ) : (
+              <CaretRight size={11} className="text-neutral-400 shrink-0" />
+            )}
+            <Folder size={15} weight="duotone" className="text-neutral-700 dark:text-neutral-300 shrink-0" />
+            <span className="truncate text-xs font-semibold select-none pointer-events-none">{leafName}</span>
+            {folderDocs.some((d) => isItemUnread(d, 'workspace', activeMember, authUser?.id)) && !isFolderOpen && (
+              <NewBadge className="ml-1" />
+            )}
+            {isFolderTarget && (
+              <span className="text-[9px] bg-blue-500 text-white px-1.5 py-0.2 rounded-full font-medium ml-1">
+                {isInsideDropTarget ? 'Mover dentro' : 'Mover aquí'}
+              </span>
+            )}
+          </div>
+          <div
+            className="flex items-center gap-1"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <span className="text-[10px] text-neutral-400 font-mono">
+              {folderDocs.length}
+            </span>
+            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleCreateWorkspace(null, folderPath, 'doc', false)
+                }}
+                className="p-1 rounded text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
+                title={`Crear nota en ${leafName}`}
+              >
+                <Plus size={12} />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setCreatingSubfolderParent(folderPath)
+                  setFolderOpenMap((prev) => ({ ...prev, [folderPath]: true }))
+                  setNewSubfolderName('')
+                }}
+                className="p-1 rounded text-neutral-400 hover:text-blue-500"
+                title="Crear subcarpeta"
+              >
+                <FolderSimplePlus size={12} weight="duotone" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  const newName = prompt(`Renombrar carpeta "${leafName}":`, leafName)
+                  if (newName) handleRenameFolder(folderPath, newName)
+                }}
+                className="p-1 rounded text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
+                title="Renombrar carpeta"
+              >
+                <PencilSimple size={12} weight="duotone" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleDeleteFolder(folderPath)
+                }}
+                className="p-1 rounded text-neutral-400 hover:text-rose-500"
+                title="Eliminar carpeta"
+              >
+                <Trash size={12} weight="duotone" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Input inline para crear subcarpeta dentro de esta carpeta */}
+        {isFolderOpen && creatingSubfolderParent === folderPath && (
+          <div
+            style={{ paddingLeft: `${14 + (level + 1) * 14}px` }}
+            className="py-1 pr-2 my-0.5"
+          >
+            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] border border-blue-500/40">
+              <Folder size={14} weight="duotone" className="text-blue-500 shrink-0" />
+              <input
+                type="text"
+                value={newSubfolderName}
+                onChange={(e) => setNewSubfolderName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleCreateSubfolder(folderPath, newSubfolderName)
+                  } else if (e.key === 'Escape') {
+                    setCreatingSubfolderParent(null)
+                    setNewSubfolderName('')
+                  }
+                }}
+                onBlur={() => {
+                  if (newSubfolderName.trim()) {
+                    handleCreateSubfolder(folderPath, newSubfolderName)
+                  } else {
+                    setCreatingSubfolderParent(null)
+                    setNewSubfolderName('')
+                  }
+                }}
+                placeholder="Nombre de la subcarpeta..."
+                autoFocus
+                className="w-full bg-transparent text-xs text-neutral-900 dark:text-neutral-100 outline-none placeholder:text-neutral-400"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Child subfolders */}
+        {isFolderOpen && childFolders.length > 0 && (
+          <div className="space-y-0.5 my-0.5">
+            {childFolders.map((childPath: string) => renderFolderItem(childPath, level + 1))}
+          </div>
+        )}
+
+        {/* Empty placeholder */}
+        {isFolderOpen &&
+          folderDocs.length === 0 &&
+          childFolders.length === 0 &&
+          creatingSubfolderParent !== folderPath && (
+            <div
+              style={{ marginLeft: `${14 + (level + 1) * 14}px` }}
+              onDragOver={(e) => handleEmptyFolderDragOver(e, folderPath)}
+              onDrop={(e) => handleFolderHeaderDrop(e, folderPath)}
+              className="py-2 px-3 text-[11px] text-neutral-400 italic rounded-lg border border-dashed border-black/10 dark:border-white/10 my-1 mr-2 select-none"
+            >
+              Carpeta vacía (arrastra notas o carpetas aquí)
+            </div>
+          )}
+
+        {/* Direct docs inside this folder */}
+        {isFolderOpen && folderDocs.length > 0 && (
+          <div
+            style={{ marginLeft: `${14 + level * 14}px` }}
+            className="pl-3.5 space-y-0.5 border-l border-black/[0.04] dark:border-white/[0.06] my-0.5"
+          >
+            {folderDocs.map((doc) => {
+              const isActive = doc.id === currentWorkspaceId
+              const isBeingDragged = draggedDocId === doc.id
+              const isDropTargetBefore = dropTarget?.id === doc.id && dropTarget?.position === 'before'
+              const isDropTargetAfter = dropTarget?.id === doc.id && dropTarget?.position === 'after'
+
+              return (
+                <div
+                  key={doc.id}
+                  draggable={true}
+                  onDragStart={(e) => handleDocDragStart(e, doc)}
+                  onDragEnd={handleDocDragEnd}
+                  onDragOver={(e) => handleDocDragOver(e, doc, folderPath)}
+                  onDrop={(e) => handleDocDrop(e, doc, folderPath)}
+                  onClick={() => {
+                    if (hasJustDraggedRef.current) return
+                    onSelectWorkspace(doc.id)
+                  }}
+                  className={`group relative flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-grab active:cursor-grabbing transition select-none ${
+                    isBeingDragged
+                      ? 'opacity-40 bg-black/[0.04] dark:bg-white/[0.04] scale-[0.98]'
+                      : isActive
+                      ? 'bg-white dark:bg-[#202024] text-neutral-900 dark:text-neutral-100 font-semibold shadow-xs border border-black/[0.04] dark:border-white/[0.06]'
+                      : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-black/[0.03] dark:hover:bg-white/[0.05] font-medium'
+                  }`}
+                >
+                  {isDropTargetBefore && (
+                    <div className="absolute -top-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
+                      <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
+                    </div>
+                  )}
+                  {isDropTargetAfter && (
+                    <div className="absolute -bottom-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
+                      <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <DocumentItemIcon
+                      icon={doc.icon}
+                      viewMode={doc.viewMode}
+                      title={doc.title}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setEmojiPickerTarget({ id: doc.id, type: 'doc', currentIcon: doc.icon })
+                      }}
+                    />
+                    <span className="truncate flex-1 text-xs select-none pointer-events-none">{renderWithAppleEmoji(doc.title || 'Untitled')}</span>
+                    {isItemUnread(doc, 'workspace', activeMember, authUser?.id) && (
+                      <NewBadge className="ml-1.5" />
+                    )}
+                  </div>
+                  <div
+                    className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      onClick={(e) => handleToggleFavorite(e, doc)}
+                      className="p-1 rounded text-neutral-400 hover:text-amber-500"
+                      title="Favorito"
+                    >
+                      <Star size={13} weight={doc.isFavorite ? 'fill' : 'duotone'} className={doc.isFavorite ? 'text-amber-500' : 'text-neutral-400'} />
+                    </button>
+                    <button
+                      onClick={(e) => handleDeleteWorkspace(e, doc.id)}
+                      className="p-1 rounded text-neutral-400 hover:text-rose-500"
+                      title="Eliminar"
+                    >
+                      <Trash size={13} weight="duotone" />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
   }
 
   return (
@@ -961,7 +1469,12 @@ export function Sidebar({
               </span>
             </div>
           </div>
-          <CaretDown size={14} className="text-neutral-400 group-hover:text-neutral-700 dark:group-hover:text-neutral-200 transition shrink-0 ml-1.5" />
+          <div className="flex items-center gap-1.5 shrink-0 ml-1.5">
+            {visibleSpaces.some((s) => s.id !== currentSpace.id && isItemUnread(s, 'space', activeMember, authUser?.id)) && (
+              <NewDot title="Nuevos espacios de trabajo disponibles" />
+            )}
+            <CaretDown size={14} className="text-neutral-400 group-hover:text-neutral-700 dark:group-hover:text-neutral-200 transition shrink-0" />
+          </div>
         </button>
 
         {/* Space Switcher Popover Dropdown */}
@@ -1052,6 +1565,9 @@ export function Sidebar({
                           <AppleEmoji emoji={sp.icon || sp.name.charAt(0)} size={12} />
                         </div>
                         <span className="truncate min-w-0 flex-1 text-left">{sp.name}</span>
+                        {isItemUnread(sp, 'space', activeMember, authUser?.id) && (
+                          <NewBadge className="ml-1.5" />
+                        )}
                         {sp.isPrivate && (
                           <span
                             className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full text-[9px] font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 shrink-0"
@@ -1272,6 +1788,9 @@ export function Sidebar({
                           }}
                         />
                         <span className="truncate flex-1">{renderWithAppleEmoji(fav.title || 'Untitled')}</span>
+                        {isItemUnread(fav, 'workspace', activeMember, authUser?.id) && (
+                          <NewBadge className="ml-1.5" />
+                        )}
                       </div>
                       <button
                         onClick={(e) => handleToggleFavorite(e, fav)}
@@ -1382,6 +1901,12 @@ export function Sidebar({
                           }}
                         />
                         <span className="truncate flex-1 text-xs select-none pointer-events-none">{renderWithAppleEmoji(doc.title || 'Untitled')}</span>
+                    {isItemUnread(doc, 'workspace', activeMember, authUser?.id) && (
+                      <NewBadge className="ml-1.5" />
+                    )}
+                        {isItemUnread(doc, 'workspace', activeMember, authUser?.id) && (
+                          <NewBadge className="ml-1.5" />
+                        )}
                       </div>
                       <div
                         className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
@@ -1503,196 +2028,10 @@ export function Sidebar({
                 </div>
               )}
 
-              {/* Dynamic folders list */}
-              {orderedFolders.map((folderName) => {
-                const folderDocs = teamDocs
-                  .filter((w) => w.folder === folderName)
-                  .sort(sortByOrder)
-                const isFolderOpen = folderOpenMap[folderName] !== false
-                const isFolderTarget = dropTarget?.type === 'folderHeader' && dropTarget?.folder === folderName
-                const isFolderDropBefore = dropTarget?.type === 'folder' && dropTarget?.folder === folderName && dropTarget?.position === 'before'
-                const isFolderDropAfter = dropTarget?.type === 'folder' && dropTarget?.folder === folderName && dropTarget?.position === 'after'
-                const isBeingDraggedFolder = draggedFolderName === folderName
-
-                return (
-                  <div
-                    key={`folder-${folderName}`}
-                    className="mb-1 relative"
-                  >
-                    <div
-                      draggable={true}
-                      onDragStart={(e) => handleFolderDragStart(e, folderName)}
-                      onDragEnd={handleFolderDragEnd}
-                      onDragOver={(e) => handleFolderHeaderDragOver(e, folderName)}
-                      onDrop={(e) => handleFolderHeaderDrop(e, folderName)}
-                      onClick={() => {
-                        if (hasJustDraggedRef.current) return
-                        toggleFolder(folderName)
-                      }}
-                      className={`group relative flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-grab active:cursor-grabbing hover:bg-black/[0.03] dark:hover:bg-white/[0.05] text-neutral-600 dark:text-neutral-400 font-medium transition select-none ${
-                        isBeingDraggedFolder ? 'opacity-40 bg-black/[0.04] dark:bg-white/[0.04]' : ''
-                      } ${
-                        isFolderTarget
-                          ? 'bg-blue-500/15 dark:bg-blue-500/25 ring-1 ring-blue-500/60 text-blue-600 dark:text-blue-300'
-                          : ''
-                      }`}
-                    >
-                      {isFolderDropBefore && (
-                        <div className="absolute -top-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
-                          <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
-                        </div>
-                      )}
-                      {isFolderDropAfter && (
-                        <div className="absolute -bottom-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
-                          <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
-                        </div>
-                      )}
-
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        {isFolderOpen ? (
-                          <CaretDown size={11} className="text-neutral-400 shrink-0" />
-                        ) : (
-                          <CaretRight size={11} className="text-neutral-400 shrink-0" />
-                        )}
-                        <Folder size={15} weight="duotone" className="text-neutral-700 dark:text-neutral-300 shrink-0" />
-                        <span className="truncate text-xs font-semibold select-none pointer-events-none">{folderName}</span>
-                        {isFolderTarget && (
-                          <span className="text-[9px] bg-blue-500 text-white px-1.5 py-0.2 rounded-full font-medium ml-1">
-                            Mover aquí
-                          </span>
-                        )}
-                      </div>
-                      <div
-                        className="flex items-center gap-1"
-                        onMouseDown={(e) => e.stopPropagation()}
-                      >
-                        <span className="text-[10px] text-neutral-400 font-mono">
-                          {folderDocs.length}
-                        </span>
-                        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleCreateWorkspace(null, folderName, 'doc', false)
-                            }}
-                            className="p-1 rounded text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
-                            title={`Crear nota en ${folderName}`}
-                          >
-                            <Plus size={12} />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              const newName = prompt(`Renombrar carpeta "${folderName}":`, folderName)
-                              if (newName) handleRenameFolder(folderName, newName)
-                            }}
-                            className="p-1 rounded text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
-                            title="Renombrar carpeta"
-                          >
-                            <PencilSimple size={12} weight="duotone" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleDeleteFolder(folderName)
-                            }}
-                            className="p-1 rounded text-neutral-400 hover:text-rose-500"
-                            title="Eliminar carpeta"
-                          >
-                            <Trash size={12} weight="duotone" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {isFolderOpen && folderDocs.length === 0 && (
-                      <div
-                        onDragOver={(e) => handleEmptyFolderDragOver(e, folderName)}
-                        onDrop={(e) => handleFolderHeaderDrop(e, folderName)}
-                        className="pl-6 py-2 text-[11px] text-neutral-400 italic rounded-lg border border-dashed border-black/10 dark:border-white/10 my-1 ml-3 select-none"
-                      >
-                        Carpeta vacía (arrastra notas aquí)
-                      </div>
-                    )}
-
-                    {isFolderOpen && folderDocs.length > 0 && (
-                      <div className="pl-4 space-y-0.5 border-l border-black/[0.04] dark:border-white/[0.06] ml-3.5 my-0.5">
-                        {folderDocs.map((doc) => {
-                          const isActive = doc.id === currentWorkspaceId
-                          const isBeingDragged = draggedDocId === doc.id
-                          const isDropTargetBefore = dropTarget?.id === doc.id && dropTarget?.position === 'before'
-                          const isDropTargetAfter = dropTarget?.id === doc.id && dropTarget?.position === 'after'
-
-                          return (
-                            <div
-                              key={doc.id}
-                              draggable={true}
-                              onDragStart={(e) => handleDocDragStart(e, doc)}
-                              onDragEnd={handleDocDragEnd}
-                              onDragOver={(e) => handleDocDragOver(e, doc, folderName)}
-                              onDrop={(e) => handleDocDrop(e, doc, folderName)}
-                              onClick={() => {
-                                if (hasJustDraggedRef.current) return
-                                onSelectWorkspace(doc.id)
-                              }}
-                              className={`group relative flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-grab active:cursor-grabbing transition select-none ${
-                                isBeingDragged
-                                  ? 'opacity-40 bg-black/[0.04] dark:bg-white/[0.04] scale-[0.98]'
-                                  : isActive
-                                  ? 'bg-white dark:bg-[#202024] text-neutral-900 dark:text-neutral-100 font-semibold shadow-xs border border-black/[0.04] dark:border-white/[0.06]'
-                                  : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-black/[0.03] dark:hover:bg-white/[0.05] font-medium'
-                              }`}
-                            >
-                              {isDropTargetBefore && (
-                                <div className="absolute -top-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
-                                  <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
-                                </div>
-                              )}
-                              {isDropTargetAfter && (
-                                <div className="absolute -bottom-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
-                                  <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
-                                </div>
-                              )}
-
-                              <div className="flex items-center gap-2 min-w-0 flex-1">
-                                <DocumentItemIcon
-                                  icon={doc.icon}
-                                  viewMode={doc.viewMode}
-                                  title={doc.title}
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setEmojiPickerTarget({ id: doc.id, type: 'doc', currentIcon: doc.icon })
-                                  }}
-                                />
-                                <span className="truncate flex-1 text-xs select-none pointer-events-none">{renderWithAppleEmoji(doc.title || 'Untitled')}</span>
-                              </div>
-                              <div
-                                className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                                onMouseDown={(e) => e.stopPropagation()}
-                              >
-                                <button
-                                  onClick={(e) => handleToggleFavorite(e, doc)}
-                                  className="p-1 rounded text-neutral-400 hover:text-amber-500"
-                                  title="Favorito"
-                                >
-                                  <Star size={13} weight={doc.isFavorite ? 'fill' : 'duotone'} className={doc.isFavorite ? 'text-amber-500' : 'text-neutral-400'} />
-                                </button>
-                                <button
-                                  onClick={(e) => handleDeleteWorkspace(e, doc.id)}
-                                  className="p-1 rounded text-neutral-400 hover:text-rose-500"
-                                  title="Eliminar"
-                                >
-                                  <Trash size={13} weight="duotone" />
-                                </button>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+              {/* Dynamic recursive folders list */}
+              {sortFolders(allFolders.filter((f: string) => getParentFolderPath(f) === null)).map((folderName: string) =>
+                renderFolderItem(folderName, 0)
+              )}
 
               {/* Root pages */}
               {rootPages.map((page) => {
@@ -1746,6 +2085,9 @@ export function Sidebar({
                           }}
                         />
                         <span className="truncate flex-1 select-none pointer-events-none">{renderWithAppleEmoji(page.title || 'Untitled')}</span>
+                        {isItemUnread(page, 'workspace', activeMember, authUser?.id) && (
+                          <NewBadge className="ml-1.5" />
+                        )}
                       </div>
                       <div
                         className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"

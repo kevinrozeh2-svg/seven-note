@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useEditor, EditorContent } from '@tiptap/react'
 import { Mark, mergeAttributes } from '@tiptap/core'
@@ -54,7 +54,7 @@ import {
   PageIcon,
   CopyIcon
 } from '@blocksuite/icons/rc'
-import { db, type WorkspaceItem, type NotionDatabaseData, type NotionDatabaseViewType } from '../../db'
+import { db, type WorkspaceItem, type SpaceItem, DEFAULT_SPACE_ID, type NotionDatabaseData, type NotionDatabaseViewType } from '../../db'
 import { syncEngine } from '../../lib/syncEngine'
 import { EmojiPickerPopover } from '../modals/EmojiPickerPopover'
 import { AppleEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
@@ -86,9 +86,27 @@ function sanitizeUrl(url: string): string {
   return '#'
 }
 
+function extractSnippetFromHtml(html?: string, maxLength: number = 90): string {
+  if (!html) return ''
+  const clean = html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<\/?[^>]+(>|$)/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (!clean) return ''
+  return clean.length > maxLength ? clean.slice(0, maxLength) + '...' : clean
+}
+
 interface DocEditorProps {
   workspace: WorkspaceItem
   allWorkspaces?: WorkspaceItem[]
+  spaces?: SpaceItem[]
   onSelectWorkspace?: (id: string) => void
   onTitleChange?: (newTitle: string) => void
   onToggleViewMode?: () => void
@@ -231,9 +249,30 @@ const SuperscriptMark = Mark.create({
   }
 })
 
+interface BidirectionalLinkItem {
+  workspace: WorkspaceItem
+  isOutgoing: boolean
+  isIncoming: boolean
+  relation: 'bidirectional' | 'incoming' | 'outgoing'
+  spaceName: string
+  spaceIcon: string
+  snippet: string
+}
+
+interface HoverPopoverData {
+  note: WorkspaceItem
+  spaceName: string
+  spaceIcon: string
+  snippet: string
+  top: number
+  left: number
+  width: number
+}
+
 export function DocEditor({
   workspace,
   allWorkspaces = [],
+  spaces = [],
   onSelectWorkspace,
   onTitleChange,
   onToggleViewMode,
@@ -247,6 +286,11 @@ export function DocEditor({
   const [infoText, setInfoText] = useState(workspace.informationContent || '')
   const [showBiDirectional, setShowBiDirectional] = useState(workspace.biDirectionalLinksVisible ?? false)
   const [showLinkSelector, setShowLinkSelector] = useState(false)
+  const [linkSearchQuery, setLinkSearchQuery] = useState('')
+
+  // Hover Popover preview state
+  const [hoverPopoverData, setHoverPopoverData] = useState<HoverPopoverData | null>(null)
+  const closeTimerRef = useRef<any>(null)
 
   // Slash Menu state
   const [slashMenuOpen, setSlashMenuOpen] = useState(false)
@@ -473,7 +517,8 @@ export function DocEditor({
         const target = event.target as HTMLElement
         const noteCard = target.closest('[data-note-id]') as HTMLElement | null
         if (noteCard) {
-          const noteId = noteCard.getAttribute('data-note-id')
+          const rawId = noteCard.getAttribute('data-note-id')
+          const noteId = rawId ? decodeURIComponent(rawId) : null
           if (noteId && onSelectWorkspace) {
             onSelectWorkspace(noteId)
             return true
@@ -483,7 +528,8 @@ export function DocEditor({
         if (link) {
           const href = link.getAttribute('href')
           if (href?.startsWith('#note=')) {
-            const noteId = href.replace('#note=', '')
+            const rawId = href.replace('#note=', '')
+            const noteId = rawId ? decodeURIComponent(rawId) : null
             if (noteId && onSelectWorkspace) {
               onSelectWorkspace(noteId)
               return true
@@ -659,24 +705,211 @@ export function DocEditor({
     })
   }
 
-  // Find incoming backlinks
-  const backlinks = allWorkspaces.filter(
-    (w) =>
-      w.id !== workspace.id &&
-      !w.isDeleted &&
-      (w.docContent.includes(workspace.id) ||
-        (workspace.title && workspace.title !== 'Untitled' && w.docContent.includes(workspace.title)))
-  )
+  // Bidirectional links across all public workspaces (both incoming backlinks and outgoing linked notes)
+  const bidirectionalLinks = useMemo<BidirectionalLinkItem[]>(() => {
+    return allWorkspaces
+      .filter((w) => {
+        if (w.id === workspace.id || w.isDeleted) return false
 
+        const isOutgoing =
+          workspace.docContent.includes(w.id) ||
+          (Boolean(w.title) &&
+            w.title.trim().length > 2 &&
+            w.title !== 'Untitled' &&
+            w.title !== 'Documento sin título' &&
+            workspace.docContent.includes(w.title))
+
+        const isIncoming =
+          w.docContent.includes(workspace.id) ||
+          (Boolean(workspace.title) &&
+            workspace.title.trim().length > 2 &&
+            workspace.title !== 'Untitled' &&
+            workspace.title !== 'Documento sin título' &&
+            w.docContent.includes(workspace.title))
+
+        return isOutgoing || isIncoming
+      })
+      .map((w) => {
+        const isOutgoing =
+          workspace.docContent.includes(w.id) ||
+          (Boolean(w.title) &&
+            w.title.trim().length > 2 &&
+            w.title !== 'Untitled' &&
+            w.title !== 'Documento sin título' &&
+            workspace.docContent.includes(w.title))
+
+        const isIncoming =
+          w.docContent.includes(workspace.id) ||
+          (Boolean(workspace.title) &&
+            workspace.title.trim().length > 2 &&
+            workspace.title !== 'Untitled' &&
+            workspace.title !== 'Documento sin título' &&
+            w.docContent.includes(workspace.title))
+
+        const space = spaces.find((s) => s.id === (w.spaceId || DEFAULT_SPACE_ID))
+        const relation: 'bidirectional' | 'incoming' | 'outgoing' =
+          isOutgoing && isIncoming ? 'bidirectional' : isIncoming ? 'incoming' : 'outgoing'
+
+        const item: BidirectionalLinkItem = {
+          workspace: w,
+          isOutgoing,
+          isIncoming,
+          relation,
+          spaceName: space?.name || 'Espacio General',
+          spaceIcon: space?.icon || '🌐',
+          snippet: w.informationContent?.trim() || extractSnippetFromHtml(w.docContent, 75) || 'Sin contenido adicional'
+        }
+        return item
+      })
+      .sort((a, b) => (b.workspace.updatedAt || 0) - (a.workspace.updatedAt || 0))
+  }, [allWorkspaces, workspace.id, workspace.docContent, workspace.title, spaces])
+
+  // Insert a rich interactive preview card for the linked note
   const handleInsertLinkToNote = (targetNote: WorkspaceItem) => {
     if (!editor || readOnly) return
     const safeTitle = escapeHtml(targetNote.title || 'Untitled')
     const safeIcon = escapeHtml(targetNote.icon || '📄')
     const safeId = encodeURIComponent(targetNote.id)
-    const linkHtml = `<p>🔗 <a href="#note=${safeId}" class="text-blue-400 underline font-medium">${safeIcon} ${safeTitle}</a></p>`
-    editor.commands.insertContent(linkHtml)
+    const targetSpace = spaces.find((s) => s.id === (targetNote.spaceId || DEFAULT_SPACE_ID))
+    const spaceName = escapeHtml(targetSpace?.name || 'Espacio General')
+    const spaceIcon = escapeHtml(targetSpace?.icon || '🌐')
+    const snippet = escapeHtml(
+      targetNote.informationContent?.trim() ||
+      extractSnippetFromHtml(targetNote.docContent, 80) ||
+      'Página conectada mediante enlace bidireccional'
+    )
+    const updatedDate = new Date(targetNote.updatedAt || targetNote.createdAt || Date.now()).toLocaleDateString('es-ES', {
+      day: 'numeric',
+      month: 'short'
+    })
+
+    const previewHtml = `
+      <div class="seven-note-link-card not-prose my-3 p-3 rounded-xl border border-[var(--affine-border-color)] bg-[var(--affine-background-secondary-color)] hover:border-[#1e96eb]/60 hover:bg-[var(--affine-hover-color)] transition-all cursor-pointer shadow-xs group select-none max-w-xl" data-note-id="${safeId}" contenteditable="false">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <div class="w-8 h-8 rounded-lg bg-[var(--affine-background-primary-color)] border border-[var(--affine-border-color)] flex items-center justify-center text-lg shrink-0 group-hover:scale-105 transition-transform shadow-xs">
+              ${safeIcon}
+            </div>
+            <div class="min-w-0">
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span class="font-semibold text-xs text-[var(--affine-text-primary-color)] group-hover:text-[#1e96eb] transition-colors truncate">
+                  ${safeTitle}
+                </span>
+                <span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.2 rounded-full bg-[#1e96eb]/10 border border-[#1e96eb]/25 text-[#1e96eb] font-medium shrink-0">
+                  <span>${spaceIcon}</span>
+                  <span>${spaceName}</span>
+                </span>
+              </div>
+              <p class="text-[11px] text-[var(--affine-text-secondary-color)] truncate mt-0.5">
+                ${snippet}
+              </p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 shrink-0">
+            <span class="text-[10px] text-[var(--affine-text-secondary-color)] hidden sm:inline">
+              ${updatedDate}
+            </span>
+            <a href="#note=${safeId}" class="text-[11px] font-medium text-[#1e96eb] px-2.5 py-1 rounded-md bg-[#1e96eb]/10 group-hover:bg-[#1e96eb] group-hover:text-white transition-all flex items-center gap-1 no-underline">
+              Abrir ↗
+            </a>
+          </div>
+        </div>
+      </div><p></p>
+    `
+    editor.commands.insertContent(previewHtml)
     setShowLinkSelector(false)
+    toast.success(`Preview de "${targetNote.title || 'Untitled'}" insertado`)
   }
+
+  // Handle mouse hover over any note link or preview card to show actionable preview popover
+  const handleContainerMouseOver = useCallback((e: React.MouseEvent) => {
+    const target = e.target as HTMLElement | null
+    if (!target) return
+
+    // If hovering inside the popover itself, keep it open
+    if (target.closest('.seven-note-hover-popover')) {
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current)
+        closeTimerRef.current = null
+      }
+      return
+    }
+
+    // Check if hovering over a note card, link, or backlink item
+    const noteEl = target.closest('[data-note-id], a[href^="#note="], [data-backlink-id]') as HTMLElement | null
+    if (!noteEl) {
+      if (!closeTimerRef.current && hoverPopoverData) {
+        closeTimerRef.current = setTimeout(() => {
+          setHoverPopoverData(null)
+        }, 220)
+      }
+      return
+    }
+
+    let rawId = noteEl.getAttribute('data-note-id') || noteEl.getAttribute('data-backlink-id')
+    if (!rawId && noteEl.tagName.toLowerCase() === 'a') {
+      const href = noteEl.getAttribute('href')
+      if (href?.startsWith('#note=')) {
+        rawId = href.replace('#note=', '')
+      }
+    }
+    const noteId = rawId ? decodeURIComponent(rawId) : null
+    if (!noteId) return
+
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current)
+      closeTimerRef.current = null
+    }
+
+    if (hoverPopoverData?.note.id === noteId) return
+
+    const targetNote = allWorkspaces.find((w) => w.id === noteId)
+    if (!targetNote) return
+
+    const targetSpace = spaces.find((s) => s.id === (targetNote.spaceId || DEFAULT_SPACE_ID))
+    const rect = noteEl.getBoundingClientRect()
+    const popoverWidth = 320
+    const popoverHeight = 185
+
+    const spaceAbove = rect.top
+    const placeAbove = spaceAbove >= popoverHeight + 12
+
+    let top = placeAbove ? rect.top - popoverHeight - 8 : rect.bottom + 8
+    if (top < 8) top = 8
+    if (top + popoverHeight > window.innerHeight - 8) {
+      top = window.innerHeight - popoverHeight - 8
+    }
+
+    let left = rect.left + rect.width / 2 - popoverWidth / 2
+    if (left < 16) left = 16
+    if (left + popoverWidth > window.innerWidth - 16) {
+      left = window.innerWidth - popoverWidth - 16
+    }
+
+    const snippet =
+      targetNote.informationContent?.trim() ||
+      extractSnippetFromHtml(targetNote.docContent, 100) ||
+      'Sin contenido adicional en esta página.'
+
+    setHoverPopoverData({
+      note: targetNote,
+      spaceName: targetSpace?.name || 'Espacio General',
+      spaceIcon: targetSpace?.icon || '🌐',
+      snippet,
+      top,
+      left,
+      width: popoverWidth
+    })
+  }, [allWorkspaces, spaces, hoverPopoverData])
+
+  const handleContainerMouseLeave = useCallback(() => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current)
+    }
+    closeTimerRef.current = setTimeout(() => {
+      setHoverPopoverData(null)
+    }, 220)
+  }, [])
 
   // Insert custom block into editor
   const insertBlock = useCallback(
@@ -1915,20 +2148,28 @@ export function DocEditor({
         )}
 
         {/* TipTap WYSIWYG Document Editor */}
-        <div className="min-h-[280px]">
+        <div
+          onMouseOver={handleContainerMouseOver}
+          onMouseLeave={handleContainerMouseLeave}
+          className="min-h-[280px]"
+        >
           <EditorContent editor={editor} />
         </div>
 
         {/* Section: Bi-Directional Links */}
-        <div className="mt-14 pt-6 border-t border-[var(--affine-divider-color)]">
+        <div
+          onMouseOver={handleContainerMouseOver}
+          onMouseLeave={handleContainerMouseLeave}
+          className="mt-14 pt-6 border-t border-[var(--affine-divider-color)]"
+        >
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <span className="text-sm font-semibold text-[var(--affine-text-primary-color)]">
                 Bi-Directional Links
               </span>
-              {backlinks.length > 0 && (
+              {bidirectionalLinks.length > 0 && (
                 <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-[#1e96eb]/15 border border-[#1e96eb]/40 text-[#1e96eb] font-semibold">
-                  {backlinks.length}
+                  {bidirectionalLinks.length}
                 </span>
               )}
             </div>
@@ -1937,7 +2178,7 @@ export function DocEditor({
               {showBiDirectional && (
                 <button
                   onClick={() => setShowLinkSelector(!showLinkSelector)}
-                  className="px-2.5 py-1 rounded-md bg-[var(--affine-background-secondary-color)] hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] text-xs flex items-center gap-1 border border-[var(--affine-border-color)] transition"
+                  className="px-2.5 py-1 rounded-md bg-[var(--affine-background-secondary-color)] hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] text-xs flex items-center gap-1 border border-[var(--affine-border-color)] transition active:scale-95 cursor-pointer"
                 >
                   <PlusIcon className="w-3 h-3 text-[#1e96eb]" />
                   <span>Vincular nota</span>
@@ -1945,7 +2186,7 @@ export function DocEditor({
               )}
               <button
                 onClick={handleToggleBiDirectional}
-                className="px-3 py-1 rounded-md bg-[var(--affine-background-secondary-color)] hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] text-xs font-medium border border-[var(--affine-border-color)] transition"
+                className="px-3 py-1 rounded-md bg-[var(--affine-background-secondary-color)] hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] text-xs font-medium border border-[var(--affine-border-color)] transition active:scale-95 cursor-pointer"
               >
                 {showBiDirectional ? 'Ocultar' : 'Mostrar'}
               </button>
@@ -1956,54 +2197,145 @@ export function DocEditor({
           {showBiDirectional && (
             <div className="space-y-3 animate-in fade-in duration-100">
               {showLinkSelector && (
-                <div className="p-3 bg-[var(--affine-background-secondary-color)] border border-[var(--affine-border-color)] rounded-xl text-xs space-y-2 shadow-[var(--affine-popover-shadow)]">
-                  <span className="text-[var(--affine-text-secondary-color)] font-medium block">
-                    Selecciona una página para vincularla a este documento:
-                  </span>
-                  <div className="max-h-40 overflow-y-auto space-y-1">
+                <div className="p-3.5 bg-[var(--affine-background-secondary-color)] border border-[var(--affine-border-color)] rounded-xl text-xs space-y-2.5 shadow-lg max-w-md">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[var(--affine-text-primary-color)] font-semibold text-xs flex items-center gap-1.5">
+                      <LinkIcon className="w-3.5 h-3.5 text-[#1e96eb]" />
+                      Vincular nota (Espacios Públicos)
+                    </span>
+                    <button
+                      onClick={() => setShowLinkSelector(false)}
+                      className="text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] p-0.5 rounded transition cursor-pointer"
+                    >
+                      <CloseIcon className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  {/* Filter search input */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Buscar en todos los espacios de trabajo públicos..."
+                      value={linkSearchQuery}
+                      onChange={(e) => setLinkSearchQuery(e.target.value)}
+                      className="w-full px-2.5 py-1.5 pl-7 bg-[var(--affine-background-primary-color)] border border-[var(--affine-border-color)] rounded-lg text-xs text-[var(--affine-text-primary-color)] placeholder:text-[var(--affine-text-secondary-color)] focus:outline-none focus:border-[#1e96eb] transition"
+                      autoFocus
+                    />
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--affine-text-secondary-color)] pointer-events-none text-xs">
+                      🔍
+                    </span>
+                  </div>
+
+                  {/* List of public workspaces */}
+                  <div className="max-h-52 overflow-y-auto space-y-1 divide-y divide-[var(--affine-divider-color)]">
                     {allWorkspaces
                       .filter((w) => w.id !== workspace.id && !w.isDeleted)
-                      .map((ws) => (
-                        <div
-                          key={ws.id}
-                          onClick={() => handleInsertLinkToNote(ws)}
-                          className="flex items-center justify-between p-1.5 rounded hover:bg-[var(--affine-hover-color)] cursor-pointer text-[var(--affine-text-primary-color)] transition"
-                        >
-                          <div className="flex items-center gap-2">
-                            <AppleEmoji emoji={ws.icon || '📄'} size={16} />
-                            <span className="truncate">{renderWithAppleEmoji(ws.title || 'Untitled')}</span>
+                      .filter((w) => {
+                        if (!linkSearchQuery.trim()) return true
+                        const q = linkSearchQuery.toLowerCase()
+                        const sp = spaces.find((s) => s.id === (w.spaceId || DEFAULT_SPACE_ID))
+                        return (
+                          (w.title || '').toLowerCase().includes(q) ||
+                          (sp?.name || '').toLowerCase().includes(q)
+                        )
+                      })
+                      .map((ws) => {
+                        const sp = spaces.find((s) => s.id === (ws.spaceId || DEFAULT_SPACE_ID))
+                        const spName = sp?.name || 'Espacio General'
+                        const spIcon = sp?.icon || '🌐'
+                        const snippet = ws.informationContent?.trim() || extractSnippetFromHtml(ws.docContent, 65)
+
+                        return (
+                          <div
+                            key={ws.id}
+                            onClick={() => handleInsertLinkToNote(ws)}
+                            className="flex items-center justify-between p-2 pt-2.5 rounded-lg hover:bg-[var(--affine-hover-color)] cursor-pointer text-[var(--affine-text-primary-color)] transition group"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                              <span className="shrink-0 text-base">
+                                <AppleEmoji emoji={ws.icon || '📄'} size={18} />
+                              </span>
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-medium text-xs truncate group-hover:text-[#1e96eb] transition-colors">
+                                    {renderWithAppleEmoji(ws.title || 'Untitled')}
+                                  </span>
+                                  <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.2 rounded-full bg-[#1e96eb]/10 border border-[#1e96eb]/20 text-[#1e96eb] font-medium shrink-0">
+                                    <span>{spIcon}</span>
+                                    <span>{spName}</span>
+                                  </span>
+                                </div>
+                                {snippet && (
+                                  <p className="text-[10px] text-[var(--affine-text-secondary-color)] truncate mt-0.5">
+                                    {snippet}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <span className="shrink-0 text-[10px] font-medium text-[#1e96eb] px-2 py-1 rounded bg-[#1e96eb]/10 group-hover:bg-[#1e96eb] group-hover:text-white transition">
+                              + Insertar preview
+                            </span>
                           </div>
-                          <span className="text-[10px] text-[#1e96eb]">Insertar enlace</span>
-                        </div>
-                      ))}
+                        )
+                      })}
                   </div>
                 </div>
               )}
 
-              {backlinks.length === 0 ? (
+              {bidirectionalLinks.length === 0 ? (
                 <div className="p-4 rounded-xl bg-[var(--affine-background-secondary-color)] border border-[var(--affine-border-color)] text-center text-xs text-[var(--affine-text-secondary-color)]">
                   No hay otras notas vinculadas a esta página todavía.
                   <br />
-                  Usa el botón "Vincular nota" para interconectar tus ideas.
+                  Usa el botón "Vincular nota" para interconectar tus ideas entre todos los espacios de trabajo públicos.
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {backlinks.map((linkWs) => (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {bidirectionalLinks.map((item: BidirectionalLinkItem) => (
                     <div
-                      key={linkWs.id}
-                      onClick={() => onSelectWorkspace && onSelectWorkspace(linkWs.id)}
-                      className="p-3 rounded-xl bg-[var(--affine-background-secondary-color)] border border-[var(--affine-border-color)] hover:border-[#1e96eb] hover:bg-[var(--affine-hover-color)] cursor-pointer transition flex items-center justify-between group shadow-xs"
+                      key={item.workspace.id}
+                      data-note-id={item.workspace.id}
+                      onClick={() => onSelectWorkspace && onSelectWorkspace(item.workspace.id)}
+                      className="p-3 rounded-xl bg-[var(--affine-background-secondary-color)] border border-[var(--affine-border-color)] hover:border-[#1e96eb] hover:bg-[var(--affine-hover-color)] cursor-pointer transition flex flex-col justify-between group shadow-xs select-none"
                     >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <span className="shrink-0"><AppleEmoji emoji={linkWs.icon || '📄'} size={18} /></span>
-                        <div className="min-w-0">
-                          <p className="font-medium text-[var(--affine-text-primary-color)] group-hover:text-[#1e96eb] truncate text-xs">
-                            {renderWithAppleEmoji(linkWs.title || 'Untitled')}
-                          </p>
-                          <p className="text-[10px] text-[var(--affine-text-secondary-color)]">Nota vinculada</p>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="shrink-0">
+                            <AppleEmoji emoji={item.workspace.icon || '📄'} size={18} />
+                          </span>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <p className="font-semibold text-[var(--affine-text-primary-color)] group-hover:text-[#1e96eb] truncate text-xs transition-colors">
+                                {renderWithAppleEmoji(item.workspace.title || 'Untitled')}
+                              </p>
+                              <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.2 rounded-full bg-[#1e96eb]/10 border border-[#1e96eb]/20 text-[#1e96eb] font-medium shrink-0">
+                                <span>{item.spaceIcon}</span>
+                                <span>{item.spaceName}</span>
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-[var(--affine-text-secondary-color)] truncate mt-0.5">
+                              {item.snippet}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span
+                            className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
+                              item.relation === 'bidirectional'
+                                ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30'
+                                : item.relation === 'incoming'
+                                ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
+                                : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                            }`}
+                          >
+                            {item.relation === 'bidirectional'
+                              ? '⇄ Bidireccional'
+                              : item.relation === 'incoming'
+                              ? '← Menciona esta página'
+                              : '→ Mencionada'}
+                          </span>
+                          <OpenInNewIcon className="w-3.5 h-3.5 text-[var(--affine-text-secondary-color)] group-hover:text-[#1e96eb] transition-colors" />
                         </div>
                       </div>
-                      <OpenInNewIcon className="w-3.5 h-3.5 text-[var(--affine-text-secondary-color)] group-hover:text-[#1e96eb] shrink-0" />
                     </div>
                   ))}
                 </div>
@@ -2012,6 +2344,113 @@ export function DocEditor({
           )}
         </div>
       </div>
+
+      {/* Actionable Hover Preview Popover */}
+      {hoverPopoverData &&
+        createPortal(
+          <div
+            onMouseEnter={() => {
+              if (closeTimerRef.current) {
+                clearTimeout(closeTimerRef.current)
+                closeTimerRef.current = null
+              }
+            }}
+            onMouseLeave={() => {
+              closeTimerRef.current = setTimeout(() => {
+                setHoverPopoverData(null)
+              }, 200)
+            }}
+            className="seven-note-hover-popover fixed z-[9999] bg-[#1e1f24] dark:bg-[#1a1b1e] border border-white/10 text-white rounded-xl shadow-2xl p-3.5 space-y-2.5 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md select-none"
+            style={{
+              top: `${hoverPopoverData.top}px`,
+              left: `${hoverPopoverData.left}px`,
+              width: `${hoverPopoverData.width}px`
+            }}
+          >
+            {/* Popover Header */}
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-lg shrink-0">
+                  <AppleEmoji emoji={hoverPopoverData.note.icon || '📄'} size={18} />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="font-semibold text-xs text-zinc-100 truncate">
+                    {renderWithAppleEmoji(hoverPopoverData.note.title || 'Untitled')}
+                  </h4>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.2 rounded-full bg-[#1e96eb]/15 border border-[#1e96eb]/30 text-[#1e96eb] font-medium">
+                      <span>{hoverPopoverData.spaceIcon}</span>
+                      <span>{hoverPopoverData.spaceName}</span>
+                    </span>
+                    <span className="text-[10px] text-zinc-400">
+                      {hoverPopoverData.note.updatedAt
+                        ? new Date(hoverPopoverData.note.updatedAt).toLocaleDateString('es-ES', {
+                            day: 'numeric',
+                            month: 'short'
+                          })
+                        : 'Documento'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setHoverPopoverData(null)}
+                className="text-zinc-400 hover:text-zinc-200 p-0.5 rounded transition cursor-pointer"
+                title="Cerrar vista previa"
+              >
+                <CloseIcon className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Popover Content Preview Snippet */}
+            <div className="p-2 rounded-lg bg-black/20 border border-white/5 text-[11px] text-zinc-300 leading-relaxed max-h-20 overflow-y-auto">
+              {hoverPopoverData.snippet}
+            </div>
+
+            {/* Tags if any */}
+            {hoverPopoverData.note.tags && hoverPopoverData.note.tags.length > 0 && (
+              <div className="flex items-center gap-1 flex-wrap">
+                {hoverPopoverData.note.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700/50"
+                  >
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Actionable buttons */}
+            <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/10">
+              <button
+                onClick={() => {
+                  if (onSelectWorkspace) {
+                    onSelectWorkspace(hoverPopoverData.note.id)
+                  }
+                  setHoverPopoverData(null)
+                }}
+                className="flex-1 py-1.5 px-2.5 rounded-lg bg-[#1e96eb] hover:bg-[#1a85d1] text-white text-[11px] font-medium transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
+              >
+                <OpenInNewIcon className="w-3.5 h-3.5" />
+                <span>Abrir documento</span>
+              </button>
+              <button
+                onClick={() => {
+                  const url = `${window.location.origin}/#note=${hoverPopoverData.note.id}`
+                  navigator.clipboard.writeText(url)
+                  toast.success('Enlace de la nota copiado al portapapeles')
+                }}
+                className="py-1.5 px-2.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-zinc-300 hover:text-white text-[11px] font-medium transition flex items-center gap-1 active:scale-95 cursor-pointer"
+                title="Copiar enlace"
+              >
+                <CopyIcon className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Copiar enlace</span>
+              </button>
+            </div>
+          </div>,
+          document.body
+        )}
     </div>
   )
 }
