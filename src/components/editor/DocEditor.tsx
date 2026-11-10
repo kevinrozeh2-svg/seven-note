@@ -9,6 +9,7 @@ import Placeholder from '@tiptap/extension-placeholder'
 import Underline from '@tiptap/extension-underline'
 import Link from '@tiptap/extension-link'
 import Image from '@tiptap/extension-image'
+import TextAlign from '@tiptap/extension-text-align'
 import { processAndUploadImage } from '../../lib/imageOptimizer'
 import { cleanPastedHtml } from '../../lib/pasteUtils'
 import { Table } from '@tiptap/extension-table'
@@ -19,7 +20,7 @@ import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight'
 import { common, createLowlight } from 'lowlight'
 import { toast } from 'sonner'
 import confetti from 'canvas-confetti'
-import { Lock, Unlock, Globe, ChevronDown, Maximize2, Minimize2 } from 'lucide-react'
+import { Lock, Unlock, Globe, ChevronDown, Maximize2, Minimize2, AlignLeft, AlignCenter, AlignRight, AlignJustify } from 'lucide-react'
 import {
   SmileIcon,
   EdgelessIcon,
@@ -352,6 +353,11 @@ export function DocEditor({
       Image.configure({
         inline: true,
         allowBase64: true
+      }),
+      TextAlign.configure({
+        types: ['heading', 'paragraph', 'blockquote'],
+        alignments: ['left', 'center', 'right', 'justify'],
+        defaultAlignment: 'left'
       }),
       Placeholder.configure({
         placeholder: 'Escribe algo o pulsa "/" para insertar bloques de AFFiNE...'
@@ -997,6 +1003,38 @@ export function DocEditor({
 
             <div className="w-[1px] h-4 bg-black/[0.1] dark:bg-white/[0.2] mx-0.5 sm:mx-1 shrink-0" />
 
+            {/* Alineación de texto: Izquierda, Centro, Derecha, Justificado */}
+            <button
+              onClick={() => editor.chain().focus().setTextAlign('left').run()}
+              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive({ textAlign: 'left' }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
+              title="Alinear a la izquierda"
+            >
+              <AlignLeft className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => editor.chain().focus().setTextAlign('center').run()}
+              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive({ textAlign: 'center' }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
+              title="Centrar texto"
+            >
+              <AlignCenter className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => editor.chain().focus().setTextAlign('right').run()}
+              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive({ textAlign: 'right' }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
+              title="Alinear a la derecha"
+            >
+              <AlignRight className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => editor.chain().focus().setTextAlign('justify').run()}
+              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive({ textAlign: 'justify' }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
+              title="Justificar texto"
+            >
+              <AlignJustify className="w-4 h-4" />
+            </button>
+
+            <div className="w-[1px] h-4 bg-black/[0.1] dark:bg-white/[0.2] mx-0.5 sm:mx-1 shrink-0" />
+
             <button
               onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
               className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('heading', { level: 1 }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
@@ -1220,6 +1258,40 @@ export function DocEditor({
           >
             <CodeIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
+
+          <div className="w-[1px] h-3.5 bg-black/[0.1] dark:bg-white/[0.2] mx-0.5 shrink-0" />
+
+          {/* Alineación de texto en menú flotante al seleccionar */}
+          <button
+            onClick={() => editor.chain().focus().setTextAlign('left').run()}
+            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive({ textAlign: 'left' }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
+            title="Alinear a la izquierda"
+          >
+            <AlignLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          </button>
+          <button
+            onClick={() => editor.chain().focus().setTextAlign('center').run()}
+            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive({ textAlign: 'center' }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
+            title="Centrar texto"
+          >
+            <AlignCenter className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          </button>
+          <button
+            onClick={() => editor.chain().focus().setTextAlign('right').run()}
+            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive({ textAlign: 'right' }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
+            title="Alinear a la derecha"
+          >
+            <AlignRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          </button>
+          <button
+            onClick={() => editor.chain().focus().setTextAlign('justify').run()}
+            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive({ textAlign: 'justify' }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
+            title="Justificar texto"
+          >
+            <AlignJustify className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          </button>
+
+          <div className="w-[1px] h-3.5 bg-black/[0.1] dark:bg-white/[0.2] mx-0.5 shrink-0" />
           <button
             onClick={() => setIsBodyEmojiPickerOpen(true)}
             className="p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15"

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
@@ -269,6 +269,38 @@ export function Sidebar({
 
   const isCurrentSpacePrivate = Boolean(currentSpace.isPrivate)
 
+  // Drag and Drop state & refs (direct grab & move)
+  const [draggedDocId, setDraggedDocId] = useState<string | null>(null)
+  const [draggedFolderName, setDraggedFolderName] = useState<string | null>(null)
+  const [dropTarget, setDropTarget] = useState<{
+    type: 'doc' | 'folder' | 'folderHeader' | 'root'
+    id?: string
+    folder?: string | null
+    position?: 'before' | 'after' | 'inside'
+  } | null>(null)
+
+  const draggedDocIdRef = useRef<string | null>(null)
+  const draggedFolderNameRef = useRef<string | null>(null)
+
+  // Persisted folder order for current space
+  const [folderOrder, setFolderOrder] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(`seven_note_folder_order_${currentSpace.id}`)
+      return saved ? JSON.parse(saved) : []
+    } catch {
+      return []
+    }
+  })
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`seven_note_folder_order_${currentSpace.id}`)
+      setFolderOrder(saved ? JSON.parse(saved) : [])
+    } catch {
+      setFolderOrder([])
+    }
+  }, [currentSpace.id])
+
   // Live queries for tags in current space
   const dbTags = useLiveQuery(
     () => db.tags.where('spaceId').equals(currentSpace.id).toArray(),
@@ -375,6 +407,16 @@ export function Sidebar({
     }
   }
 
+  const getSortOrder = (item: WorkspaceItem) => {
+    return typeof item.sortOrder === 'number' && !isNaN(item.sortOrder) ? item.sortOrder : (item.createdAt || 0)
+  }
+
+  const sortByOrder = (a: WorkspaceItem, b: WorkspaceItem) => {
+    const diff = getSortOrder(a) - getSortOrder(b)
+    if (diff !== 0) return diff
+    return (a.createdAt || 0) - (b.createdAt || 0)
+  }
+
   // Filter: Visible items for activeMember (Team docs OR private docs owned by activeMember)
   const activeWorkspaces = workspaces.filter(
     (w) =>
@@ -382,7 +424,7 @@ export function Sidebar({
       (w.spaceId || DEFAULT_SPACE_ID) === currentSpace.id &&
       isWorkspaceVisible(w, activeMember, authUser?.id)
   )
-  const privateDocs = activeWorkspaces.filter((w) => w.isPrivate)
+  const privateDocs = activeWorkspaces.filter((w) => w.isPrivate).sort(sortByOrder)
   const teamDocs = activeWorkspaces.filter((w) => !w.isPrivate)
   const favorites = activeWorkspaces.filter((w) => w.isFavorite)
 
@@ -401,9 +443,331 @@ export function Sidebar({
     )
   )
 
-  const rootPages = teamDocs.filter(
-    (w) => !w.parentId && (!w.folder || !w.folder.trim())
-  )
+  const orderedFolders = useMemo(() => {
+    const list = [...allFolders]
+    if (!folderOrder || folderOrder.length === 0) return list
+    return list.sort((a, b) => {
+      const idxA = folderOrder.indexOf(a)
+      const idxB = folderOrder.indexOf(b)
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB
+      if (idxA !== -1) return -1
+      if (idxB !== -1) return 1
+      return a.localeCompare(b)
+    })
+  }, [allFolders, folderOrder])
+
+  const rootPages = teamDocs
+    .filter((w) => !w.parentId && (!w.folder || !w.folder.trim()))
+    .sort(sortByOrder)
+
+  // Direct grab & move Drag & Drop Handlers
+  const handleDocDragStart = (e: React.DragEvent, doc: WorkspaceItem) => {
+    draggedDocIdRef.current = doc.id
+    draggedFolderNameRef.current = null
+    e.dataTransfer.setData('text/plain', doc.id)
+    e.dataTransfer.setData('application/seven-note-doc', doc.id)
+    e.dataTransfer.effectAllowed = 'move'
+
+    // Defer state update so HTML5 drag ghost image is created without layout flickering
+    setTimeout(() => {
+      setDraggedDocId(doc.id)
+      setDraggedFolderName(null)
+    }, 0)
+  }
+
+  const handleDocDragEnd = () => {
+    draggedDocIdRef.current = null
+    draggedFolderNameRef.current = null
+    setDraggedDocId(null)
+    setDraggedFolderName(null)
+    setDropTarget(null)
+  }
+
+  const handleDocDragOver = (
+    e: React.DragEvent,
+    targetDoc: WorkspaceItem,
+    targetFolder: string | null
+  ) => {
+    const currentDraggedId = draggedDocIdRef.current || draggedDocId
+    if (!currentDraggedId || currentDraggedId === targetDoc.id) return
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+
+    const rect = e.currentTarget.getBoundingClientRect()
+    const relY = e.clientY - rect.top
+    const position: 'before' | 'after' = relY < rect.height / 2 ? 'before' : 'after'
+
+    if (
+      dropTarget?.type !== 'doc' ||
+      dropTarget?.id !== targetDoc.id ||
+      dropTarget?.position !== position ||
+      dropTarget?.folder !== targetFolder
+    ) {
+      setDropTarget({
+        type: 'doc',
+        id: targetDoc.id,
+        folder: targetFolder,
+        position
+      })
+    }
+  }
+
+  const handleDocDrop = async (
+    e: React.DragEvent,
+    targetDoc: WorkspaceItem,
+    targetFolder: string | null
+  ) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const movingDocId =
+      draggedDocIdRef.current ||
+      e.dataTransfer.getData('application/seven-note-doc') ||
+      e.dataTransfer.getData('text/plain') ||
+      draggedDocId
+    const currentPosition = dropTarget?.position || 'after'
+
+    draggedDocIdRef.current = null
+    draggedFolderNameRef.current = null
+    setDraggedDocId(null)
+    setDraggedFolderName(null)
+    setDropTarget(null)
+
+    if (!movingDocId || movingDocId === targetDoc.id) return
+
+    const movingDoc = workspaces.find((w) => w.id === movingDocId)
+    if (!movingDoc) return
+
+    // Prevent moving parent page into its child
+    if (targetDoc.parentId === movingDocId) return
+
+    // Determine target group docs
+    let groupDocs: WorkspaceItem[] = []
+    if (movingDoc.isPrivate) {
+      groupDocs = activeWorkspaces.filter((w) => w.isPrivate)
+    } else if (targetDoc.parentId) {
+      groupDocs = activeWorkspaces.filter((w) => w.parentId === targetDoc.parentId)
+    } else if (targetFolder) {
+      groupDocs = teamDocs.filter((w) => w.folder === targetFolder)
+    } else {
+      groupDocs = teamDocs.filter((w) => !w.parentId && (!w.folder || !w.folder.trim()))
+    }
+
+    // Sort according to current order
+    groupDocs.sort(sortByOrder)
+
+    // Remove movingDoc if already in this group
+    groupDocs = groupDocs.filter((w) => w.id !== movingDocId)
+
+    // Insert movingDoc at target position relative to targetDoc
+    const targetIdx = groupDocs.findIndex((w) => w.id === targetDoc.id)
+    const insertIdx = targetIdx === -1
+      ? groupDocs.length
+      : currentPosition === 'before'
+        ? targetIdx
+        : targetIdx + 1
+
+    const updatedMovingDoc: WorkspaceItem = {
+      ...movingDoc,
+      folder: movingDoc.isPrivate ? null : targetFolder,
+      parentId: targetDoc.parentId || null
+    }
+    groupDocs.splice(insertIdx, 0, updatedMovingDoc)
+
+    // Assign spaced sortOrder values to ensure persistent order
+    const now = Date.now()
+    const updates = groupDocs.map((w, idx) => ({
+      key: w.id,
+      changes: {
+        folder: movingDoc.isPrivate ? null : targetFolder,
+        parentId: targetDoc.parentId || null,
+        sortOrder: (idx + 1) * 1000,
+        updatedAt: now,
+        syncStatus: 'pending' as const
+      }
+    }))
+
+    try {
+      await db.workspaces.bulkUpdate(updates)
+      syncEngine.scheduleSync(500)
+    } catch (err) {
+      console.error('Error reordering document', err)
+    }
+  }
+
+  // Folder header drag and drop handlers
+  const handleFolderHeaderDragOver = (e: React.DragEvent, folderName: string) => {
+    const currentDraggedDoc = draggedDocIdRef.current || draggedDocId
+    const currentDraggedFolder = draggedFolderNameRef.current || draggedFolderName
+    if (!currentDraggedDoc && !currentDraggedFolder) return
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+
+    if (currentDraggedDoc) {
+      if (dropTarget?.type !== 'folderHeader' || dropTarget?.folder !== folderName) {
+        setDropTarget({
+          type: 'folderHeader',
+          folder: folderName,
+          position: 'inside'
+        })
+      }
+    } else if (currentDraggedFolder && currentDraggedFolder !== folderName) {
+      const rect = e.currentTarget.getBoundingClientRect()
+      const relY = e.clientY - rect.top
+      const position: 'before' | 'after' = relY < rect.height / 2 ? 'before' : 'after'
+      if (dropTarget?.folder !== folderName || dropTarget?.position !== position) {
+        setDropTarget({
+          type: 'folder',
+          folder: folderName,
+          position
+        })
+      }
+    }
+  }
+
+  const handleFolderHeaderDrop = async (e: React.DragEvent, folderName: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const movingDocId =
+      draggedDocIdRef.current ||
+      e.dataTransfer.getData('application/seven-note-doc') ||
+      e.dataTransfer.getData('text/plain') ||
+      draggedDocId
+    const movingFolder = draggedFolderNameRef.current || draggedFolderName
+    const currentPosition = dropTarget?.position
+
+    draggedDocIdRef.current = null
+    draggedFolderNameRef.current = null
+    setDraggedDocId(null)
+    setDraggedFolderName(null)
+    setDropTarget(null)
+
+    if (movingDocId) {
+      const movingDoc = workspaces.find((w) => w.id === movingDocId)
+      if (!movingDoc) return
+
+      const existingInFolder = teamDocs
+        .filter((w) => w.folder === folderName && w.id !== movingDocId)
+        .sort(sortByOrder)
+
+      const maxOrder = existingInFolder.length > 0
+        ? Math.max(...existingInFolder.map((w, idx) => (typeof w.sortOrder === 'number' ? w.sortOrder : (idx + 1) * 1000)))
+        : 0
+
+      await db.workspaces.update(movingDocId, {
+        folder: folderName,
+        parentId: null,
+        sortOrder: maxOrder + 1000,
+        updatedAt: Date.now(),
+        syncStatus: 'pending'
+      })
+      syncEngine.scheduleSync(500)
+      setFolderOpenMap((prev) => ({ ...prev, [folderName]: true }))
+    } else if (movingFolder && movingFolder !== folderName) {
+      const currentList = [...orderedFolders]
+      const filtered = currentList.filter((f) => f !== movingFolder)
+      const toIndex = filtered.indexOf(folderName)
+      const insertIndex = toIndex === -1
+        ? filtered.length
+        : currentPosition === 'before'
+          ? toIndex
+          : toIndex + 1
+
+      filtered.splice(insertIndex, 0, movingFolder)
+      setFolderOrder(filtered)
+      try {
+        localStorage.setItem(`seven_note_folder_order_${currentSpace.id}`, JSON.stringify(filtered))
+      } catch (err) {
+        console.warn('Error saving folder order', err)
+      }
+    }
+  }
+
+  const handleFolderDragStart = (e: React.DragEvent, folderName: string) => {
+    draggedFolderNameRef.current = folderName
+    draggedDocIdRef.current = null
+    e.dataTransfer.setData('application/seven-note-folder', folderName)
+    e.dataTransfer.setData('text/plain', folderName)
+    e.dataTransfer.effectAllowed = 'move'
+    setTimeout(() => {
+      setDraggedFolderName(folderName)
+      setDraggedDocId(null)
+    }, 0)
+  }
+
+  const handleFolderDragEnd = () => {
+    draggedFolderNameRef.current = null
+    draggedDocIdRef.current = null
+    setDraggedFolderName(null)
+    setDraggedDocId(null)
+    setDropTarget(null)
+  }
+
+  const handleEmptyFolderDragOver = (e: React.DragEvent, folderName: string) => {
+    if (!draggedDocIdRef.current && !draggedDocId) return
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+    if (dropTarget?.type !== 'folderHeader' || dropTarget?.folder !== folderName) {
+      setDropTarget({
+        type: 'folderHeader',
+        folder: folderName,
+        position: 'inside'
+      })
+    }
+  }
+
+  const handleRootHeaderDragOver = (e: React.DragEvent) => {
+    if (!draggedDocIdRef.current && !draggedDocId) return
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = 'move'
+    if (dropTarget?.type !== 'root') {
+      setDropTarget({
+        type: 'root',
+        position: 'inside'
+      })
+    }
+  }
+
+  const handleRootHeaderDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const movingDocId =
+      draggedDocIdRef.current ||
+      e.dataTransfer.getData('application/seven-note-doc') ||
+      e.dataTransfer.getData('text/plain') ||
+      draggedDocId
+
+    draggedDocIdRef.current = null
+    setDraggedDocId(null)
+    setDropTarget(null)
+    if (!movingDocId) return
+
+    const movingDoc = workspaces.find((w) => w.id === movingDocId)
+    if (!movingDoc || (!movingDoc.folder && !movingDoc.parentId)) return
+
+    const existingRoot = teamDocs
+      .filter((w) => !w.parentId && (!w.folder || !w.folder.trim()) && w.id !== movingDocId)
+      .sort(sortByOrder)
+
+    const maxOrder = existingRoot.length > 0
+      ? Math.max(...existingRoot.map((w, idx) => (typeof w.sortOrder === 'number' ? w.sortOrder : (idx + 1) * 1000)))
+      : 0
+
+    await db.workspaces.update(movingDocId, {
+      folder: null,
+      parentId: null,
+      sortOrder: maxOrder + 1000,
+      updatedAt: Date.now(),
+      syncStatus: 'pending'
+    })
+    syncEngine.scheduleSync(500)
+    toast.success('Documento movido fuera de la carpeta')
+  }
 
   const toggleFolder = (folderName: string) => {
     setFolderOpenMap((prev) => ({
@@ -905,16 +1269,38 @@ export function Sidebar({
               ) : (
                 privateDocs.map((doc) => {
                   const isActive = doc.id === currentWorkspaceId
+                  const isBeingDragged = draggedDocId === doc.id
+                  const isDropTargetBefore = dropTarget?.id === doc.id && dropTarget?.position === 'before'
+                  const isDropTargetAfter = dropTarget?.id === doc.id && dropTarget?.position === 'after'
+
                   return (
                     <div
                       key={`priv-${doc.id}`}
+                      draggable={true}
+                      onDragStart={(e) => handleDocDragStart(e, doc)}
+                      onDragEnd={handleDocDragEnd}
+                      onDragOver={(e) => handleDocDragOver(e, doc, null)}
+                      onDrop={(e) => handleDocDrop(e, doc, null)}
                       onClick={() => onSelectWorkspace(doc.id)}
-                      className={`group flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-pointer transition ${
-                        isActive
+                      className={`group relative flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-grab active:cursor-grabbing transition select-none ${
+                        isBeingDragged
+                          ? 'opacity-40 bg-black/[0.04] dark:bg-white/[0.04] scale-[0.98]'
+                          : isActive
                           ? 'bg-amber-500/10 dark:bg-amber-500/15 text-amber-900 dark:text-amber-200 font-semibold shadow-xs border border-amber-500/30'
                           : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-black/[0.03] dark:hover:bg-white/[0.05] font-medium'
                       }`}
                     >
+                      {isDropTargetBefore && (
+                        <div className="absolute -top-1 left-1.5 right-1.5 h-[3px] bg-amber-500 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(245,158,11,1)]">
+                          <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-amber-500" />
+                        </div>
+                      )}
+                      {isDropTargetAfter && (
+                        <div className="absolute -bottom-1 left-1.5 right-1.5 h-[3px] bg-amber-500 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(245,158,11,1)]">
+                          <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-amber-500" />
+                        </div>
+                      )}
+
                       <div className="flex items-center gap-2 min-w-0 flex-1">
                         <DocumentItemIcon
                           icon={doc.icon}
@@ -926,9 +1312,12 @@ export function Sidebar({
                             setEmojiPickerTarget({ id: doc.id, type: 'doc', currentIcon: doc.icon })
                           }}
                         />
-                        <span className="truncate flex-1 text-xs">{renderWithAppleEmoji(doc.title || 'Untitled')}</span>
+                        <span className="truncate flex-1 text-xs select-none pointer-events-none">{renderWithAppleEmoji(doc.title || 'Untitled')}</span>
                       </div>
-                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div
+                        className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                        onMouseDown={(e) => e.stopPropagation()}
+                      >
                         <button
                           onClick={(e) => handleTogglePrivateWorkspace(e, doc)}
                           className="p-1 rounded text-neutral-400 hover:text-blue-500"
@@ -963,7 +1352,14 @@ export function Sidebar({
         <div>
           <div
             onClick={() => setPagesOpen(!pagesOpen)}
-            className="flex items-center justify-between px-2.5 py-1 text-[11px] font-semibold tracking-wider uppercase text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 cursor-pointer transition group"
+            onDragOver={handleRootHeaderDragOver}
+            onDrop={handleRootHeaderDrop}
+            className={`flex items-center justify-between px-2.5 py-1 text-[11px] font-semibold tracking-wider uppercase text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 cursor-pointer transition group rounded-lg ${
+              dropTarget?.type === 'root'
+                ? 'bg-blue-500/15 dark:bg-blue-500/25 ring-1 ring-blue-500/50 text-blue-600 dark:text-blue-400'
+                : ''
+            }`}
+            title="Arrastra una nota aquí para sacarla a la raíz"
           >
             <div className="flex items-center gap-1.5">
               {pagesOpen ? (
@@ -972,8 +1368,13 @@ export function Sidebar({
                 <CaretRight size={13} className="text-neutral-400 transition-transform" />
               )}
               <span>Documentos (Equipo)</span>
+              {dropTarget?.type === 'root' && (
+                <span className="text-[9px] bg-blue-500 text-white px-1.5 py-0.2 rounded-full font-medium ml-1">
+                  Mover a raíz
+                </span>
+              )}
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1" onMouseDown={(e) => e.stopPropagation()}>
               <button
                 onClick={(e) => {
                   e.stopPropagation()
@@ -1034,16 +1435,47 @@ export function Sidebar({
               )}
 
               {/* Dynamic folders list */}
-              {allFolders.map((folderName) => {
-                const folderDocs = teamDocs.filter((w) => w.folder === folderName)
+              {orderedFolders.map((folderName) => {
+                const folderDocs = teamDocs
+                  .filter((w) => w.folder === folderName)
+                  .sort(sortByOrder)
                 const isFolderOpen = folderOpenMap[folderName] !== false
+                const isFolderTarget = dropTarget?.type === 'folderHeader' && dropTarget?.folder === folderName
+                const isFolderDropBefore = dropTarget?.type === 'folder' && dropTarget?.folder === folderName && dropTarget?.position === 'before'
+                const isFolderDropAfter = dropTarget?.type === 'folder' && dropTarget?.folder === folderName && dropTarget?.position === 'after'
+                const isBeingDraggedFolder = draggedFolderName === folderName
 
                 return (
-                  <div key={`folder-${folderName}`} className="mb-1">
+                  <div
+                    key={`folder-${folderName}`}
+                    className="mb-1 relative"
+                    onDragOver={(e) => handleFolderHeaderDragOver(e, folderName)}
+                    onDrop={(e) => handleFolderHeaderDrop(e, folderName)}
+                  >
                     <div
+                      draggable={true}
+                      onDragStart={(e) => handleFolderDragStart(e, folderName)}
+                      onDragEnd={handleFolderDragEnd}
                       onClick={() => toggleFolder(folderName)}
-                      className="group flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-pointer hover:bg-black/[0.03] dark:hover:bg-white/[0.05] text-neutral-600 dark:text-neutral-400 font-medium transition"
+                      className={`group relative flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-grab active:cursor-grabbing hover:bg-black/[0.03] dark:hover:bg-white/[0.05] text-neutral-600 dark:text-neutral-400 font-medium transition select-none ${
+                        isBeingDraggedFolder ? 'opacity-40 bg-black/[0.04] dark:bg-white/[0.04]' : ''
+                      } ${
+                        isFolderTarget
+                          ? 'bg-blue-500/15 dark:bg-blue-500/25 ring-1 ring-blue-500/60 text-blue-600 dark:text-blue-300'
+                          : ''
+                      }`}
                     >
+                      {isFolderDropBefore && (
+                        <div className="absolute -top-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
+                          <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
+                        </div>
+                      )}
+                      {isFolderDropAfter && (
+                        <div className="absolute -bottom-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
+                          <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
+                        </div>
+                      )}
+
                       <div className="flex items-center gap-2 min-w-0 flex-1">
                         {isFolderOpen ? (
                           <CaretDown size={11} className="text-neutral-400 shrink-0" />
@@ -1051,9 +1483,17 @@ export function Sidebar({
                           <CaretRight size={11} className="text-neutral-400 shrink-0" />
                         )}
                         <Folder size={15} weight="duotone" className="text-neutral-700 dark:text-neutral-300 shrink-0" />
-                        <span className="truncate text-xs font-semibold">{folderName}</span>
+                        <span className="truncate text-xs font-semibold select-none pointer-events-none">{folderName}</span>
+                        {isFolderTarget && (
+                          <span className="text-[9px] bg-blue-500 text-white px-1.5 py-0.2 rounded-full font-medium ml-1">
+                            Mover aquí
+                          </span>
+                        )}
                       </div>
-                      <div className="flex items-center gap-1">
+                      <div
+                        className="flex items-center gap-1"
+                        onMouseDown={(e) => e.stopPropagation()}
+                      >
                         <span className="text-[10px] text-neutral-400 font-mono">
                           {folderDocs.length}
                         </span>
@@ -1093,20 +1533,52 @@ export function Sidebar({
                       </div>
                     </div>
 
+                    {isFolderOpen && folderDocs.length === 0 && (
+                      <div
+                        onDragOver={(e) => handleEmptyFolderDragOver(e, folderName)}
+                        onDrop={(e) => handleFolderHeaderDrop(e, folderName)}
+                        className="pl-6 py-2 text-[11px] text-neutral-400 italic rounded-lg border border-dashed border-black/10 dark:border-white/10 my-1 ml-3 select-none"
+                      >
+                        Carpeta vacía (arrastra notas aquí)
+                      </div>
+                    )}
+
                     {isFolderOpen && folderDocs.length > 0 && (
                       <div className="pl-4 space-y-0.5 border-l border-black/[0.04] dark:border-white/[0.06] ml-3.5 my-0.5">
                         {folderDocs.map((doc) => {
                           const isActive = doc.id === currentWorkspaceId
+                          const isBeingDragged = draggedDocId === doc.id
+                          const isDropTargetBefore = dropTarget?.id === doc.id && dropTarget?.position === 'before'
+                          const isDropTargetAfter = dropTarget?.id === doc.id && dropTarget?.position === 'after'
+
                           return (
                             <div
                               key={doc.id}
+                              draggable={true}
+                              onDragStart={(e) => handleDocDragStart(e, doc)}
+                              onDragEnd={handleDocDragEnd}
+                              onDragOver={(e) => handleDocDragOver(e, doc, folderName)}
+                              onDrop={(e) => handleDocDrop(e, doc, folderName)}
                               onClick={() => onSelectWorkspace(doc.id)}
-                              className={`group flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-pointer transition ${
-                                isActive
+                              className={`group relative flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-grab active:cursor-grabbing transition select-none ${
+                                isBeingDragged
+                                  ? 'opacity-40 bg-black/[0.04] dark:bg-white/[0.04] scale-[0.98]'
+                                  : isActive
                                   ? 'bg-white dark:bg-[#202024] text-neutral-900 dark:text-neutral-100 font-semibold shadow-xs border border-black/[0.04] dark:border-white/[0.06]'
                                   : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-black/[0.03] dark:hover:bg-white/[0.05] font-medium'
                               }`}
                             >
+                              {isDropTargetBefore && (
+                                <div className="absolute -top-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
+                                  <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
+                                </div>
+                              )}
+                              {isDropTargetAfter && (
+                                <div className="absolute -bottom-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
+                                  <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
+                                </div>
+                              )}
+
                               <div className="flex items-center gap-2 min-w-0 flex-1">
                                 <DocumentItemIcon
                                   icon={doc.icon}
@@ -1117,18 +1589,23 @@ export function Sidebar({
                                     setEmojiPickerTarget({ id: doc.id, type: 'doc', currentIcon: doc.icon })
                                   }}
                                 />
-                                <span className="truncate flex-1 text-xs">{renderWithAppleEmoji(doc.title || 'Untitled')}</span>
+                                <span className="truncate flex-1 text-xs select-none pointer-events-none">{renderWithAppleEmoji(doc.title || 'Untitled')}</span>
                               </div>
-                              <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div
+                                className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                                onMouseDown={(e) => e.stopPropagation()}
+                              >
                                 <button
                                   onClick={(e) => handleToggleFavorite(e, doc)}
                                   className="p-1 rounded text-neutral-400 hover:text-amber-500"
+                                  title="Favorito"
                                 >
                                   <Star size={13} weight={doc.isFavorite ? 'fill' : 'duotone'} className={doc.isFavorite ? 'text-amber-500' : 'text-neutral-400'} />
                                 </button>
                                 <button
                                   onClick={(e) => handleDeleteWorkspace(e, doc.id)}
                                   className="p-1 rounded text-neutral-400 hover:text-rose-500"
+                                  title="Eliminar"
                                 >
                                   <Trash size={13} weight="duotone" />
                                 </button>
@@ -1145,18 +1622,41 @@ export function Sidebar({
               {/* Root pages */}
               {rootPages.map((page) => {
                 const isActive = page.id === currentWorkspaceId
-                const subpages = activeWorkspaces.filter((w) => w.parentId === page.id)
+                const subpages = activeWorkspaces
+                  .filter((w) => w.parentId === page.id)
+                  .sort(sortByOrder)
+                const isBeingDragged = draggedDocId === page.id
+                const isDropTargetBefore = dropTarget?.id === page.id && dropTarget?.position === 'before'
+                const isDropTargetAfter = dropTarget?.id === page.id && dropTarget?.position === 'after'
 
                 return (
                   <div key={page.id} className="space-y-0.5">
                     <div
+                      draggable={true}
+                      onDragStart={(e) => handleDocDragStart(e, page)}
+                      onDragEnd={handleDocDragEnd}
+                      onDragOver={(e) => handleDocDragOver(e, page, null)}
+                      onDrop={(e) => handleDocDrop(e, page, null)}
                       onClick={() => onSelectWorkspace(page.id)}
-                      className={`group flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-pointer transition ${
-                        isActive
+                      className={`group relative flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-grab active:cursor-grabbing transition select-none ${
+                        isBeingDragged
+                          ? 'opacity-40 bg-black/[0.04] dark:bg-white/[0.04] scale-[0.98]'
+                          : isActive
                           ? 'bg-white dark:bg-[#202024] text-neutral-900 dark:text-neutral-100 font-semibold shadow-xs border border-black/[0.04] dark:border-white/[0.06]'
                           : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-black/[0.03] dark:hover:bg-white/[0.05] font-medium'
                       }`}
                     >
+                      {isDropTargetBefore && (
+                        <div className="absolute -top-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
+                          <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
+                        </div>
+                      )}
+                      {isDropTargetAfter && (
+                        <div className="absolute -bottom-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
+                          <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
+                        </div>
+                      )}
+
                       <div className="flex items-center gap-2 min-w-0 flex-1">
                         <DocumentItemIcon
                           icon={page.icon}
@@ -1167,9 +1667,12 @@ export function Sidebar({
                             setEmojiPickerTarget({ id: page.id, type: 'doc', currentIcon: page.icon })
                           }}
                         />
-                        <span className="truncate flex-1">{renderWithAppleEmoji(page.title || 'Untitled')}</span>
+                        <span className="truncate flex-1 select-none pointer-events-none">{renderWithAppleEmoji(page.title || 'Untitled')}</span>
                       </div>
-                      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div
+                        className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                        onMouseDown={(e) => e.stopPropagation()}
+                      >
                         <button
                           onClick={(e) => {
                             e.stopPropagation()
@@ -1202,16 +1705,38 @@ export function Sidebar({
                       <div className="pl-4 space-y-0.5 border-l border-black/[0.04] dark:border-white/[0.06] ml-3.5 my-0.5">
                         {subpages.map((sub) => {
                           const isSubActive = sub.id === currentWorkspaceId
+                          const isSubBeingDragged = draggedDocId === sub.id
+                          const isSubDropTargetBefore = dropTarget?.id === sub.id && dropTarget?.position === 'before'
+                          const isSubDropTargetAfter = dropTarget?.id === sub.id && dropTarget?.position === 'after'
+
                           return (
                             <div
                               key={sub.id}
+                              draggable={true}
+                              onDragStart={(e) => handleDocDragStart(e, sub)}
+                              onDragEnd={handleDocDragEnd}
+                              onDragOver={(e) => handleDocDragOver(e, sub, null)}
+                              onDrop={(e) => handleDocDrop(e, sub, null)}
                               onClick={() => onSelectWorkspace(sub.id)}
-                              className={`group flex items-center justify-between px-2.5 py-1 rounded-xl cursor-pointer transition ${
-                                isSubActive
+                              className={`group relative flex items-center justify-between px-2.5 py-1 rounded-xl cursor-grab active:cursor-grabbing transition select-none ${
+                                isSubBeingDragged
+                                  ? 'opacity-40 bg-black/[0.04] dark:bg-white/[0.04] scale-[0.98]'
+                                  : isSubActive
                                   ? 'bg-white dark:bg-[#202024] text-neutral-900 dark:text-neutral-100 font-semibold shadow-xs border border-black/[0.04] dark:border-white/[0.06]'
                                   : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-black/[0.03] dark:hover:bg-white/[0.05] font-medium'
                               }`}
                             >
+                              {isSubDropTargetBefore && (
+                                <div className="absolute -top-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
+                                  <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
+                                </div>
+                              )}
+                              {isSubDropTargetAfter && (
+                                <div className="absolute -bottom-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
+                                  <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
+                                </div>
+                              )}
+
                               <div className="flex items-center gap-2 min-w-0 flex-1">
                                 <DocumentItemIcon
                                   icon={sub.icon}
@@ -1223,14 +1748,20 @@ export function Sidebar({
                                     setEmojiPickerTarget({ id: sub.id, type: 'doc', currentIcon: sub.icon })
                                   }}
                                 />
-                                <span className="truncate flex-1 text-xs">{renderWithAppleEmoji(sub.title || 'Untitled')}</span>
+                                <span className="truncate flex-1 text-xs select-none pointer-events-none">{renderWithAppleEmoji(sub.title || 'Untitled')}</span>
                               </div>
-                              <button
-                                onClick={(e) => handleDeleteWorkspace(e, sub.id)}
-                                className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-neutral-400 hover:text-rose-500"
+                              <div
+                                className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                                onMouseDown={(e) => e.stopPropagation()}
                               >
-                                <Trash size={13} weight="duotone" />
-                              </button>
+                                <button
+                                  onClick={(e) => handleDeleteWorkspace(e, sub.id)}
+                                  className="p-0.5 rounded text-neutral-400 hover:text-rose-500"
+                                  title="Eliminar"
+                                >
+                                  <Trash size={13} weight="duotone" />
+                                </button>
+                              </div>
                             </div>
                           )
                         })}
