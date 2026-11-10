@@ -327,8 +327,10 @@ function MainApp() {
       setSidebarOpen(false)
     }
     const ws = workspaces.find((w) => w.id === wsId)
-    if (ws?.spaceId && ws.spaceId !== currentSpaceId) {
-      setCurrentSpaceId(ws.spaceId)
+    const targetSpaceId = ws?.spaceId || DEFAULT_SPACE_ID
+    if (targetSpaceId !== currentSpaceId) {
+      setCurrentSpaceId(targetSpaceId)
+      localStorage.setItem('seven_note_active_space_id', targetSpaceId)
     }
     setCurrentWorkspaceId(wsId)
     setViewMode(ws?.viewMode || 'doc')
