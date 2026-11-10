@@ -1502,9 +1502,9 @@ function CanvasBoardInner({
       )
 
       if (isPdf) {
-        clean = cleanPdfContent(html, text || '')
+        clean = cleanPdfContent(html || '', text || '')
       } else if (html && hasHtmlFormatting(html)) {
-        clean = cleanPastedHtml(html)
+        clean = cleanPastedHtml(html || '')
       }
 
       if (clean && clean.trim()) {

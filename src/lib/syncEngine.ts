@@ -279,7 +279,9 @@ class SyncEngine {
               customProperties: w.customProperties,
               databaseData: w.databaseData,
               canvasGridVariant: w.canvasGridVariant,
-              sortOrder: w.sortOrder
+              sortOrder: w.sortOrder,
+              viewedBy: w.viewedBy,
+              isNewItem: w.isNewItem
             }
           }))
 
@@ -512,7 +514,9 @@ class SyncEngine {
               customProperties: meta.customProperties,
               databaseData: meta.databaseData,
               canvasGridVariant: meta.canvasGridVariant,
-              sortOrder: meta.sortOrder ?? (rw as any).sort_order ?? (rw as any).sortOrder
+              sortOrder: meta.sortOrder ?? (rw as any).sort_order ?? (rw as any).sortOrder,
+              viewedBy: meta.viewedBy,
+              isNewItem: meta.isNewItem
             })
           }
         }

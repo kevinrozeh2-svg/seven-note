@@ -11,6 +11,8 @@ import {
 } from 'lucide-react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, type WorkspaceItem, type CanvasNodeItem } from '../../db'
+import { isItemUnread, NewBadge, useUnreadTrigger } from '../../lib/unreadTracker'
+import { getCurrentMember } from '../../lib/teamAuth'
 import { AppleEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
 import { DocThumbnailPreview } from '../ui/DocThumbnailPreview'
 
@@ -85,6 +87,8 @@ export const AllDocsPage: React.FC<AllDocsPageProps> = ({
   const [viewLayout, setViewLayout] = useState<ViewModeLayout>('list')
   const [searchQuery, setSearchQuery] = useState('')
   const [openMenuDocId, setOpenMenuDocId] = useState<string | null>(null)
+  useUnreadTrigger()
+  const currentMember = getCurrentMember()
 
   // Fetch canvas nodes for real visual thumbnails
   const allCanvasNodes =
@@ -358,6 +362,9 @@ export const AllDocsPage: React.FC<AllDocsPageProps> = ({
                                 <span className="font-semibold text-xs text-neutral-100 truncate">
                                   {renderWithAppleEmoji(doc.title || 'Sin título')}
                                 </span>
+                                {isItemUnread(doc, 'workspace', currentMember) && (
+                                  <NewBadge className="ml-1.5" />
+                                )}
                               </div>
                               <button
                                 onClick={(e) => onToggleFavorite(e, doc)}
@@ -428,6 +435,9 @@ export const AllDocsPage: React.FC<AllDocsPageProps> = ({
                             <span className="font-semibold text-sm text-neutral-100 truncate">
                               {renderWithAppleEmoji(doc.title || 'Sin título')}
                             </span>
+                            {isItemUnread(doc, 'workspace', currentMember) && (
+                              <NewBadge className="ml-1.5" />
+                            )}
                             {doc.isJournal && (
                               <span className="text-[10px] px-1.5 py-0.2 bg-neutral-800 text-neutral-400 rounded border border-neutral-700">
                                 Diario

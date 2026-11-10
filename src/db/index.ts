@@ -19,6 +19,8 @@ export interface SpaceItem {
   ownerName?: string
   userId?: string
   createdBy?: string
+  viewedBy?: string[]
+  isNewItem?: boolean
 }
 
 export interface CustomPropertyItem {
@@ -107,6 +109,11 @@ export interface WorkspaceItem {
 
   // Canvas visual configuration
   canvasGridVariant?: 'dots' | 'lines' | 'none'
+
+  // New item notification / unread tracker
+  viewedBy?: string[]
+  isNewItem?: boolean
+  userId?: string
 }
 
 export type CanvasNodeType =
@@ -707,6 +714,8 @@ export async function createSpace(
   const spaceId = `space-${crypto.randomUUID()}`
   const trimmedName = name.trim() || 'Nuevo Espacio'
 
+  const creatorTokens = [ownerMember, ownerName, userId].filter(Boolean) as string[]
+
   const space: SpaceItem = {
     id: spaceId,
     name: trimmedName,
@@ -719,7 +728,9 @@ export async function createSpace(
     ownerMember: ownerMember || undefined,
     ownerName: ownerName || undefined,
     userId: userId || undefined,
-    createdBy: ownerName || ownerMember || undefined
+    createdBy: ownerName || ownerMember || undefined,
+    viewedBy: creatorTokens,
+    isNewItem: true
   }
 
   await db.spaces.add(space)
@@ -746,6 +757,9 @@ export async function createSpace(
     ownerMember: ownerMember || undefined,
     ownerName: ownerName || undefined,
     createdBy: ownerName || ownerMember || undefined,
+    userId: userId || undefined,
+    viewedBy: creatorTokens,
+    isNewItem: true,
     activeProperties: [
       'tags',
       'createdAt',

@@ -184,6 +184,7 @@ create table if not exists public.seven_spaces (
 
 alter table public.seven_spaces add column if not exists is_private boolean not null default false;
 alter table public.seven_spaces add column if not exists owner_member text;
+alter table public.seven_spaces add column if not exists viewed_by text[];
 
 -- Tabla de Páginas / Documentos / Tableros
 create table if not exists public.seven_workspaces (

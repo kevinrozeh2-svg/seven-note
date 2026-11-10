@@ -35,6 +35,7 @@ import {
   updateSpace,
   deleteSpace
 } from './db'
+import { markItemAsRead } from './lib/unreadTracker'
 import { syncEngine, type SyncEngineStatus } from './lib/syncEngine'
 import { Sidebar } from './components/sidebar/Sidebar'
 import { DocEditor } from './components/editor/DocEditor'
@@ -268,6 +269,16 @@ function MainApp() {
     localStorage.setItem('seven_note_workbench_active_tab', activeTabId)
   }, [activeTabId])
 
+  // Mark currently open note and space as read for the active member
+  useEffect(() => {
+    if (currentWorkspaceId) {
+      markItemAsRead(currentWorkspaceId, 'workspace', currentMember, authUser?.id)
+    }
+    if (currentSpaceId) {
+      markItemAsRead(currentSpaceId, 'space', currentMember, authUser?.id)
+    }
+  }, [currentWorkspaceId, currentSpaceId, currentMember, authUser?.id])
+
   // Synchronize and deduplicate tabs whenever workspaces are loaded or changed
   useEffect(() => {
     if (workspaces.length === 0) return
@@ -331,9 +342,11 @@ function MainApp() {
     if (targetSpaceId !== currentSpaceId) {
       setCurrentSpaceId(targetSpaceId)
       localStorage.setItem('seven_note_active_space_id', targetSpaceId)
+      markItemAsRead(targetSpaceId, 'space', currentMember, authUser?.id)
     }
     setCurrentWorkspaceId(wsId)
     setViewMode(ws?.viewMode || 'doc')
+    markItemAsRead(wsId, 'workspace', currentMember, authUser?.id)
 
     setTabs((prev) => {
       const existing = prev.find((t) => t.workspaceId === wsId && (!t.viewType || t.viewType === 'doc'))
@@ -445,7 +458,10 @@ function MainApp() {
       syncStatus: 'pending',
       ownerMember: currentMember.id,
       ownerName: currentMember.name,
-      createdBy: currentMember.name
+      createdBy: currentMember.name,
+      userId: authUser?.id || undefined,
+      viewedBy: [currentMember.id, currentMember.fullName || currentMember.name, currentMember.email, authUser?.id].filter(Boolean) as string[],
+      isNewItem: true
     })
     const newTab: WorkbenchTab = {
       id: `tab-${crypto.randomUUID()}`,
@@ -693,22 +709,51 @@ function MainApp() {
   const currentWorkspace: WorkspaceItem | undefined =
     activeWorkspaces.find((w) => w.id === currentWorkspaceId) || activeWorkspaces[0]
 
+  // Workspaces from all public spaces (for bidirectional links and cross-workspace referencing)
+  const publicWorkspaces = useMemo(() => {
+    const privateSpaceIds = new Set(
+      spaces.filter((s: SpaceItem) => Boolean(s.isPrivate) && !s.isDeleted).map((s: SpaceItem) => s.id)
+    )
+
+    const map = new Map<string, WorkspaceItem>()
+
+    // Add all non-deleted, non-private workspaces from public spaces
+    workspaces.forEach((w) => {
+      if (w.isDeleted) return
+      const spaceId = w.spaceId || DEFAULT_SPACE_ID
+      const isSpacePublic = !privateSpaceIds.has(spaceId)
+      if (isSpacePublic && !w.isPrivate) {
+        map.set(w.id, w)
+      }
+    })
+
+    // Also include active workspaces from current space visible to current member
+    activeWorkspaces.forEach((w) => {
+      map.set(w.id, w)
+    })
+
+    return Array.from(map.values())
+  }, [spaces, workspaces, activeWorkspaces])
+
   // Space switcher actions
   const handleSelectSpace = async (spaceId: string) => {
     setCurrentSpaceId(spaceId)
     localStorage.setItem('seven_note_active_space_id', spaceId)
+    markItemAsRead(spaceId, 'space', currentMember, authUser?.id)
 
     const targetSpacePages = workspaces.filter(
       (w) => !w.isDeleted && (w.spaceId || DEFAULT_SPACE_ID) === spaceId && isWorkspaceVisible(w, currentMember, authUser?.id)
     )
     if (targetSpacePages.length > 0) {
       setCurrentWorkspaceId(targetSpacePages[0].id)
+      markItemAsRead(targetSpacePages[0].id, 'workspace', currentMember, authUser?.id)
     } else {
       // Auto-create initial page if space has no visible pages
       const sp = spaces.find((s) => s.id === spaceId)
       const isSpPrivate = Boolean(sp?.isPrivate)
       const newPageId = crypto.randomUUID()
       const now = Date.now()
+      const creatorTokens = [currentMember.id, currentMember.fullName || currentMember.name, currentMember.email, authUser?.id].filter(Boolean) as string[]
       await db.workspaces.add({
         id: newPageId,
         parentId: null,
@@ -729,6 +774,9 @@ function MainApp() {
         ownerMember: currentMember.id,
         ownerName: currentMember.fullName || currentMember.name,
         createdBy: currentMember.fullName || currentMember.name,
+        userId: authUser?.id || undefined,
+        viewedBy: creatorTokens,
+        isNewItem: true,
         activeProperties: ['tags', 'createdAt', 'updatedAt'],
         propertyVisibility: {
           tags: 'always_show',
@@ -1646,7 +1694,10 @@ function MainApp() {
                   syncStatus: 'pending',
                   ownerMember: currentMember.id,
                   ownerName: currentMember.name,
-                  createdBy: currentMember.name
+                  createdBy: currentMember.name,
+                  userId: authUser?.id || undefined,
+                  viewedBy: [currentMember.id, currentMember.fullName || currentMember.name, currentMember.email, authUser?.id].filter(Boolean) as string[],
+                  isNewItem: true
                 })
                 selectWorkspaceWithTab(newId)
               }}
@@ -1681,7 +1732,8 @@ function MainApp() {
               <div className="flex-1 h-full overflow-hidden">
                 <DocEditor
                   workspace={currentWorkspace}
-                  allWorkspaces={activeWorkspaces}
+                  allWorkspaces={publicWorkspaces}
+                  spaces={spaces}
                   onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
                   onTitleChange={handleTitleChange}
                   onToggleViewMode={() => setViewMode('canvas')}
@@ -1713,7 +1765,8 @@ function MainApp() {
                 <div className="w-1/2 h-full overflow-hidden border-r border-[#242428]">
                   <DocEditor
                     workspace={currentWorkspace}
-                    allWorkspaces={activeWorkspaces}
+                    allWorkspaces={publicWorkspaces}
+                    spaces={spaces}
                     onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
                     onTitleChange={handleTitleChange}
                     onToggleViewMode={() => setViewMode('canvas')}
@@ -1777,7 +1830,10 @@ function MainApp() {
             syncStatus: 'pending',
             ownerMember: currentMember.id,
             ownerName: currentMember.name,
-            createdBy: currentMember.name
+            createdBy: currentMember.name,
+            userId: authUser?.id || undefined,
+            viewedBy: [currentMember.id, currentMember.fullName || currentMember.name, currentMember.email, authUser?.id].filter(Boolean) as string[],
+            isNewItem: true
           })
           selectWorkspaceWithTab(newId)
           toast.success('Página creada')
@@ -1860,7 +1916,10 @@ function MainApp() {
             syncStatus: 'pending',
             ownerMember: currentMember.id,
             ownerName: currentMember.name,
-            createdBy: currentMember.name
+            createdBy: currentMember.name,
+            userId: authUser?.id || undefined,
+            viewedBy: [currentMember.id, currentMember.fullName || currentMember.name, currentMember.email, authUser?.id].filter(Boolean) as string[],
+            isNewItem: true
           })
           selectWorkspaceWithTab(newId)
         }}

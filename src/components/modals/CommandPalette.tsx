@@ -21,6 +21,8 @@ import {
   ImportIcon
 } from '@blocksuite/icons/rc'
 import { db, type WorkspaceItem, type CanvasNodeItem } from '../../db'
+import { isItemUnread, NewBadge, useUnreadTrigger } from '../../lib/unreadTracker'
+import { getCurrentMember } from '../../lib/teamAuth'
 import { useAppStore } from '../../store/useAppStore'
 import { AppleEmoji } from '../ui/AppleEmoji'
 
@@ -48,6 +50,8 @@ export function CommandPalette({
   onToggleDarkMode
 }: CommandPaletteProps) {
   const [isGlobalEmojiOpen, setIsGlobalEmojiOpen] = useState(false)
+  useUnreadTrigger()
+  const currentMember = getCurrentMember()
   const store = useAppStore()
   const darkMode = propDarkMode ?? store.darkMode
   const toggleDarkMode = onToggleDarkMode ?? store.toggleDarkMode
@@ -275,6 +279,9 @@ export function CommandPalette({
                         <div className="flex items-center gap-2.5">
                           <AppleEmoji emoji={ws.icon || '📄'} size={16} />
                           <span className="font-medium">{ws.title || 'Sin título'}</span>
+                          {isItemUnread(ws, 'workspace', currentMember) && (
+                            <NewBadge className="ml-1" />
+                          )}
                         </div>
                         <ArrowRightSmallIcon className="w-3.5 h-3.5 text-neutral-400 opacity-60" />
                       </Command.Item>

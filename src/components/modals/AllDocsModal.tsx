@@ -11,6 +11,8 @@ import {
   EdgelessIcon
 } from '@blocksuite/icons/rc'
 import type { WorkspaceItem } from '../../db'
+import { isItemUnread, NewBadge, useUnreadTrigger } from '../../lib/unreadTracker'
+import { getCurrentMember } from '../../lib/teamAuth'
 import { AppleEmoji } from '../ui/AppleEmoji'
 import { DocThumbnailPreview } from '../ui/DocThumbnailPreview'
 
@@ -41,6 +43,8 @@ export function AllDocsModal({
   const [selectedTag, setSelectedTag] = useState<string>('all')
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all')
   const [sortBy, setSortBy] = useState<'updated' | 'created' | 'title'>('updated')
+  useUnreadTrigger()
+  const currentMember = getCurrentMember()
 
   if (!isOpen) return null
 
@@ -267,6 +271,9 @@ export function AllDocsModal({
                         <h4 className="font-medium text-xs text-[var(--app-text-primary)] truncate">
                           {ws.title || 'Untitled'}
                         </h4>
+                        {isItemUnread(ws, 'workspace', currentMember) && (
+                          <NewBadge className="ml-1" />
+                        )}
                         {ws.isFavorite && (
                           <FavoritedIcon style={{ width: 13, height: 13, color: '#f59e0b', flexShrink: 0 }} />
                         )}
