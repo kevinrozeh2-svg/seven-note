@@ -611,7 +611,7 @@ export const NotionDatabaseView: React.FC<NotionDatabaseViewProps> = ({
 
         {/* 3. LIST VIEW */}
         {activeView === 'list' && (
-          <div className="flex flex-col gap-1.5 max-w-4xl mx-auto">
+          <div className="flex flex-col gap-1.5 w-full">
             {filteredItems.map((item) => {
               const isDone = item.status === 'Completado' || item.completed
               const priorityInfo = PRIORITY_CONFIG[item.priority || 'Media'] || PRIORITY_CONFIG['Media']

@@ -16,7 +16,6 @@ import {
   FileText,
   CalendarBlank,
   Graph,
-  Stack,
   Tag,
   Books,
   DownloadSimple,
@@ -80,7 +79,6 @@ export interface SidebarProps {
   onOpenTemplates: () => void
   onOpenShortcuts: () => void
   onOpenTags?: (tag?: string) => void
-  onOpenCollections?: () => void
   onOpenKnowledgeGraph?: () => void
   syncStatus: SyncEngineStatus
   darkMode: boolean
@@ -233,7 +231,6 @@ export function Sidebar({
   onOpenTemplates,
   onOpenShortcuts,
   onOpenTags,
-  onOpenCollections,
   onOpenKnowledgeGraph,
   syncStatus,
   darkMode,
@@ -248,7 +245,6 @@ export function Sidebar({
   const [folderOpenMap, setFolderOpenMap] = useState<Record<string, boolean>>({ 'First Folder': true })
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
-  const [collectionsOpen, setCollectionsOpen] = useState(false)
   const [tagsOpen, setTagsOpen] = useState(false)
   const [toolsOpen, setToolsOpen] = useState(false)
 
@@ -273,12 +269,7 @@ export function Sidebar({
 
   const isCurrentSpacePrivate = Boolean(currentSpace.isPrivate)
 
-  // Live queries for collections and tags in current space
-  const dbCollections = useLiveQuery(
-    () => db.collections.where('spaceId').equals(currentSpace.id).toArray(),
-    [currentSpace.id]
-  ) ?? []
-
+  // Live queries for tags in current space
   const dbTags = useLiveQuery(
     () => db.tags.where('spaceId').equals(currentSpace.id).toArray(),
     [currentSpace.id]
@@ -630,7 +621,7 @@ export function Sidebar({
                         >
                           <AppleEmoji emoji={sp.icon || sp.name.charAt(0)} size={12} />
                         </div>
-                        <span className="truncate flex-1 text-left">{sp.name}</span>
+                        <span className="truncate min-w-0 flex-1 text-left">{sp.name}</span>
                         {sp.isPrivate && (
                           <span
                             className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full text-[9px] font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 shrink-0"
@@ -640,12 +631,12 @@ export function Sidebar({
                             <span>Privado</span>
                           </span>
                         )}
-                        <span className="text-[10px] opacity-60 font-mono shrink-0">
-                          {docsInSpace}
-                        </span>
                       </div>
 
-                      <div className="flex items-center gap-1 shrink-0 ml-1.5">
+                      <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                        <span className="text-[10px] opacity-60 font-mono tabular-nums">
+                          {docsInSpace}
+                        </span>
                         {isSelected && <Check size={14} weight="bold" className="text-neutral-900 dark:text-white shrink-0" />}
                         <button
                           type="button"
@@ -798,7 +789,7 @@ export function Sidebar({
         <div className="h-[1px] bg-black/[0.04] dark:bg-white/[0.06]" />
       </div>
 
-      {/* 6. Scrollable Structure: Favorites, Documents, Collections, Tags, Tools */}
+      {/* 6. Scrollable Structure: Favorites, Documents, Tags, Tools */}
       <div className="flex-1 overflow-y-auto px-2 space-y-4 custom-scrollbar">
         {/* FAVORITES */}
         <div>
@@ -1127,14 +1118,6 @@ export function Sidebar({
                                   }}
                                 />
                                 <span className="truncate flex-1 text-xs">{renderWithAppleEmoji(doc.title || 'Untitled')}</span>
-                                {(doc.ownerName || doc.createdBy) && (
-                                  <span
-                                    className="text-[9px] text-neutral-400 dark:text-neutral-500 shrink-0 font-normal truncate max-w-[65px] px-1 py-0.5 rounded bg-black/[0.03] dark:bg-white/[0.04]"
-                                    title={`Creado por ${doc.ownerName || doc.createdBy}`}
-                                  >
-                                    {doc.ownerName || doc.createdBy}
-                                  </span>
-                                )}
                               </div>
                               <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button
@@ -1185,14 +1168,6 @@ export function Sidebar({
                           }}
                         />
                         <span className="truncate flex-1">{renderWithAppleEmoji(page.title || 'Untitled')}</span>
-                        {(page.ownerName || page.createdBy) && (
-                          <span
-                            className="text-[9px] text-neutral-400 dark:text-neutral-500 shrink-0 font-normal truncate max-w-[65px] px-1 py-0.5 rounded bg-black/[0.03] dark:bg-white/[0.04]"
-                            title={`Creado por ${page.ownerName || page.createdBy}`}
-                          >
-                            {page.ownerName || page.createdBy}
-                          </span>
-                        )}
                       </div>
                       <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
@@ -1249,14 +1224,6 @@ export function Sidebar({
                                   }}
                                 />
                                 <span className="truncate flex-1 text-xs">{renderWithAppleEmoji(sub.title || 'Untitled')}</span>
-                                {(sub.ownerName || sub.createdBy) && (
-                                  <span
-                                    className="text-[9px] text-neutral-400 dark:text-neutral-500 shrink-0 font-normal truncate max-w-[65px] px-1 py-0.5 rounded bg-black/[0.03] dark:bg-white/[0.04]"
-                                    title={`Creado por ${sub.ownerName || sub.createdBy}`}
-                                  >
-                                    {sub.ownerName || sub.createdBy}
-                                  </span>
-                                )}
                               </div>
                               <button
                                 onClick={(e) => handleDeleteWorkspace(e, sub.id)}
@@ -1272,61 +1239,6 @@ export function Sidebar({
                   </div>
                 )
               })}
-            </div>
-          )}
-        </div>
-
-        {/* COLLECTIONS */}
-        <div>
-          <div
-            onClick={() => setCollectionsOpen(!collectionsOpen)}
-            className="flex items-center justify-between px-2.5 py-1 text-[11px] font-semibold tracking-wider uppercase text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 cursor-pointer transition group"
-          >
-            <div className="flex items-center gap-1.5">
-              {collectionsOpen ? (
-                <CaretDown size={13} className="text-neutral-400 transition-transform" />
-              ) : (
-                <CaretRight size={13} className="text-neutral-400 transition-transform" />
-              )}
-              <span>Colecciones</span>
-            </div>
-            {onOpenCollections && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onOpenCollections()
-                }}
-                className="p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
-                title="Administrar colecciones"
-              >
-                <Plus size={13} />
-              </button>
-            )}
-          </div>
-
-          {collectionsOpen && (
-            <div className="mt-1 space-y-0.5">
-              {dbCollections.length === 0 ? (
-                <div className="px-3 py-1.5 text-[11px] text-neutral-400 italic">
-                  Sin colecciones creadas
-                </div>
-              ) : (
-                dbCollections.map((col) => (
-                  <div
-                    key={col.id}
-                    onClick={() => onOpenCollections && onOpenCollections()}
-                    className="flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-pointer hover:bg-black/[0.03] dark:hover:bg-white/[0.05] text-neutral-600 dark:text-neutral-400 font-medium transition"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Stack size={15} weight="duotone" className="text-neutral-700 dark:text-neutral-300 shrink-0" />
-                      <span className="truncate">{col.name}</span>
-                    </div>
-                    <span className="text-[10px] font-mono text-neutral-400">
-                      {col.docIds?.length || 0}
-                    </span>
-                  </div>
-                ))
-              )}
             </div>
           )}
         </div>

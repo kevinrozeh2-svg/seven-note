@@ -20,7 +20,8 @@ import {
   Graph,
   PencilSimpleLine,
   LockKey,
-  LockKeyOpen
+  LockKeyOpen,
+  ArrowsOutLineHorizontal
 } from '@phosphor-icons/react'
 import {
   db,
@@ -41,6 +42,7 @@ import { CanvasBoard } from './components/canvas/CanvasBoard'
 import { RightSidebar } from './components/sidebar/RightSidebar'
 import { CommandPalette } from './components/modals/CommandPalette'
 import { SettingsModal } from './components/modals/SettingsModal'
+import { initTauriUpdater } from './lib/tauriUpdater'
 import { TrashModal } from './components/modals/TrashModal'
 import { ShareModal } from './components/modals/ShareModal'
 import { TemplatesModal } from './components/modals/TemplatesModal'
@@ -48,7 +50,6 @@ import { AllDocsModal } from './components/modals/AllDocsModal'
 import { ImportModal } from './components/modals/ImportModal'
 import { ShortcutsModal } from './components/modals/ShortcutsModal'
 import { CreateWorkspaceModal } from './components/modals/CreateWorkspaceModal'
-import { CollectionsModal } from './components/modals/CollectionsModal'
 import { TagsModal } from './components/modals/TagsModal'
 import { KnowledgeGraphModal } from './components/modals/KnowledgeGraphModal'
 import { AuthModal, type AuthMode } from './components/modals/AuthModal'
@@ -61,7 +62,6 @@ import { AllDocsPage } from './components/views/AllDocsPage'
 import { KnowledgeGraphPage } from './components/views/KnowledgeGraphPage'
 import { TrashPage } from './components/views/TrashPage'
 import { TemplatesPage } from './components/views/TemplatesPage'
-import { CollectionsPage } from './components/views/CollectionsPage'
 import { TagsPage } from './components/views/TagsPage'
 import { ExternalShareView } from './components/views/ExternalShareView'
 import { type AppTemplate } from './lib/templates'
@@ -88,6 +88,7 @@ function MainApp() {
 
   // Sincronizar sesión activa de Supabase Auth
   useEffect(() => {
+    initTauriUpdater()
     // Detectar si el usuario llega con un token de recuperación de contraseña (#type=recovery)
     if (typeof window !== 'undefined' && window.location.hash.includes('type=recovery')) {
       setAuthModalMode('reset')
@@ -208,7 +209,6 @@ function MainApp() {
   const [isAllDocsOpen, setIsAllDocsOpen] = useState(false)
   const [isImportOpen, setIsImportOpen] = useState(false)
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false)
-  const [isCollectionsOpen, setIsCollectionsOpen] = useState(false)
   const [isTagsOpen, setIsTagsOpen] = useState(false)
   const [selectedTagForModal, setSelectedTagForModal] = useState<string | null>(null)
   const [isKnowledgeGraphOpen, setIsKnowledgeGraphOpen] = useState(false)
@@ -358,7 +358,7 @@ function MainApp() {
   }
 
   const openSpecialViewTab = (
-    viewType: 'all-docs' | 'knowledge-graph' | 'trash' | 'templates' | 'collections' | 'tags',
+    viewType: 'all-docs' | 'knowledge-graph' | 'trash' | 'templates' | 'tags',
     title: string
   ) => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
@@ -386,7 +386,7 @@ function MainApp() {
     const tab = tabs.find((t) => t.id === tabId)
     if (tab) {
       setActiveTabId(tabId)
-      // 1. Special views (all-docs, knowledge-graph, trash, templates, collections, tags)
+      // 1. Special views (all-docs, knowledge-graph, trash, templates, tags)
       if (tab.viewType && tab.viewType !== 'doc') {
         return
       }
@@ -416,10 +416,11 @@ function MainApp() {
     setClosedTabsHistory((prev) => [closingTab, ...prev].slice(0, 20))
 
     const remaining = tabs.filter((t) => t.id !== tabId)
+    setTabs(remaining)
     if (remaining.length === 0) {
-      handleNewTab()
+      setActiveTabId('')
+      setCurrentWorkspaceId('')
     } else {
-      setTabs(remaining)
       if (activeTabId === tabId) {
         const nextActive = remaining[Math.min(tabIndex, remaining.length - 1)]
         handleSelectTab(nextActive.id)
@@ -1037,7 +1038,6 @@ function MainApp() {
                 setSelectedTagForModal(tag || null)
                 openSpecialViewTab('tags', 'Etiquetas')
               }}
-              onOpenCollections={() => openSpecialViewTab('collections', 'Colecciones')}
               onOpenKnowledgeGraph={() => openSpecialViewTab('knowledge-graph', 'Grafo de Conocimiento')}
               syncStatus={syncStatus}
               darkMode={darkMode}
@@ -1251,6 +1251,38 @@ function MainApp() {
                     >
                       <Columns size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
                       <span>{activeViewMode === 'split' ? 'Cerrar vista dividida' : 'Vista dividida'}</span>
+                    </button>
+
+                    {/* Toggle Ancho completo (Notion Full Width Style) */}
+                    <button
+                      onClick={async () => {
+                        if (!currentWorkspace) return
+                        const isCurrentFull = (currentWorkspace.pageWidth || 'full') === 'full'
+                        const nextWidth = isCurrentFull ? 'standard' : 'full'
+                        await db.workspaces.update(currentWorkspace.id, {
+                          pageWidth: nextWidth,
+                          updatedAt: Date.now(),
+                          syncStatus: 'pending'
+                        })
+                        syncEngine.scheduleSync(500)
+                        toast.success(nextWidth === 'full' ? 'Ancho completo activado' : 'Ancho estándar activado')
+                        setActiveDropdown(null)
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center justify-between text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2 sm:gap-2.5 truncate">
+                        <ArrowsOutLineHorizontal size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
+                        <span className="truncate">Ancho completo</span>
+                      </div>
+                      <div
+                        className={`w-7 h-4 rounded-full transition-colors p-0.5 flex items-center ${
+                          (currentWorkspace?.pageWidth || 'full') === 'full'
+                            ? 'bg-blue-600 justify-end'
+                            : 'bg-neutral-300 dark:bg-neutral-700 justify-start'
+                        }`}
+                      >
+                        <div className="w-3 h-3 rounded-full bg-white shadow-xs" />
+                      </div>
                     </button>
 
                     <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-0.5 sm:my-1" />
@@ -1650,12 +1682,6 @@ function MainApp() {
                 selectWorkspaceWithTab(currentWorkspace?.id || '')
               }}
             />
-          ) : activeTab?.viewType === 'collections' ? (
-            <CollectionsPage
-              spaceId={currentSpaceId}
-              workspaces={currentSpaceWorkspaces}
-              onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
-            />
           ) : activeTab?.viewType === 'tags' ? (
             <TagsPage
               spaceId={currentSpaceId}
@@ -1877,14 +1903,6 @@ function MainApp() {
       <ShortcutsModal
         isOpen={isShortcutsOpen}
         onClose={() => setIsShortcutsOpen(false)}
-      />
-
-      <CollectionsModal
-        isOpen={isCollectionsOpen}
-        onClose={() => setIsCollectionsOpen(false)}
-        spaceId={currentSpaceId}
-        workspaces={currentSpaceWorkspaces}
-        onSelectWorkspace={selectWorkspaceWithTab}
       />
 
       <TagsModal

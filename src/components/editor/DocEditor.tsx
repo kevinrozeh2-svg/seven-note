@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { useEditor, EditorContent } from '@tiptap/react'
+import { Mark, mergeAttributes } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
@@ -9,6 +10,7 @@ import Underline from '@tiptap/extension-underline'
 import Link from '@tiptap/extension-link'
 import Image from '@tiptap/extension-image'
 import { processAndUploadImage } from '../../lib/imageOptimizer'
+import { cleanPastedHtml } from '../../lib/pasteUtils'
 import { Table } from '@tiptap/extension-table'
 import { TableRow } from '@tiptap/extension-table-row'
 import { TableHeader } from '@tiptap/extension-table-header'
@@ -17,7 +19,7 @@ import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight'
 import { common, createLowlight } from 'lowlight'
 import { toast } from 'sonner'
 import confetti from 'canvas-confetti'
-import { Lock, Unlock, Globe, ChevronDown } from 'lucide-react'
+import { Lock, Unlock, Globe, ChevronDown, Maximize2, Minimize2 } from 'lucide-react'
 import {
   SmileIcon,
   EdgelessIcon,
@@ -87,6 +89,141 @@ interface DocEditorProps {
   readOnly?: boolean
 }
 
+// Custom Marks to preserve styles (color, highlight, sub, sup, font styles) during paste & editing
+const TextStyle = Mark.create({
+  name: 'textStyle',
+  addOptions() {
+    return {
+      HTMLAttributes: {}
+    }
+  },
+  parseHTML() {
+    return [
+      {
+        tag: 'span',
+        getAttrs: (element) => {
+          const el = element as HTMLElement
+          return el.hasAttribute('style') ? {} : false
+        }
+      }
+    ]
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['span', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes), 0]
+  }
+})
+
+const ColorMark = Mark.create({
+  name: 'color',
+  addOptions() {
+    return {
+      HTMLAttributes: {}
+    }
+  },
+  addAttributes() {
+    return {
+      color: {
+        default: null,
+        parseHTML: (element) => element.style.color || element.getAttribute('color') || null,
+        renderHTML: (attributes) => {
+          if (!attributes.color) return {}
+          return {
+            style: `color: ${attributes.color}`
+          }
+        }
+      }
+    }
+  },
+  parseHTML() {
+    return [
+      {
+        tag: 'span[style*=color]',
+        getAttrs: (element) => {
+          const color = (element as HTMLElement).style.color
+          return color ? { color } : false
+        }
+      },
+      {
+        tag: 'font[color]',
+        getAttrs: (element) => {
+          const color = (element as HTMLElement).getAttribute('color')
+          return color ? { color } : false
+        }
+      }
+    ]
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['span', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes), 0]
+  }
+})
+
+const HighlightMark = Mark.create({
+  name: 'highlight',
+  addOptions() {
+    return {
+      HTMLAttributes: {}
+    }
+  },
+  addAttributes() {
+    return {
+      color: {
+        default: null,
+        parseHTML: (element) => {
+          const bg = element.style.backgroundColor || element.style.background
+          return bg || null
+        },
+        renderHTML: (attributes) => {
+          if (!attributes.color) return {}
+          return {
+            style: `background-color: ${attributes.color}`
+          }
+        }
+      }
+    }
+  },
+  parseHTML() {
+    return [
+      {
+        tag: 'mark',
+        getAttrs: (element) => {
+          const bg = (element as HTMLElement).style.backgroundColor || (element as HTMLElement).style.background
+          return { color: bg || null }
+        }
+      },
+      {
+        tag: 'span[style*=background]',
+        getAttrs: (element) => {
+          const bg = (element as HTMLElement).style.backgroundColor || (element as HTMLElement).style.background
+          return bg ? { color: bg } : false
+        }
+      }
+    ]
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['mark', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes), 0]
+  }
+})
+
+const SubscriptMark = Mark.create({
+  name: 'subscript',
+  parseHTML() {
+    return [{ tag: 'sub' }]
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['sub', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes), 0]
+  }
+})
+
+const SuperscriptMark = Mark.create({
+  name: 'superscript',
+  parseHTML() {
+    return [{ tag: 'sup' }]
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['sup', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes), 0]
+  }
+})
+
 export function DocEditor({
   workspace,
   allWorkspaces = [],
@@ -140,6 +277,25 @@ export function DocEditor({
   const isFirstRender = useRef(true)
   const saveTimeoutRef = useRef<any>(null)
   const editorImageInputRef = useRef<HTMLInputElement>(null)
+  const titleTextareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const adjustTitleHeight = useCallback(() => {
+    const el = titleTextareaRef.current
+    if (el) {
+      el.style.height = 'auto'
+      el.style.height = `${el.scrollHeight}px`
+    }
+  }, [])
+
+  useEffect(() => {
+    adjustTitleHeight()
+  }, [workspace.title, adjustTitleHeight])
+
+  useEffect(() => {
+    const handleResize = () => adjustTitleHeight()
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [adjustTitleHeight])
 
   const handleEditorImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
@@ -179,6 +335,11 @@ export function DocEditor({
       TableHeader,
       TableCell,
       Underline,
+      TextStyle,
+      ColorMark,
+      HighlightMark,
+      SubscriptMark,
+      SuperscriptMark,
       TaskList,
       TaskItem.configure({
         nested: true,
@@ -202,26 +363,34 @@ export function DocEditor({
         class:
           'prose prose-invert max-w-none focus:outline-none min-h-[350px] text-zinc-200 font-sans leading-relaxed text-sm selection:bg-blue-600/30'
       },
+      transformPastedHTML: (html) => {
+        return cleanPastedHtml(html)
+      },
       handlePaste: (view, event) => {
-        const items = event.clipboardData?.items
-        if (items) {
-          for (const item of items) {
-            if (item.type.indexOf('image') === 0) {
-              const file = item.getAsFile()
-              if (file) {
-                const toastId = toast.loading('Optimizando imagen pegada...')
-                processAndUploadImage(file)
-                  .then((result) => {
-                    const node = view.state.schema.nodes.image.create({ src: result.url, alt: file.name })
-                    const tr = view.state.tr.replaceSelectionWith(node)
-                    view.dispatch(tr)
-                    toast.success('Imagen optimizada pegada en el documento', { id: toastId })
-                  })
-                  .catch((err: any) => {
-                    toast.error('Error al procesar imagen: ' + (err?.message || 'Error'), { id: toastId })
-                  })
-                return true
-              }
+        // If the clipboard contains HTML or plain text, do NOT intercept as an image!
+        // Allow ProseMirror to handle the rich formatted paste.
+        const html = event.clipboardData?.getData('text/html')
+        const text = event.clipboardData?.getData('text/plain')
+        if ((html && html.trim()) || (text && text.trim())) {
+          return false
+        }
+
+        const files = event.clipboardData?.files
+        if (files && files.length > 0) {
+          for (const file of Array.from(files)) {
+            if (file.type.startsWith('image/')) {
+              const toastId = toast.loading('Optimizando imagen pegada...')
+              processAndUploadImage(file)
+                .then((result) => {
+                  const node = view.state.schema.nodes.image.create({ src: result.url, alt: file.name })
+                  const tr = view.state.tr.replaceSelectionWith(node)
+                  view.dispatch(tr)
+                  toast.success('Imagen optimizada pegada en el documento', { id: toastId })
+                })
+                .catch((err: any) => {
+                  toast.error('Error al procesar imagen: ' + (err?.message || 'Error'), { id: toastId })
+                })
+              return true
             }
           }
         }
@@ -726,12 +895,33 @@ export function DocEditor({
     { id: 'divider', title: 'Separador Horizontal', desc: 'Línea de división de contenido', icon: <DividerIcon className="w-4 h-4 text-[var(--affine-text-secondary-color)]" /> }
   ].filter((item) => item.title.toLowerCase().includes(slashFilter.toLowerCase()) || item.desc.toLowerCase().includes(slashFilter.toLowerCase()))
 
+  // Default to 'full' so the editor occupies the screen gracefully without huge empty black sidebars
+  const effectivePageWidth = workspace.pageWidth || 'full'
+
+  const handleTogglePageWidth = async () => {
+    if (readOnly) return
+    const nextWidth = effectivePageWidth === 'full' ? 'standard' : effectivePageWidth === 'wide' ? 'full' : 'wide'
+    await db.workspaces.update(workspace.id, {
+      pageWidth: nextWidth,
+      updatedAt: Date.now(),
+      syncStatus: 'pending'
+    })
+    syncEngine.scheduleSync(500)
+    toast.success(
+      nextWidth === 'full'
+        ? 'Ancho completo activado (rellenando pantalla)'
+        : nextWidth === 'wide'
+        ? 'Ancho amplio activado'
+        : 'Ancho estándar activado'
+    )
+  }
+
   const pageWidthClass =
-    workspace.pageWidth === 'full'
-      ? 'max-w-full px-3 sm:px-8'
-      : workspace.pageWidth === 'wide'
-      ? 'max-w-5xl px-3 sm:px-8'
-      : 'max-w-3xl px-3 sm:px-6'
+    effectivePageWidth === 'standard'
+      ? 'max-w-4xl px-4 sm:px-8'
+      : effectivePageWidth === 'wide'
+      ? 'max-w-6xl px-4 sm:px-8 md:px-12'
+      : 'max-w-full w-full px-4 sm:px-8 md:px-12 lg:px-16 xl:px-20'
 
   if (!editor) return null
 
@@ -774,70 +964,70 @@ export function DocEditor({
               />
             </div>
 
-            <div className="w-[1px] h-4 bg-black/[0.1] dark:bg-white/[0.12] mx-0.5 sm:mx-1 shrink-0" />
+            <div className="w-[1px] h-4 bg-black/[0.1] dark:bg-white/[0.2] mx-0.5 sm:mx-1 shrink-0" />
 
             <button
               onClick={() => editor.chain().focus().toggleBold().run()}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('bold') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'}`}
+              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('bold') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
               title="Negrita"
             >
               <BoldIcon className="w-4 h-4" />
             </button>
             <button
               onClick={() => editor.chain().focus().toggleItalic().run()}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('italic') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'}`}
+              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('italic') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
               title="Cursiva"
             >
               <ItalicIcon className="w-4 h-4" />
             </button>
             <button
               onClick={() => editor.chain().focus().toggleUnderline().run()}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('underline') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'}`}
+              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('underline') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
               title="Subrayado"
             >
               <UnderLineIcon className="w-4 h-4" />
             </button>
             <button
               onClick={() => editor.chain().focus().toggleCode().run()}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('code') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'}`}
+              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('code') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
               title="Código en línea"
             >
               <CodeIcon className="w-4 h-4" />
             </button>
 
-            <div className="w-[1px] h-4 bg-black/[0.1] dark:bg-white/[0.12] mx-0.5 sm:mx-1 shrink-0" />
+            <div className="w-[1px] h-4 bg-black/[0.1] dark:bg-white/[0.2] mx-0.5 sm:mx-1 shrink-0" />
 
             <button
               onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('heading', { level: 1 }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'}`}
+              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('heading', { level: 1 }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
               title="Encabezado 1"
             >
               <Heading1Icon className="w-4 h-4" />
             </button>
             <button
               onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('heading', { level: 2 }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'}`}
+              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('heading', { level: 2 }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
               title="Encabezado 2"
             >
               <Heading2Icon className="w-4 h-4" />
             </button>
             <button
               onClick={() => editor.chain().focus().toggleBulletList().run()}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('bulletList') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'}`}
+              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('bulletList') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
               title="Lista de viñetas"
             >
               <BulletedListIcon className="w-4 h-4" />
             </button>
             <button
               onClick={() => editor.chain().focus().toggleTaskList().run()}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('taskList') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'}`}
+              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('taskList') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
               title="Lista de tareas"
             >
               <CheckBoxCheckSolidIcon className="w-4 h-4" />
             </button>
             <button
               onClick={() => editorImageInputRef.current?.click()}
-              className="w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 active:scale-95 shrink-0"
+              className="w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15 active:scale-95 shrink-0"
               title="Añadir foto"
             >
               <ImageIcon className="w-4 h-4" />
@@ -852,10 +1042,28 @@ export function DocEditor({
             />
           </div>
 
-          <div className="hidden sm:flex items-center gap-2 text-[11px] text-[var(--app-text-muted)]">
-            <span className="font-mono">
-              {saveStatus === 'saving' ? 'Guardando...' : 'Guardado'}
-            </span>
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Quick toggle page width button */}
+            <button
+              onClick={handleTogglePageWidth}
+              className="h-8 px-2 sm:px-2.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.08] hover:bg-black/[0.08] dark:hover:bg-white/[0.15] text-[var(--app-text-primary)] transition flex items-center gap-1.5 text-xs font-medium border border-black/[0.06] dark:border-white/[0.08] cursor-pointer active:scale-95 shrink-0"
+              title={`Ancho de página: ${effectivePageWidth === 'full' ? 'Completo (pantalla extendida)' : effectivePageWidth === 'wide' ? 'Amplio' : 'Estándar'}. Clic para alternar`}
+            >
+              {effectivePageWidth === 'full' ? (
+                <Minimize2 className="w-3.5 h-3.5 text-blue-500" />
+              ) : (
+                <Maximize2 className="w-3.5 h-3.5 text-neutral-400" />
+              )}
+              <span className="hidden md:inline text-xs font-medium">
+                {effectivePageWidth === 'full' ? 'Ancho completo' : effectivePageWidth === 'wide' ? 'Ancho amplio' : 'Estándar'}
+              </span>
+            </button>
+
+            <div className="hidden sm:flex items-center gap-2 text-[11px] text-[var(--app-text-muted)]">
+              <span className="font-mono">
+                {saveStatus === 'saving' ? 'Guardando...' : 'Guardado'}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -986,35 +1194,35 @@ export function DocEditor({
         >
           <button
             onClick={() => editor.chain().focus().toggleBold().run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('bold') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-neutral-300 hover:bg-black/5 dark:hover:bg-white/10'}`}
+            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('bold') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
             title="Negrita (Ctrl+B)"
           >
             <BoldIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
           <button
             onClick={() => editor.chain().focus().toggleItalic().run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('italic') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-neutral-300 hover:bg-black/5 dark:hover:bg-white/10'}`}
+            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('italic') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
             title="Cursiva (Ctrl+I)"
           >
             <ItalicIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
           <button
             onClick={() => editor.chain().focus().toggleUnderline().run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('underline') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-neutral-300 hover:bg-black/5 dark:hover:bg-white/10'}`}
+            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('underline') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
             title="Subrayado (Ctrl+U)"
           >
             <UnderLineIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
           <button
             onClick={() => editor.chain().focus().toggleCode().run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('code') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-neutral-300 hover:bg-black/5 dark:hover:bg-white/10'}`}
+            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('code') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
             title="Código en línea (Ctrl+E)"
           >
             <CodeIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
           <button
             onClick={() => setIsBodyEmojiPickerOpen(true)}
-            className="p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 text-neutral-600 dark:text-neutral-300 hover:bg-black/5 dark:hover:bg-white/10"
+            className="p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15"
             title="Insertar Emoji Apple en la nota"
           >
             <AppleEmoji emoji="✨" size={14} />
@@ -1441,17 +1649,27 @@ export function DocEditor({
 
           {/* Big Title */}
           <div className="mb-6">
-            <input
-              type="text"
+            <textarea
+              ref={titleTextareaRef}
+              rows={1}
               value={workspace.title === 'Untitled' ? '' : workspace.title}
               onChange={(e) => {
                 if (readOnly) return
                 const val = e.target.value
                 onTitleChange?.(val || 'Untitled')
+                e.target.style.height = 'auto'
+                e.target.style.height = `${e.target.scrollHeight}px`
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault()
+                  editor?.commands.focus('start')
+                }
               }}
               readOnly={readOnly}
               placeholder="Title"
-              className={`w-full text-4xl font-bold tracking-tight text-[var(--affine-text-primary-color)] placeholder:text-[var(--affine-placeholder-color)] bg-transparent border-none outline-none focus:outline-none ${readOnly ? 'cursor-default' : ''}`}
+              className={`w-full text-4xl font-bold tracking-tight text-[var(--affine-text-primary-color)] placeholder:text-[var(--affine-placeholder-color)] bg-transparent border-none outline-none focus:outline-none resize-none overflow-hidden leading-tight break-words whitespace-pre-wrap block ${readOnly ? 'cursor-default' : ''}`}
+              style={{ fieldSizing: 'content' }}
             />
           </div>
 

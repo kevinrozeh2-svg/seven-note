@@ -45,6 +45,7 @@ import {
   X,
   Kanban
 } from '@phosphor-icons/react'
+import { hasHtmlFormatting, cleanPastedHtml } from '../../lib/pasteUtils'
 import {
   SelectIcon,
   HandIcon,
@@ -151,19 +152,19 @@ const CanvasZoomBar = memo(function CanvasZoomBar({ showMiniMap, onToggleMiniMap
   const zoom = useStore((s) => s.transform[2])
 
   return (
-    <Panel position="bottom-right" className="mr-2 sm:mr-4 mb-2 sm:mb-4 z-20">
-      <div className="flex items-center gap-1 px-2 py-1.5 rounded-full bg-white/85 dark:bg-[#1a1b1e]/85 backdrop-blur-xl border border-black/[0.08] dark:border-white/[0.1] shadow-2xl text-[var(--app-text-primary)]">
+    <Panel position="bottom-right" className="mr-2 sm:mr-3 mb-2 sm:mb-4 z-20">
+      <div className="flex items-center gap-0.5 px-1.5 py-1 rounded-full bg-white/85 dark:bg-[#1a1b1e]/85 backdrop-blur-xl border border-black/[0.08] dark:border-white/[0.1] shadow-2xl text-[var(--app-text-primary)]">
         <button
           onClick={() => reactFlowInstance.zoomOut()}
           className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-neutral-600 dark:text-neutral-300 transition-all active:scale-95 cursor-pointer"
           title="Alejar (-)"
         >
-          <MagnifyingGlassMinus size={16} weight="duotone" />
+          <MagnifyingGlassMinus size={15} weight="duotone" />
         </button>
 
         <button
           onClick={() => reactFlowInstance.zoomTo(1, { duration: 300 })}
-          className="px-2.5 py-1 text-xs font-semibold hover:bg-black/5 dark:hover:bg-white/10 rounded-full text-neutral-700 dark:text-neutral-200 transition-all font-mono min-w-[50px] text-center active:scale-95 cursor-pointer"
+          className="px-2 py-0.5 text-[11px] font-semibold hover:bg-black/5 dark:hover:bg-white/10 rounded-full text-neutral-700 dark:text-neutral-200 transition-all font-mono min-w-[44px] text-center active:scale-95 cursor-pointer"
           title="Restablecer zoom al 100%"
         >
           {Math.round((zoom || 1) * 100)}%
@@ -174,17 +175,17 @@ const CanvasZoomBar = memo(function CanvasZoomBar({ showMiniMap, onToggleMiniMap
           className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-neutral-600 dark:text-neutral-300 transition-all active:scale-95 cursor-pointer"
           title="Acercar (+)"
         >
-          <MagnifyingGlassPlus size={16} weight="duotone" />
+          <MagnifyingGlassPlus size={15} weight="duotone" />
         </button>
 
-        <div className="w-[1px] h-4 bg-black/[0.08] dark:border-white/[0.1] mx-0.5" />
+        <div className="w-[1px] h-4 bg-black/[0.08] dark:bg-white/[0.1] mx-0.5" />
 
         <button
           onClick={() => reactFlowInstance.fitView({ padding: 0.25, duration: 400 })}
           className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-neutral-600 dark:text-neutral-300 transition-all active:scale-95 cursor-pointer"
           title="Ajustar a la pantalla"
         >
-          <ArrowsOutSimple size={16} weight="duotone" />
+          <ArrowsOutSimple size={15} weight="duotone" />
         </button>
 
         <button
@@ -196,7 +197,7 @@ const CanvasZoomBar = memo(function CanvasZoomBar({ showMiniMap, onToggleMiniMap
           }`}
           title={showMiniMap ? 'Ocultar minimapa' : 'Mostrar minimapa'}
         >
-          <MapTrifold size={16} weight="duotone" />
+          <MapTrifold size={15} weight="duotone" />
         </button>
       </div>
     </Panel>
@@ -1453,7 +1454,7 @@ function CanvasBoardInner({
     }
   }
 
-  // Handle Clipboard Paste (Ctrl+V) of images/screenshots onto canvas
+  // Handle Clipboard Paste (Ctrl+V) of images or formatted text onto canvas
   useEffect(() => {
     const handlePaste = async (e: ClipboardEvent) => {
       const target = e.target as HTMLElement
@@ -1463,23 +1464,44 @@ function CanvasBoardInner({
       const files = e.clipboardData?.files
       if (files && files.length > 0) {
         const imageFiles = Array.from(files).filter((file) => file.type.startsWith('image/'))
-        if (imageFiles.length === 0) return
-
-        let count = 0
-        for (const file of imageFiles) {
-          try {
-            const result = await processAndUploadImage(file)
-            await addNewNode('image', {
-              imageUrl: result.url,
-              caption: file.name ? file.name.replace(/\.[^/.]+$/, '') : 'Captura pegada',
-              offsetX: count * 30,
-              offsetY: count * 30
-            })
-            count++
-          } catch (err) {
-            console.error('Error al pegar imagen:', err)
+        if (imageFiles.length > 0) {
+          let count = 0
+          for (const file of imageFiles) {
+            try {
+              const result = await processAndUploadImage(file)
+              await addNewNode('image', {
+                imageUrl: result.url,
+                caption: file.name ? file.name.replace(/\.[^/.]+$/, '') : 'Captura pegada',
+                offsetX: count * 30,
+                offsetY: count * 30
+              })
+              count++
+            } catch (err) {
+              console.error('Error al pegar imagen:', err)
+            }
           }
+          return
         }
+      }
+
+      // If text/html is pasted onto empty canvas area
+      const html = e.clipboardData?.getData('text/html')
+      const text = e.clipboardData?.getData('text/plain')
+
+      if (html && hasHtmlFormatting(html)) {
+        const clean = cleanPastedHtml(html)
+        if (clean.trim()) {
+          await addNewNode('note', {
+            content: clean,
+            hasHtmlHighlight: true
+          })
+          toast.success('Nota creada con el formato copiado')
+        }
+      } else if (text && text.trim()) {
+        await addNewNode('note', {
+          content: text
+        })
+        toast.success('Nota creada desde el portapapeles')
       }
     }
     window.addEventListener('paste', handlePaste)
@@ -2396,10 +2418,10 @@ function CanvasBoardInner({
         />
 
         {/* Bottom Center Floating Edgeless Tool Dock (Milanote Physical Palette) */}
-        <Panel position="bottom-center" className="mb-2 sm:mb-4 z-20 max-w-[calc(100vw-24px)]">
-          <div className="flex items-center px-2 py-1 rounded-full bg-white/85 dark:bg-[#1a1b1e]/85 border border-black/[0.08] dark:border-white/[0.1] shadow-2xl shadow-black/10 dark:shadow-black/40 text-[var(--app-text-primary)] h-12 sm:h-14 backdrop-blur-2xl select-none max-w-full overflow-x-auto no-scrollbar">
+        <Panel position="bottom-center" className="mb-2 sm:mb-4 z-20 max-w-[calc(100vw-24px)] md:-translate-x-14 2xl:translate-x-0">
+          <div className="flex items-center px-2.5 py-1 rounded-full bg-white/85 dark:bg-[#1a1b1e]/85 border border-black/[0.08] dark:border-white/[0.1] shadow-2xl shadow-black/10 dark:shadow-black/40 text-[var(--app-text-primary)] h-12 sm:h-14 backdrop-blur-2xl select-none">
             {/* Quick Tools (Left Section: 32px buttons) */}
-            <div className="flex items-center gap-1 pr-1">
+            <div className="flex items-center gap-0.5 pr-1">
               {/* Tool 1: Pointer / Select */}
               <button
                 onClick={() => {
@@ -2407,7 +2429,7 @@ function CanvasBoardInner({
                   setShapePaletteOpen(false)
                   setNoteMenuOpen(false)
                 }}
-                className={`p-2.5 rounded-full transition active:scale-95 cursor-pointer ${
+                className={`p-2 rounded-full transition active:scale-95 cursor-pointer ${
                   activeTool === 'select'
                     ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-sm'
                     : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
@@ -2424,7 +2446,7 @@ function CanvasBoardInner({
                   setShapePaletteOpen(false)
                   setNoteMenuOpen(false)
                 }}
-                className={`p-2.5 rounded-full transition active:scale-95 cursor-pointer ${
+                className={`p-2 rounded-full transition active:scale-95 cursor-pointer ${
                   activeTool === 'pan'
                     ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-sm'
                     : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
@@ -2441,7 +2463,7 @@ function CanvasBoardInner({
                   setShapePaletteOpen(false)
                   setNoteMenuOpen(false)
                 }}
-                className={`p-2.5 rounded-full transition active:scale-95 cursor-pointer ${
+                className={`p-2 rounded-full transition active:scale-95 cursor-pointer ${
                   activeTool === 'frame'
                     ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-sm'
                     : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
@@ -2458,7 +2480,7 @@ function CanvasBoardInner({
                   setShapePaletteOpen(false)
                   setNoteMenuOpen(false)
                 }}
-                className={`p-2.5 rounded-full transition active:scale-95 cursor-pointer ${
+                className={`p-2 rounded-full transition active:scale-95 cursor-pointer ${
                   activeTool === 'connector'
                     ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-sm'
                     : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
@@ -2475,7 +2497,7 @@ function CanvasBoardInner({
                   setShapePaletteOpen(false)
                   setNoteMenuOpen(false)
                 }}
-                className={`p-2.5 rounded-full transition active:scale-95 cursor-pointer ${
+                className={`p-2 rounded-full transition active:scale-95 cursor-pointer ${
                   activeTool === 'link'
                     ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-sm'
                     : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
@@ -2487,10 +2509,10 @@ function CanvasBoardInner({
             </div>
 
             {/* Vertical Divider */}
-            <div className="w-[1px] h-6 bg-black/[0.08] dark:bg-white/[0.1] mx-1.5" />
+            <div className="w-[1px] h-6 bg-black/[0.08] dark:bg-white/[0.1] mx-1" />
 
             {/* Senior Tools (Right Section: Illustrated 3D Widgets with Hover Animations) */}
-            <div className="flex items-center gap-1.5 pl-1 relative">
+            <div className="flex items-center gap-1 pl-1 relative">
               {/* Senior Tool 1: Notes (Sticky Notes, Page Cards, Kanban) */}
               <div className="relative">
                 <button

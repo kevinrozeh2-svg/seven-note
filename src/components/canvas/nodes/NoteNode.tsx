@@ -1,11 +1,12 @@
-import { memo, useState, useEffect } from 'react'
-import DOMPurify from 'dompurify'
+import { memo, useState, useEffect, useRef } from 'react'
 import { Trash2, Type } from 'lucide-react'
+import { toast } from 'sonner'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
 import { areNodePropsEqual, NodeHandles, SourceNodeBadge, getCardCustomStyle, isColorDark, CardSelectionOverlay } from './nodeUtils'
 import { AppleEmoji, renderWithAppleEmoji, isSingleEmoji } from '../../ui/AppleEmoji'
 import { FontPickerPopover } from './FontPickerPopover'
+import { hasHtmlFormatting, cleanPastedHtml, sanitizeHtmlContent } from '../../../lib/pasteUtils'
 
 interface ColorScheme {
   cardBorder: string
@@ -124,12 +125,123 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
   const [linkUrl] = useState(data.linkUrl ?? '')
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [isEditingContent, setIsEditingContent] = useState(false)
+  const contentEditableRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (data.title !== undefined) setTitle(data.title)
     if (data.content !== undefined) setContent(data.content)
     if (data.fontFamily !== undefined) setFontFamily(data.fontFamily)
   }, [data.title, data.content, data.fontFamily])
+
+  // Sync content into contentEditable element when entering edit mode
+  useEffect(() => {
+    if (isEditingContent && contentEditableRef.current) {
+      const el = contentEditableRef.current
+      if (hasHtmlFormatting(content) || data.hasHtmlHighlight) {
+        el.innerHTML = sanitizeHtmlContent(content)
+      } else if (content) {
+        el.innerText = content
+      } else {
+        el.innerHTML = ''
+      }
+      el.focus()
+      try {
+        const range = document.createRange()
+        range.selectNodeContents(el)
+        range.collapse(false)
+        const sel = window.getSelection()
+        sel?.removeAllRanges()
+        sel?.addRange(range)
+      } catch {
+        // ignore selection errors
+      }
+    }
+  }, [isEditingContent])
+
+  // Paste formatted text directly into selected note on canvas
+  useEffect(() => {
+    if (!selected || isEditingContent || isEditingTitle) return
+
+    const handleCardPaste = (e: ClipboardEvent) => {
+      const activeEl = document.activeElement
+      if (
+        activeEl &&
+        (activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          (activeEl as HTMLElement).isContentEditable)
+      ) {
+        return
+      }
+
+      const html = e.clipboardData?.getData('text/html')
+      const text = e.clipboardData?.getData('text/plain')
+
+      if (html && hasHtmlFormatting(html)) {
+        e.preventDefault()
+        const clean = cleanPastedHtml(html)
+        const updated = content && content.trim() ? `${content}<br/>${clean}` : clean
+        setContent(updated)
+        save({ content: updated, hasHtmlHighlight: true })
+        toast.success('Formato de texto conservado en la nota')
+      } else if (text && text.trim()) {
+        e.preventDefault()
+        const updated = content && content.trim() ? `${content}\n${text}` : text
+        setContent(updated)
+        save({ content: updated })
+      }
+    }
+
+    window.addEventListener('paste', handleCardPaste)
+    return () => window.removeEventListener('paste', handleCardPaste)
+  }, [selected, isEditingContent, isEditingTitle, content])
+
+  const handleContentPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    const html = e.clipboardData.getData('text/html')
+    const text = e.clipboardData.getData('text/plain')
+
+    if (html && hasHtmlFormatting(html)) {
+      const clean = cleanPastedHtml(html)
+      document.execCommand('insertHTML', false, clean)
+    } else if (text) {
+      document.execCommand('insertText', false, text)
+    }
+
+    if (contentEditableRef.current) {
+      const htmlVal = contentEditableRef.current.innerHTML
+      setContent(htmlVal)
+      save({
+        content: htmlVal,
+        hasHtmlHighlight: hasHtmlFormatting(htmlVal)
+      })
+    }
+  }
+
+  const handleContentBlur = () => {
+    setIsEditingContent(false)
+    if (contentEditableRef.current) {
+      const htmlVal = contentEditableRef.current.innerHTML
+      setContent(htmlVal)
+      save({
+        content: htmlVal,
+        hasHtmlHighlight: hasHtmlFormatting(htmlVal)
+      })
+    }
+  }
+
+  const handleContentKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Escape') {
+      setIsEditingContent(false)
+      if (contentEditableRef.current) {
+        const htmlVal = contentEditableRef.current.innerHTML
+        setContent(htmlVal)
+        save({
+          content: htmlVal,
+          hasHtmlHighlight: hasHtmlFormatting(htmlVal)
+        })
+      }
+    }
+  }
 
   const colorScheme = COLOR_MAP[color] || COLOR_MAP.slate
   const isConnectorActive = Boolean(data?.isConnectorActive)
@@ -161,7 +273,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
   }
 
   // Standalone Emoji Sticker (pure emoji without card background)
-  const isEmojiSticker = !title && isSingleEmoji(content.trim()) && !isQuote && !alertBox && !isBanner && !linkUrl
+  const isEmojiSticker = !title && isSingleEmoji(content.trim()) && !isQuote && !alertBox && !isBanner && !linkUrl && !hasHtmlFormatting(content)
 
   if (isEmojiSticker) {
     return (
@@ -403,24 +515,31 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
         // Quote style
         <div className={`border-l-2 pl-3 my-1.5 italic ${colorScheme.quoteBar} relative z-10`}>
           {isEditingContent ? (
-            <textarea
-              autoFocus
-              value={content}
-              onChange={(e) => {
-                setContent(e.target.value)
-                save({ content: e.target.value })
-              }}
-              onBlur={() => setIsEditingContent(false)}
+            <div
+              ref={contentEditableRef}
+              contentEditable
+              suppressContentEditableWarning
+              onBlur={handleContentBlur}
+              onInput={(e) => setContent(e.currentTarget.innerHTML)}
+              onPaste={handleContentPaste}
+              onKeyDown={handleContentKeyDown}
               onPointerDown={(e) => e.stopPropagation()}
-              rows={4}
-              className="nodrag nowheel w-full bg-transparent border-none outline-none resize-none text-[13px] leading-relaxed italic text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 dark:placeholder:text-zinc-500"
+              data-placeholder="Escribe tu cita aquí..."
+              className="nodrag nowheel w-full bg-transparent border-none outline-none text-[13px] leading-relaxed italic text-zinc-800 dark:text-zinc-200 empty:before:content-[attr(data-placeholder)] empty:before:text-zinc-400 dark:empty:before:text-zinc-500 [&_a]:text-blue-500 [&_a]:underline"
+              style={{ minHeight: '36px' }}
             />
           ) : (
             <div
               onDoubleClick={() => setIsEditingContent(true)}
-              className="nodrag cursor-text select-text whitespace-pre-wrap leading-relaxed text-[13px] italic text-zinc-800 dark:text-zinc-200 min-h-[36px]"
+              className="nodrag cursor-text select-text leading-relaxed text-[13px] italic text-zinc-800 dark:text-zinc-200 min-h-[36px] [&_a]:text-blue-500 [&_a]:underline"
             >
-              {content ? renderWithAppleEmoji(content) : (
+              {content ? (
+                hasHtmlFormatting(content) || data.hasHtmlHighlight ? (
+                  <div dangerouslySetInnerHTML={{ __html: sanitizeHtmlContent(content) }} />
+                ) : (
+                  <div className="whitespace-pre-wrap">{renderWithAppleEmoji(content)}</div>
+                )
+              ) : (
                 <span className="text-zinc-400 dark:text-zinc-500 italic select-none">Escribe tu cita aquí...</span>
               )}
             </div>
@@ -436,41 +555,38 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
       ) : (
         // Normal text note
         <div className="text-[13px] leading-relaxed relative z-10">
-          {data.hasHtmlHighlight ? (
+          {isEditingContent ? (
             <div
-              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(content) }}
-              className="nodrag select-text leading-relaxed text-zinc-800 dark:text-zinc-200"
-            />
-          ) : isEditingContent ? (
-            <textarea
-              autoFocus
-              value={content}
-              onChange={(e) => {
-                setContent(e.target.value)
-                save({ content: e.target.value })
-              }}
-              onBlur={() => setIsEditingContent(false)}
+              ref={contentEditableRef}
+              contentEditable
+              suppressContentEditableWarning
+              onBlur={handleContentBlur}
+              onInput={(e) => setContent(e.currentTarget.innerHTML)}
+              onPaste={handleContentPaste}
+              onKeyDown={handleContentKeyDown}
               onPointerDown={(e) => e.stopPropagation()}
-              rows={content.length > 120 ? 5 : 3}
-              placeholder="Escribe tu nota aquí..."
-              className={`nodrag nowheel w-full bg-transparent border-none outline-none resize-none text-[14px] leading-relaxed font-normal ${
-                isDarkFill ? 'text-white placeholder:text-zinc-400' : 'text-zinc-800 dark:text-zinc-200 placeholder:text-zinc-400 dark:placeholder:text-zinc-500'
-              }`}
+              data-placeholder="Escribe tu nota aquí..."
+              className={`nodrag nowheel w-full bg-transparent border-none outline-none text-[14px] leading-relaxed font-normal ${
+                isDarkFill ? 'text-white' : 'text-zinc-800 dark:text-zinc-200'
+              } empty:before:content-[attr(data-placeholder)] empty:before:text-zinc-400 dark:empty:before:text-zinc-500 [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through [&_del]:line-through [&_a]:text-blue-500 [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:border-l-2 [&_blockquote]:pl-2 [&_blockquote]:italic [&_code]:bg-black/10 dark:[&_code]:bg-white/10 [&_code]:px-1 [&_code]:rounded`}
+              style={{ minHeight: '36px' }}
             />
           ) : (
             <div
               onDoubleClick={() => setIsEditingContent(true)}
-              className={`nodrag cursor-text select-text whitespace-pre-wrap leading-relaxed text-[14px] font-normal ${
+              className={`nodrag cursor-text select-text leading-relaxed text-[14px] font-normal ${
                 isDarkFill ? 'text-zinc-100' : 'text-zinc-800 dark:text-zinc-200'
-              } min-h-[36px]`}
+              } min-h-[36px] [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through [&_del]:line-through [&_a]:text-blue-500 [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:border-l-2 [&_blockquote]:pl-2 [&_blockquote]:italic [&_code]:bg-black/10 dark:[&_code]:bg-white/10 [&_code]:px-1 [&_code]:rounded`}
             >
               {content ? (
-                isSingleEmoji(content.trim()) && !title ? (
+                isSingleEmoji(content.trim()) && !title && !hasHtmlFormatting(content) ? (
                   <div className="py-2 flex items-center justify-center">
                     <AppleEmoji emoji={content.trim()} size={56} className="drop-shadow-md hover:scale-110 transition-transform duration-150 cursor-pointer" />
                   </div>
+                ) : hasHtmlFormatting(content) || data.hasHtmlHighlight ? (
+                  <div dangerouslySetInnerHTML={{ __html: sanitizeHtmlContent(content) }} />
                 ) : (
-                  renderWithAppleEmoji(content)
+                  <div className="whitespace-pre-wrap">{renderWithAppleEmoji(content)}</div>
                 )
               ) : (
                 <span className="text-zinc-400 dark:text-zinc-500 italic select-none">Escribe tu nota aquí...</span>

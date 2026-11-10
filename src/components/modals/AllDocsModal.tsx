@@ -51,7 +51,7 @@ export function AllDocsModal({
     new Set(activeDocs.flatMap((w) => w.tags || []).filter(Boolean))
   )
 
-  // Filter and sort matching AFFiNE collections
+  // Filter and sort docs
   const filtered = activeDocs
     .filter((w) => {
       // Search
@@ -123,7 +123,7 @@ export function AllDocsModal({
           </div>
         </div>
 
-        {/* Collection Filter Tabs */}
+        {/* Filter Tabs */}
         <div className="px-5 py-2.5 border-b border-[var(--app-border)] flex items-center gap-1.5 overflow-x-auto shrink-0 bg-[var(--app-bg-secondary)]">
           {[
             { id: 'all', label: 'Todas las notas' },

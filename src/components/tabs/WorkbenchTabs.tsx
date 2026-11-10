@@ -25,7 +25,7 @@ export interface WorkbenchTab {
   id: string
   workspaceId: string
   pinned?: boolean
-  viewType?: 'doc' | 'all-docs' | 'knowledge-graph' | 'trash' | 'templates' | 'collections' | 'tags'
+  viewType?: 'doc' | 'all-docs' | 'knowledge-graph' | 'trash' | 'templates' | 'tags'
   title?: string
   icon?: string
   spaceId?: string
@@ -156,8 +156,6 @@ export function WorkbenchTabs({
       return { title: 'Papelera', icon: '🗑️', viewMode: 'doc' }
     } else if (tab.viewType === 'templates') {
       return { title: 'Plantillas', icon: '📋', viewMode: 'doc' }
-    } else if (tab.viewType === 'collections') {
-      return { title: 'Colecciones', icon: '📁', viewMode: 'doc' }
     } else if (tab.viewType === 'tags') {
       return { title: 'Etiquetas', icon: '🏷️', viewMode: 'doc' }
     }
@@ -231,7 +229,7 @@ export function WorkbenchTabs({
   })
 
   return (
-    <div className="h-9 border-b border-[var(--app-border)] bg-[var(--app-bg-secondary)] px-1.5 flex items-center justify-between shrink-0 select-none z-15 relative overflow-hidden">
+    <div className="h-9 border-b border-[var(--app-border)] bg-[var(--app-bg-secondary)] px-1.5 flex items-center justify-between shrink-0 select-none z-30 relative">
       {/* Sidebar toggle button (visible on mobile or when sidebar is collapsed) */}
       {onToggleSidebar && (
         <button
@@ -260,7 +258,7 @@ export function WorkbenchTabs({
       <div
         ref={tabsContainerRef}
         onWheel={handleWheel}
-        className="flex items-center gap-1 overflow-x-auto no-scrollbar flex-1 h-full py-1 pr-1 touch-pan-x"
+        className="flex items-center gap-1 overflow-x-auto overflow-y-hidden no-scrollbar flex-1 h-full pr-1 touch-pan-x"
       >
         {tabs.map((tab, index) => {
           const isActive = tab.id === activeTabId

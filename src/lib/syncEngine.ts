@@ -205,187 +205,207 @@ class SyncEngine {
     try {
       const authUser = await getAuthUser()
       const authUserId = authUser?.id || undefined
+      const currentMember = getCurrentMember()
 
-      // ==========================================
-      // 1. PUSH & PULL: SPACES
-      // ==========================================
-      const pendingSpaces = await db.spaces.where('syncStatus').equals('pending').toArray()
-      if (pendingSpaces.length > 0) {
-        const payload = pendingSpaces.map((s: SpaceItem) => ({
-          id: s.id,
-          name: s.name,
-          icon: s.icon,
-          color: s.color,
-          created_at: s.createdAt,
-          updated_at: s.updatedAt,
-          is_deleted: Boolean(s.isDeleted),
-          is_private: Boolean(s.isPrivate),
-          owner_member: s.ownerMember || currentMember.id,
-          ...(authUserId ? { user_id: authUserId } : (s.userId ? { user_id: s.userId } : {}))
-        }))
-        const { error: spError } = await supabase.from('seven_spaces').upsert(payload, { onConflict: 'id' })
-        if (spError) throw spError
-        await db.spaces.bulkUpdate(
-          pendingSpaces.map((s) => ({ key: s.id, changes: { syncStatus: 'synced' as const } }))
-        )
-      }
-
-      // ==========================================
-      // 2. PUSH & PULL: WORKSPACES (PAGES / DOCS)
-      // ==========================================
-      const pendingWorkspaces = await db.workspaces.where('syncStatus').equals('pending').toArray()
-      if (pendingWorkspaces.length > 0) {
-        const payload = pendingWorkspaces.map((w: WorkspaceItem) => ({
-          id: w.id,
-          parent_id: w.parentId,
-          space_id: w.spaceId || 'default-workspace',
-          folder: w.folder || null,
-          title: w.title,
-          icon: w.icon,
-          color: w.color,
-          view_mode: w.viewMode,
-          doc_content: w.docContent,
-          created_at: w.createdAt,
-          updated_at: w.updatedAt,
-          is_favorite: w.isFavorite,
-          is_deleted: w.isDeleted,
-          is_private: Boolean(w.isPrivate),
-          owner_member: w.ownerMember || 'kevin',
-          is_public_shared: Boolean(w.isPublicShared),
-          share_token: w.shareToken || null,
-          share_permission: w.sharePermission || 'view',
-          ...(authUserId ? { user_id: authUserId } : {}),
-          metadata: {
-            tags: w.tags || [],
-            documentMode: w.documentMode,
-            isJournal: w.isJournal,
-            journalDate: w.journalDate,
-            templateName: w.templateName,
-            createdBy: w.createdBy,
-            lastEditedBy: w.lastEditedBy,
-            borderlessTheme: w.borderlessTheme,
-            pageWidth: w.pageWidth,
-            isInformationOpen: w.isInformationOpen,
-            informationContent: w.informationContent,
-            biDirectionalLinksVisible: w.biDirectionalLinksVisible,
-            propertyVisibility: w.propertyVisibility,
-            activeProperties: w.activeProperties,
-            customProperties: w.customProperties,
-            databaseData: w.databaseData,
-            canvasGridVariant: w.canvasGridVariant
+      // Solo empujar cambios locales si hay sesión autenticada (las políticas RLS requieren usuario autenticado)
+      if (authUserId) {
+        // ==========================================
+        // 1. PUSH: SPACES
+        // ==========================================
+        const pendingSpaces = await db.spaces.where('syncStatus').equals('pending').toArray()
+        if (pendingSpaces.length > 0) {
+          const payload = pendingSpaces.map((s: SpaceItem) => ({
+            id: s.id,
+            name: s.name,
+            icon: s.icon,
+            color: s.color,
+            created_at: s.createdAt,
+            updated_at: s.updatedAt,
+            is_deleted: Boolean(s.isDeleted),
+            is_private: Boolean(s.isPrivate),
+            owner_member: s.ownerMember || currentMember.id,
+            user_id: authUserId
+          }))
+          const { error: spError } = await supabase.from('seven_spaces').upsert(payload, { onConflict: 'id' })
+          if (!spError) {
+            await db.spaces.bulkUpdate(
+              pendingSpaces.map((s) => ({ key: s.id, changes: { syncStatus: 'synced' as const } }))
+            )
+          } else {
+            console.warn('Warning syncing spaces:', spError.message)
           }
-        }))
+        }
 
-        const { error: wsError } = await supabase.from('seven_workspaces').upsert(payload, { onConflict: 'id' })
-        if (wsError) throw wsError
+        // ==========================================
+        // 2. PUSH: WORKSPACES (PAGES / DOCS)
+        // ==========================================
+        const pendingWorkspaces = await db.workspaces.where('syncStatus').equals('pending').toArray()
+        if (pendingWorkspaces.length > 0) {
+          const payload = pendingWorkspaces.map((w: WorkspaceItem) => ({
+            id: w.id,
+            parent_id: w.parentId,
+            space_id: w.spaceId || 'default-workspace',
+            folder: w.folder || null,
+            title: w.title,
+            icon: w.icon,
+            color: w.color,
+            view_mode: w.viewMode,
+            doc_content: w.docContent,
+            created_at: w.createdAt,
+            updated_at: w.updatedAt,
+            is_favorite: w.isFavorite,
+            is_deleted: w.isDeleted,
+            is_private: Boolean(w.isPrivate),
+            owner_member: w.ownerMember || currentMember.id || 'kevin',
+            is_public_shared: Boolean(w.isPublicShared),
+            share_token: w.shareToken || null,
+            share_permission: w.sharePermission || 'view',
+            user_id: authUserId,
+            metadata: {
+              tags: w.tags || [],
+              documentMode: w.documentMode,
+              isJournal: w.isJournal,
+              journalDate: w.journalDate,
+              templateName: w.templateName,
+              createdBy: w.createdBy,
+              lastEditedBy: w.lastEditedBy,
+              borderlessTheme: w.borderlessTheme,
+              pageWidth: w.pageWidth,
+              isInformationOpen: w.isInformationOpen,
+              informationContent: w.informationContent,
+              biDirectionalLinksVisible: w.biDirectionalLinksVisible,
+              propertyVisibility: w.propertyVisibility,
+              activeProperties: w.activeProperties,
+              customProperties: w.customProperties,
+              databaseData: w.databaseData,
+              canvasGridVariant: w.canvasGridVariant,
+              sortOrder: w.sortOrder
+            }
+          }))
 
-        await db.workspaces.bulkUpdate(
-          pendingWorkspaces.map((w) => ({ key: w.id, changes: { syncStatus: 'synced' as const } }))
-        )
-      }
+          const { error: wsError } = await supabase.from('seven_workspaces').upsert(payload, { onConflict: 'id' })
+          if (!wsError) {
+            await db.workspaces.bulkUpdate(
+              pendingWorkspaces.map((w) => ({ key: w.id, changes: { syncStatus: 'synced' as const } }))
+            )
+          } else {
+            console.warn('Warning syncing workspaces:', wsError.message)
+          }
+        }
 
-      // ==========================================
-      // 3. PUSH: CANVAS NODES
-      // ==========================================
-      const pendingNodes = await db.canvasNodes.where('syncStatus').equals('pending').toArray()
-      if (pendingNodes.length > 0) {
-        const payload = pendingNodes.map((n: CanvasNodeItem) => ({
-          id: n.id,
-          user_id: authUserId,
-          workspace_id: n.workspaceId,
-          type: n.type,
-          position_x: n.positionX,
-          position_y: n.positionY,
-          width: n.width,
-          height: n.height,
-          data: n.data,
-          created_at: n.createdAt,
-          updated_at: n.updatedAt,
-          is_deleted: n.isDeleted
-        }))
+        // ==========================================
+        // 3. PUSH: CANVAS NODES
+        // ==========================================
+        const pendingNodes = await db.canvasNodes.where('syncStatus').equals('pending').toArray()
+        if (pendingNodes.length > 0) {
+          const payload = pendingNodes.map((n: CanvasNodeItem) => ({
+            id: n.id,
+            user_id: authUserId,
+            workspace_id: n.workspaceId,
+            type: n.type,
+            position_x: n.positionX,
+            position_y: n.positionY,
+            width: n.width,
+            height: n.height,
+            data: n.data,
+            created_at: n.createdAt,
+            updated_at: n.updatedAt,
+            is_deleted: n.isDeleted
+          }))
 
-        const { error: nodeError } = await supabase.from('seven_canvas_nodes').upsert(payload, { onConflict: 'id' })
-        if (nodeError) throw nodeError
+          const { error: nodeError } = await supabase.from('seven_canvas_nodes').upsert(payload, { onConflict: 'id' })
+          if (!nodeError) {
+            await db.canvasNodes.bulkUpdate(
+              pendingNodes.map((n) => ({ key: n.id, changes: { syncStatus: 'synced' as const } }))
+            )
+          } else {
+            console.warn('Warning syncing canvas nodes:', nodeError.message)
+          }
+        }
 
-        await db.canvasNodes.bulkUpdate(
-          pendingNodes.map((n) => ({ key: n.id, changes: { syncStatus: 'synced' as const } }))
-        )
-      }
+        // ==========================================
+        // 4. PUSH: CANVAS EDGES
+        // ==========================================
+        const pendingEdges = await db.canvasEdges.where('syncStatus').equals('pending').toArray()
+        if (pendingEdges.length > 0) {
+          const payload = pendingEdges.map((e: CanvasEdgeItem) => ({
+            id: e.id,
+            user_id: authUserId,
+            workspace_id: e.workspaceId,
+            source: e.source,
+            target: e.target,
+            source_handle: e.sourceHandle,
+            target_handle: e.targetHandle,
+            label: e.label,
+            animated: e.animated,
+            color: e.color,
+            edge_type: e.edgeType || 'default',
+            marker_end_type: e.markerEndType || 'arrow',
+            created_at: e.createdAt,
+            updated_at: e.updatedAt,
+            is_deleted: e.isDeleted
+          }))
 
-      // ==========================================
-      // 4. PUSH: CANVAS EDGES
-      // ==========================================
-      const pendingEdges = await db.canvasEdges.where('syncStatus').equals('pending').toArray()
-      if (pendingEdges.length > 0) {
-        const payload = pendingEdges.map((e: CanvasEdgeItem) => ({
-          id: e.id,
-          user_id: authUserId,
-          workspace_id: e.workspaceId,
-          source: e.source,
-          target: e.target,
-          source_handle: e.sourceHandle,
-          target_handle: e.targetHandle,
-          label: e.label,
-          animated: e.animated,
-          color: e.color,
-          edge_type: e.edgeType || 'default',
-          marker_end_type: e.markerEndType || 'arrow',
-          created_at: e.createdAt,
-          updated_at: e.updatedAt,
-          is_deleted: e.isDeleted
-        }))
+          const { error: edgeError } = await supabase.from('seven_canvas_edges').upsert(payload, { onConflict: 'id' })
+          if (!edgeError) {
+            await db.canvasEdges.bulkUpdate(
+              pendingEdges.map((e) => ({ key: e.id, changes: { syncStatus: 'synced' as const } }))
+            )
+          } else {
+            console.warn('Warning syncing canvas edges:', edgeError.message)
+          }
+        }
 
-        const { error: edgeError } = await supabase.from('seven_canvas_edges').upsert(payload, { onConflict: 'id' })
-        if (edgeError) throw edgeError
+        // ==========================================
+        // 5. PUSH: COLLECTIONS
+        // ==========================================
+        const pendingCollections = await db.collections.where('syncStatus').equals('pending').toArray()
+        if (pendingCollections.length > 0) {
+          const payload = pendingCollections.map((c: CollectionItem) => ({
+            id: c.id,
+            user_id: authUserId,
+            space_id: c.spaceId,
+            name: c.name,
+            icon: c.icon,
+            color: c.color,
+            doc_ids: c.docIds,
+            created_at: c.createdAt,
+            updated_at: c.updatedAt,
+            is_deleted: Boolean(c.isDeleted)
+          }))
+          const { error: colError } = await supabase.from('seven_collections').upsert(payload, { onConflict: 'id' })
+          if (!colError) {
+            await db.collections.bulkUpdate(
+              pendingCollections.map((c) => ({ key: c.id, changes: { syncStatus: 'synced' as const } }))
+            )
+          } else {
+            console.warn('Warning syncing collections:', colError.message)
+          }
+        }
 
-        await db.canvasEdges.bulkUpdate(
-          pendingEdges.map((e) => ({ key: e.id, changes: { syncStatus: 'synced' as const } }))
-        )
-      }
-
-      // ==========================================
-      // 5. PUSH: COLLECTIONS
-      // ==========================================
-      const pendingCollections = await db.collections.where('syncStatus').equals('pending').toArray()
-      if (pendingCollections.length > 0) {
-        const payload = pendingCollections.map((c: CollectionItem) => ({
-          id: c.id,
-          user_id: authUserId,
-          space_id: c.spaceId,
-          name: c.name,
-          icon: c.icon,
-          color: c.color,
-          doc_ids: c.docIds,
-          created_at: c.createdAt,
-          updated_at: c.updatedAt,
-          is_deleted: Boolean(c.isDeleted)
-        }))
-        const { error: colError } = await supabase.from('seven_collections').upsert(payload, { onConflict: 'id' })
-        if (colError) throw colError
-        await db.collections.bulkUpdate(
-          pendingCollections.map((c) => ({ key: c.id, changes: { syncStatus: 'synced' as const } }))
-        )
-      }
-
-      // ==========================================
-      // 6. PUSH: TAGS
-      // ==========================================
-      const pendingTags = await db.tags.where('syncStatus').equals('pending').toArray()
-      if (pendingTags.length > 0) {
-        const payload = pendingTags.map((t: TagItem) => ({
-          id: t.id,
-          user_id: authUserId,
-          space_id: t.spaceId,
-          name: t.name,
-          color: t.color,
-          created_at: t.createdAt,
-          is_deleted: Boolean(t.isDeleted)
-        }))
-        const { error: tagError } = await supabase.from('seven_tags').upsert(payload, { onConflict: 'id' })
-        if (tagError) throw tagError
-        await db.tags.bulkUpdate(
-          pendingTags.map((t) => ({ key: t.id, changes: { syncStatus: 'synced' as const } }))
-        )
+        // ==========================================
+        // 6. PUSH: TAGS
+        // ==========================================
+        const pendingTags = await db.tags.where('syncStatus').equals('pending').toArray()
+        if (pendingTags.length > 0) {
+          const payload = pendingTags.map((t: TagItem) => ({
+            id: t.id,
+            user_id: authUserId,
+            space_id: t.spaceId,
+            name: t.name,
+            color: t.color,
+            created_at: t.createdAt,
+            is_deleted: Boolean(t.isDeleted)
+          }))
+          const { error: tagError } = await supabase.from('seven_tags').upsert(payload, { onConflict: 'id' })
+          if (!tagError) {
+            await db.tags.bulkUpdate(
+              pendingTags.map((t) => ({ key: t.id, changes: { syncStatus: 'synced' as const } }))
+            )
+          } else {
+            console.warn('Warning syncing tags:', tagError.message)
+          }
+        }
       }
 
       // ==========================================
@@ -394,7 +414,6 @@ class SyncEngine {
       const lastSync = this.lastSyncTime || 0
 
       // Pull Spaces
-      const currentMember = getCurrentMember()
       const { data: remoteSpaces } = await supabase
         .from('seven_spaces')
         .select('*')
@@ -492,7 +511,8 @@ class SyncEngine {
               activeProperties: meta.activeProperties,
               customProperties: meta.customProperties,
               databaseData: meta.databaseData,
-              canvasGridVariant: meta.canvasGridVariant
+              canvasGridVariant: meta.canvasGridVariant,
+              sortOrder: meta.sortOrder ?? (rw as any).sort_order ?? (rw as any).sortOrder
             })
           }
         }

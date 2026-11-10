@@ -5,12 +5,14 @@ import {
   AlignHorizontalCenterIcon,
   AlignRightIcon
 } from '@blocksuite/icons/rc'
+import { toast } from 'sonner'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
 import { areNodePropsEqual, NodeHandles, SourceNodeBadge } from './nodeUtils'
 import { renderWithAppleEmoji } from '../../ui/AppleEmoji'
 import { FONT_FAMILIES, type FontOption } from '../../../lib/fonts'
 import { FontPickerPopover } from './FontPickerPopover'
+import { hasHtmlFormatting, cleanPastedHtml, sanitizeHtmlContent } from '../../../lib/pasteUtils'
 
 export { FONT_FAMILIES }
 export type { FontOption }
@@ -40,7 +42,7 @@ export const TextNode = memo(({ id, data, selected }: any) => {
   const [align, setAlign] = useState<'left' | 'center' | 'right'>(data.textAlign || 'left')
   const [isEditing, setIsEditing] = useState(false)
   const [showFontMenu, setShowFontMenu] = useState(false)
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const contentEditableRef = useRef<HTMLDivElement | null>(null)
   const fontMenuRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -50,6 +52,96 @@ export const TextNode = memo(({ id, data, selected }: any) => {
     if (data.textAlign) setAlign(data.textAlign)
     if (data.fontFamily) setFontFamily(data.fontFamily)
   }, [data.content, data.color, data.fontSize, data.textAlign, data.fontFamily])
+
+  // Sync content into contentEditable element when entering edit mode
+  useEffect(() => {
+    if (isEditing && contentEditableRef.current) {
+      const el = contentEditableRef.current
+      if (hasHtmlFormatting(content)) {
+        el.innerHTML = sanitizeHtmlContent(content)
+      } else if (content) {
+        el.innerText = content
+      } else {
+        el.innerHTML = ''
+      }
+      el.focus()
+      try {
+        const range = document.createRange()
+        range.selectNodeContents(el)
+        range.collapse(false)
+        const sel = window.getSelection()
+        sel?.removeAllRanges()
+        sel?.addRange(range)
+      } catch {
+        // ignore selection errors
+      }
+    }
+  }, [isEditing])
+
+  // Paste formatted text directly into selected text node on canvas
+  useEffect(() => {
+    if (!selected || isEditing) return
+
+    const handleCardPaste = (e: ClipboardEvent) => {
+      const activeEl = document.activeElement
+      if (
+        activeEl &&
+        (activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          (activeEl as HTMLElement).isContentEditable)
+      ) {
+        return
+      }
+
+      const html = e.clipboardData?.getData('text/html')
+      const text = e.clipboardData?.getData('text/plain')
+
+      if (html && hasHtmlFormatting(html)) {
+        e.preventDefault()
+        const clean = cleanPastedHtml(html)
+        const updated = content && content.trim() ? `${content}<br/>${clean}` : clean
+        setContent(updated)
+        save({ content: updated })
+        toast.success('Formato de texto conservado')
+      } else if (text && text.trim()) {
+        e.preventDefault()
+        const updated = content && content.trim() ? `${content}\n${text}` : text
+        setContent(updated)
+        save({ content: updated })
+      }
+    }
+
+    window.addEventListener('paste', handleCardPaste)
+    return () => window.removeEventListener('paste', handleCardPaste)
+  }, [selected, isEditing, content])
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    const html = e.clipboardData.getData('text/html')
+    const text = e.clipboardData.getData('text/plain')
+
+    if (html && hasHtmlFormatting(html)) {
+      const clean = cleanPastedHtml(html)
+      document.execCommand('insertHTML', false, clean)
+    } else if (text) {
+      document.execCommand('insertText', false, text)
+    }
+
+    if (contentEditableRef.current) {
+      const htmlVal = contentEditableRef.current.innerHTML
+      setContent(htmlVal)
+      save({ content: htmlVal })
+    }
+  }
+
+  const handleBlur = () => {
+    setIsEditing(false)
+    if (contentEditableRef.current) {
+      const htmlVal = contentEditableRef.current.innerHTML
+      setContent(htmlVal)
+      save({ content: htmlVal })
+    }
+  }
 
   // Close font menu on outside click
   useEffect(() => {
@@ -63,12 +155,7 @@ export const TextNode = memo(({ id, data, selected }: any) => {
     return () => window.removeEventListener('mousedown', handleClickOutside)
   }, [showFontMenu])
 
-  useEffect(() => {
-    if (isEditing && textareaRef.current) {
-      textareaRef.current.style.height = 'auto'
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`
-    }
-  }, [content, isEditing])
+
 
   const save = async (updates: any) => {
     try {
@@ -248,35 +335,35 @@ export const TextNode = memo(({ id, data, selected }: any) => {
 
       {/* Text Body */}
       {isEditing ? (
-        <textarea
-          ref={textareaRef}
-          autoFocus
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          onBlur={() => {
-            setIsEditing(false)
-            save({ content })
-          }}
+        <div
+          ref={contentEditableRef}
+          contentEditable
+          suppressContentEditableWarning
+          onBlur={handleBlur}
+          onInput={(e) => setContent(e.currentTarget.innerHTML)}
+          onPaste={handlePaste}
           onKeyDown={(e) => {
             if (e.key === 'Escape') {
-              setIsEditing(false)
-              save({ content })
+              handleBlur()
             }
           }}
           onPointerDown={(e) => e.stopPropagation()}
-          placeholder="Escribe texto..."
-          className={`nodrag nowheel w-full bg-transparent border-none outline-none resize-none leading-relaxed select-text ${textColorClass} ${fontSizeClass} text-${align}`}
-          style={{ fontFamily }}
-          rows={1}
+          data-placeholder="Escribe texto..."
+          className={`nodrag nowheel w-full bg-transparent border-none outline-none leading-relaxed select-text ${textColorClass} ${fontSizeClass} text-${align} empty:before:content-[attr(data-placeholder)] empty:before:opacity-60 [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through [&_del]:line-through [&_a]:text-sky-500 [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5`}
+          style={{ fontFamily, minHeight: '24px' }}
         />
       ) : (
         <div
           onDoubleClick={() => setIsEditing(true)}
-          className={`nodrag cursor-text whitespace-pre-wrap select-text leading-relaxed ${textColorClass} ${fontSizeClass} text-${align}`}
+          className={`nodrag cursor-text select-text leading-relaxed ${textColorClass} ${fontSizeClass} text-${align} [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through [&_del]:line-through [&_a]:text-sky-500 [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5`}
           style={{ fontFamily }}
         >
           {content ? (
-            renderWithAppleEmoji(content)
+            hasHtmlFormatting(content) ? (
+              <div dangerouslySetInnerHTML={{ __html: sanitizeHtmlContent(content) }} />
+            ) : (
+              <div className="whitespace-pre-wrap">{renderWithAppleEmoji(content)}</div>
+            )
           ) : (
             <span className="italic text-xs opacity-60 select-none">Doble clic para escribir texto</span>
           )}

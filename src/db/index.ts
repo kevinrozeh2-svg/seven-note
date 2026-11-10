@@ -73,6 +73,7 @@ export interface WorkspaceItem {
   isFavorite: boolean
   isDeleted: boolean
   syncStatus: SyncStatus
+  sortOrder?: number
 
   // Extended properties matching AppFlowy / AFFiNE
   tags?: string[]
@@ -459,7 +460,7 @@ export async function seedInitialData() {
         updatedAt: 'always_show',
         createdBy: 'always_hide',
         borderlessTheme: 'always_hide',
-        pageWidth: 'always_hide'
+        pageWidth: 'always_show'
       }
     },
     {

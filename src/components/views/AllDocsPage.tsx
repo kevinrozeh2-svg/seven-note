@@ -24,7 +24,7 @@ interface AllDocsPageProps {
   onDeleteWorkspace: (e: React.MouseEvent, id: string) => void
 }
 
-type MainTab = 'docs' | 'collections' | 'tags'
+type MainTab = 'docs' | 'tags'
 type ViewModeLayout = 'list' | 'grid'
 
 function formatRelativeTime(timestamp: number) {
@@ -147,7 +147,7 @@ export const AllDocsPage: React.FC<AllDocsPageProps> = ({
     <div className="flex-1 flex flex-col h-full bg-[#18181b] text-neutral-200 select-none overflow-hidden">
       {/* Top AFFiNE-style Header */}
       <header className="h-14 px-3 sm:px-8 border-b border-neutral-800 flex items-center justify-between shrink-0 bg-[#18181b] gap-2 overflow-x-auto no-scrollbar">
-        {/* Navigation Tabs (Documentos / Colecciones / Etiquetas) */}
+        {/* Navigation Tabs (Documentos / Etiquetas) */}
         <div className="flex items-center gap-3 sm:gap-6 shrink-0">
           <button
             onClick={() => setActiveTab('docs')}
@@ -158,16 +158,6 @@ export const AllDocsPage: React.FC<AllDocsPageProps> = ({
             }`}
           >
             Documentos
-          </button>
-          <button
-            onClick={() => setActiveTab('collections')}
-            className={`text-xs sm:text-sm font-semibold transition pb-0.5 whitespace-nowrap cursor-pointer ${
-              activeTab === 'collections'
-                ? 'text-white border-b-2 border-white'
-                : 'text-neutral-400 hover:text-neutral-200'
-            }`}
-          >
-            Colecciones
           </button>
           <button
             onClick={() => setActiveTab('tags')}

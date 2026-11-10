@@ -1,4 +1,4 @@
-import { memo, useState, useEffect } from 'react'
+import { memo, useState, useEffect, useRef } from 'react'
 import {
   ToggleDownIcon,
   ExpandFullIcon,
@@ -17,9 +17,18 @@ export const DocFrameNode = memo(({ id, data, selected }: any) => {
   const [isExpanded, setIsExpanded] = useState(data.isExpanded ?? false)
   const [showInfo, setShowInfo] = useState(false)
   const [copied, setCopied] = useState(false)
+  const titleTextareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const adjustHeight = () => {
+    if (titleTextareaRef.current) {
+      titleTextareaRef.current.style.height = 'auto'
+      titleTextareaRef.current.style.height = `${titleTextareaRef.current.scrollHeight}px`
+    }
+  }
 
   useEffect(() => {
     setTitle(data.title || '')
+    adjustHeight()
   }, [data.title])
 
   const handleTitleChange = async (newTitle: string) => {
@@ -174,12 +183,18 @@ export const DocFrameNode = memo(({ id, data, selected }: any) => {
               <AppleEmoji emoji={data.icon} size={24} />
             </div>
           )}
-          <input
-            type="text"
+          <textarea
+            ref={titleTextareaRef}
+            rows={1}
             value={title === 'Untitled' ? '' : title}
-            onChange={(e) => handleTitleChange(e.target.value)}
+            onChange={(e) => {
+              handleTitleChange(e.target.value)
+              e.target.style.height = 'auto'
+              e.target.style.height = `${e.target.scrollHeight}px`
+            }}
             placeholder="Título..."
-            className="text-xl font-bold tracking-tight text-[var(--affine-text-primary-color)] placeholder:text-[var(--affine-placeholder-color)] bg-transparent border-none outline-none focus:outline-none w-full"
+            className="text-xl font-bold tracking-tight text-[var(--affine-text-primary-color)] placeholder:text-[var(--affine-placeholder-color)] bg-transparent border-none outline-none focus:outline-none w-full resize-none overflow-hidden leading-snug break-words whitespace-pre-wrap block"
+            style={{ fieldSizing: 'content' }}
           />
 
           {/* Preview of page text */}

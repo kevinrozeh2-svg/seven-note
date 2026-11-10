@@ -20,6 +20,7 @@ import { syncEngine, type SyncEngineStatus } from '../../lib/syncEngine'
 import { db } from '../../db'
 import schemaSql from '../../supabase_schema.sql?raw'
 import { toast } from 'sonner'
+import { isTauri, checkForAppUpdates } from '../../lib/tauriUpdater'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -413,7 +414,7 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
             </div>
           </div>
 
-          {/* PWA / Desktop App Install */}
+          {/* PWA / Desktop App Install & Updates */}
           <div className="p-4 rounded-3xl border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.02] flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full flex items-center justify-center bg-indigo-500/10 text-indigo-500 font-bold text-sm">
@@ -421,24 +422,34 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
               </div>
               <div>
                 <div className="text-xs font-bold text-[var(--app-text-primary)]">
-                  Aplicación de Escritorio / PWA
+                  {isTauri ? 'Seven Note para Escritorio (Nativo)' : 'Aplicación de Escritorio / PWA'}
                 </div>
                 <div className="text-[11px] text-neutral-400">
-                  {isStandalone
+                  {isTauri
+                    ? 'Versión nativa de escritorio v1.0.0. Actualizaciones automáticas activas.'
+                    : isStandalone
                     ? 'Seven Note se está ejecutando en modo standalone (instalada).'
                     : 'Instala Seven Note en Windows, Mac, iPad o Android para acceso directo y 100% offline.'}
                 </div>
               </div>
             </div>
 
-            {!isStandalone && (
+            {isTauri ? (
+              <button
+                type="button"
+                onClick={() => checkForAppUpdates(true)}
+                className="px-4 py-1.5 rounded-full text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition shadow-xs cursor-pointer active:scale-95 shrink-0"
+              >
+                Buscar actualizaciones
+              </button>
+            ) : !isStandalone ? (
               <button
                 onClick={handleInstallApp}
                 className="px-4 py-1.5 rounded-full text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition shadow-xs cursor-pointer active:scale-95 shrink-0"
               >
                 Instalar App
               </button>
-            )}
+            ) : null}
           </div>
         </div>
 

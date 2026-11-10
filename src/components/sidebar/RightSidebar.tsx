@@ -69,7 +69,7 @@ export function RightSidebar({
     updatedAt: 'always_show',
     createdBy: 'always_hide',
     borderlessTheme: 'always_hide',
-    pageWidth: 'always_hide',
+    pageWidth: 'always_show',
     ...(workspace.propertyVisibility || {})
   }
 
@@ -469,7 +469,7 @@ export function RightSidebar({
                         key={width}
                         onClick={() => handleUpdateFieldValue('pageWidth', width)}
                         className={`flex-1 py-1 rounded text-xs capitalize ${
-                          (workspace.pageWidth || 'standard') === width
+                          (workspace.pageWidth || 'full') === width
                             ? 'bg-blue-600 text-white font-medium'
                             : 'bg-[#222226] text-zinc-400 hover:text-zinc-200'
                         }`}
