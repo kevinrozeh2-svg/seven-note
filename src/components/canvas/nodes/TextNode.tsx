@@ -18,8 +18,8 @@ import {
   sanitizeHtmlContent,
   isPdfHtml,
   isPdfOrStructuredText,
-  cleanPdfHtml,
-  formatPdfOrStructuredText
+  isLegalContractOrPdfText,
+  cleanPdfContent
 } from '../../../lib/pasteUtils'
 
 export { FONT_FAMILIES }
@@ -105,10 +105,13 @@ export const TextNode = memo(({ id, data, selected }: any) => {
       const text = e.clipboardData?.getData('text/plain')
 
       let clean = ''
-      const isPdf = Boolean((html && isPdfHtml(html)) || (text && isPdfOrStructuredText(text)))
+      const isPdf = Boolean(
+        (html && isPdfHtml(html)) ||
+        (text && (isPdfOrStructuredText(text) || isLegalContractOrPdfText(text)))
+      )
 
       if (isPdf) {
-        clean = html ? cleanPdfHtml(html, text || '') : (text ? formatPdfOrStructuredText(text) : '')
+        clean = cleanPdfContent(html, text || '')
       } else if (html && hasHtmlFormatting(html)) {
         clean = cleanPastedHtml(html)
       }
@@ -137,10 +140,13 @@ export const TextNode = memo(({ id, data, selected }: any) => {
     const text = e.clipboardData.getData('text/plain')
 
     let clean = ''
-    const isPdf = Boolean((html && isPdfHtml(html)) || (text && isPdfOrStructuredText(text)))
+    const isPdf = Boolean(
+      (html && isPdfHtml(html)) ||
+      (text && (isPdfOrStructuredText(text) || isLegalContractOrPdfText(text)))
+    )
 
     if (isPdf) {
-      clean = html ? cleanPdfHtml(html, text || '') : (text ? formatPdfOrStructuredText(text) : '')
+      clean = cleanPdfContent(html, text || '')
     } else if (html && hasHtmlFormatting(html)) {
       clean = cleanPastedHtml(html)
     }
