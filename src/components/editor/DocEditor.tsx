@@ -15,8 +15,8 @@ import {
   cleanPastedHtml,
   isPdfHtml,
   isPdfOrStructuredText,
-  cleanPdfHtml,
-  formatPdfOrStructuredText
+  isLegalContractOrPdfText,
+  cleanPdfContent
 } from '../../lib/pasteUtils'
 import { Table } from '@tiptap/extension-table'
 import { TableRow } from '@tiptap/extension-table-row'
@@ -383,9 +383,12 @@ export function DocEditor({
         const text = event.clipboardData?.getData('text/plain')
 
         // 1. Check if pasted content is from a PDF (either browser PDF viewer or desktop PDF reader like Acrobat)
-        const isPdf = Boolean((html && isPdfHtml(html)) || (text && isPdfOrStructuredText(text)))
+        const isPdf = Boolean(
+          (html && isPdfHtml(html)) ||
+          (text && (isPdfOrStructuredText(text) || isLegalContractOrPdfText(text)))
+        )
         if (isPdf) {
-          const formatted = html ? cleanPdfHtml(html, text || '') : (text ? formatPdfOrStructuredText(text) : '')
+          const formatted = cleanPdfContent(html || '', text || '')
           if (formatted && formatted.trim()) {
             editor?.commands.insertContent(formatted)
             toast.success('Texto de PDF pegado conservando formato')

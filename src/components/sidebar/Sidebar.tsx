@@ -245,6 +245,61 @@ export function Sidebar({
   const [newFolderName, setNewFolderName] = useState('')
   const [toolsOpen, setToolsOpen] = useState(false)
 
+  // Resizable sidebar state (min: 200px, max: 600px)
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('seven_note_sidebar_width')
+      if (saved) {
+        const parsed = parseInt(saved, 10)
+        if (!isNaN(parsed) && parsed >= 180 && parsed <= 700) {
+          return parsed
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return 260
+  })
+  const [isResizing, setIsResizing] = useState(false)
+
+  useEffect(() => {
+    if (!isResizing) return
+
+    const handleMouseMove = (e: MouseEvent) => {
+      // Sidebar is on the left, so width is directly mouse X position
+      const clampedWidth = Math.min(Math.max(e.clientX, 180), 650)
+      setSidebarWidth(clampedWidth)
+    }
+
+    const handleMouseUp = () => {
+      setIsResizing(false)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [isResizing])
+
+  // Save width to localStorage when resizing ends or changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('seven_note_sidebar_width', sidebarWidth.toString())
+    } catch {
+      // ignore
+    }
+  }, [sidebarWidth])
+
   const activeMember = currentMember || getCurrentMember()
 
   // Workspace switcher dropdown state
@@ -278,6 +333,7 @@ export function Sidebar({
 
   const draggedDocIdRef = useRef<string | null>(null)
   const draggedFolderNameRef = useRef<string | null>(null)
+  const hasJustDraggedRef = useRef<boolean>(false)
 
   // Persisted folder order for current space
   const [folderOrder, setFolderOrder] = useState<string[]>(() => {
@@ -450,6 +506,7 @@ export function Sidebar({
   const handleDocDragStart = (e: React.DragEvent, doc: WorkspaceItem) => {
     draggedDocIdRef.current = doc.id
     draggedFolderNameRef.current = null
+    hasJustDraggedRef.current = true
     e.dataTransfer.setData('text/plain', doc.id)
     e.dataTransfer.setData('application/seven-note-doc', doc.id)
     e.dataTransfer.effectAllowed = 'move'
@@ -467,6 +524,9 @@ export function Sidebar({
     setDraggedDocId(null)
     setDraggedFolderName(null)
     setDropTarget(null)
+    setTimeout(() => {
+      hasJustDraggedRef.current = false
+    }, 120)
   }
 
   const handleDocDragOver = (
@@ -519,6 +579,9 @@ export function Sidebar({
     setDraggedDocId(null)
     setDraggedFolderName(null)
     setDropTarget(null)
+    setTimeout(() => {
+      hasJustDraggedRef.current = false
+    }, 120)
 
     if (!movingDocId || movingDocId === targetDoc.id) return
 
@@ -617,12 +680,15 @@ export function Sidebar({
     e.preventDefault()
     e.stopPropagation()
 
+    const movingFolder =
+      draggedFolderNameRef.current ||
+      draggedFolderName ||
+      e.dataTransfer.getData('application/seven-note-folder')
     const movingDocId =
       draggedDocIdRef.current ||
+      draggedDocId ||
       e.dataTransfer.getData('application/seven-note-doc') ||
-      e.dataTransfer.getData('text/plain') ||
-      draggedDocId
-    const movingFolder = draggedFolderNameRef.current || draggedFolderName
+      (!movingFolder ? e.dataTransfer.getData('text/plain') : null)
     const currentPosition = dropTarget?.position
 
     draggedDocIdRef.current = null
@@ -630,6 +696,29 @@ export function Sidebar({
     setDraggedDocId(null)
     setDraggedFolderName(null)
     setDropTarget(null)
+    setTimeout(() => {
+      hasJustDraggedRef.current = false
+    }, 120)
+
+    if (movingFolder && movingFolder !== folderName) {
+      const currentList = [...orderedFolders]
+      const filtered = currentList.filter((f) => f !== movingFolder)
+      const toIndex = filtered.indexOf(folderName)
+      const insertIndex = toIndex === -1
+        ? filtered.length
+        : currentPosition === 'before'
+          ? toIndex
+          : toIndex + 1
+
+      filtered.splice(insertIndex, 0, movingFolder)
+      setFolderOrder(filtered)
+      try {
+        localStorage.setItem(`seven_note_folder_order_${currentSpace.id}`, JSON.stringify(filtered))
+      } catch (err) {
+        console.warn('Error saving folder order', err)
+      }
+      return
+    }
 
     if (movingDocId) {
       const movingDoc = workspaces.find((w) => w.id === movingDocId)
@@ -652,31 +741,14 @@ export function Sidebar({
       })
       syncEngine.scheduleSync(500)
       setFolderOpenMap((prev) => ({ ...prev, [folderName]: true }))
-    } else if (movingFolder && movingFolder !== folderName) {
-      const currentList = [...orderedFolders]
-      const filtered = currentList.filter((f) => f !== movingFolder)
-      const toIndex = filtered.indexOf(folderName)
-      const insertIndex = toIndex === -1
-        ? filtered.length
-        : currentPosition === 'before'
-          ? toIndex
-          : toIndex + 1
-
-      filtered.splice(insertIndex, 0, movingFolder)
-      setFolderOrder(filtered)
-      try {
-        localStorage.setItem(`seven_note_folder_order_${currentSpace.id}`, JSON.stringify(filtered))
-      } catch (err) {
-        console.warn('Error saving folder order', err)
-      }
     }
   }
 
   const handleFolderDragStart = (e: React.DragEvent, folderName: string) => {
     draggedFolderNameRef.current = folderName
     draggedDocIdRef.current = null
+    hasJustDraggedRef.current = true
     e.dataTransfer.setData('application/seven-note-folder', folderName)
-    e.dataTransfer.setData('text/plain', folderName)
     e.dataTransfer.effectAllowed = 'move'
     setTimeout(() => {
       setDraggedFolderName(folderName)
@@ -690,6 +762,9 @@ export function Sidebar({
     setDraggedFolderName(null)
     setDraggedDocId(null)
     setDropTarget(null)
+    setTimeout(() => {
+      hasJustDraggedRef.current = false
+    }, 120)
   }
 
   const handleEmptyFolderDragOver = (e: React.DragEvent, folderName: string) => {
@@ -825,7 +900,12 @@ export function Sidebar({
   }
 
   return (
-    <aside className="w-72 sm:w-64 h-full flex flex-col bg-[#fbfbfa] dark:bg-[#161619] border-r border-black/[0.05] dark:border-white/[0.06] text-neutral-800 dark:text-neutral-200 select-none shrink-0 text-xs transition-colors duration-200 font-sans shadow-2xl md:shadow-none">
+    <aside
+      style={{ width: `${sidebarWidth}px` }}
+      className={`relative h-full flex flex-col bg-[#fbfbfa] dark:bg-[#161619] border-r border-black/[0.05] dark:border-white/[0.06] text-neutral-800 dark:text-neutral-200 select-none shrink-0 text-xs font-sans shadow-2xl md:shadow-none max-w-[85vw] ${
+        isResizing ? '' : 'transition-[width] duration-75'
+      }`}
+    >
       {/* 1. Header: Brand & Collapse Sidebar */}
       <div className="h-10 px-3 pt-2 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
@@ -1267,7 +1347,10 @@ export function Sidebar({
                       onDragEnd={handleDocDragEnd}
                       onDragOver={(e) => handleDocDragOver(e, doc, null)}
                       onDrop={(e) => handleDocDrop(e, doc, null)}
-                      onClick={() => onSelectWorkspace(doc.id)}
+                      onClick={() => {
+                        if (hasJustDraggedRef.current) return
+                        onSelectWorkspace(doc.id)
+                      }}
                       className={`group relative flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-grab active:cursor-grabbing transition select-none ${
                         isBeingDragged
                           ? 'opacity-40 bg-black/[0.04] dark:bg-white/[0.04] scale-[0.98]'
@@ -1435,14 +1518,17 @@ export function Sidebar({
                   <div
                     key={`folder-${folderName}`}
                     className="mb-1 relative"
-                    onDragOver={(e) => handleFolderHeaderDragOver(e, folderName)}
-                    onDrop={(e) => handleFolderHeaderDrop(e, folderName)}
                   >
                     <div
                       draggable={true}
                       onDragStart={(e) => handleFolderDragStart(e, folderName)}
                       onDragEnd={handleFolderDragEnd}
-                      onClick={() => toggleFolder(folderName)}
+                      onDragOver={(e) => handleFolderHeaderDragOver(e, folderName)}
+                      onDrop={(e) => handleFolderHeaderDrop(e, folderName)}
+                      onClick={() => {
+                        if (hasJustDraggedRef.current) return
+                        toggleFolder(folderName)
+                      }}
                       className={`group relative flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-grab active:cursor-grabbing hover:bg-black/[0.03] dark:hover:bg-white/[0.05] text-neutral-600 dark:text-neutral-400 font-medium transition select-none ${
                         isBeingDraggedFolder ? 'opacity-40 bg-black/[0.04] dark:bg-white/[0.04]' : ''
                       } ${
@@ -1545,7 +1631,10 @@ export function Sidebar({
                               onDragEnd={handleDocDragEnd}
                               onDragOver={(e) => handleDocDragOver(e, doc, folderName)}
                               onDrop={(e) => handleDocDrop(e, doc, folderName)}
-                              onClick={() => onSelectWorkspace(doc.id)}
+                              onClick={() => {
+                                if (hasJustDraggedRef.current) return
+                                onSelectWorkspace(doc.id)
+                              }}
                               className={`group relative flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-grab active:cursor-grabbing transition select-none ${
                                 isBeingDragged
                                   ? 'opacity-40 bg-black/[0.04] dark:bg-white/[0.04] scale-[0.98]'
@@ -1623,7 +1712,10 @@ export function Sidebar({
                       onDragEnd={handleDocDragEnd}
                       onDragOver={(e) => handleDocDragOver(e, page, null)}
                       onDrop={(e) => handleDocDrop(e, page, null)}
-                      onClick={() => onSelectWorkspace(page.id)}
+                      onClick={() => {
+                        if (hasJustDraggedRef.current) return
+                        onSelectWorkspace(page.id)
+                      }}
                       className={`group relative flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-grab active:cursor-grabbing transition select-none ${
                         isBeingDragged
                           ? 'opacity-40 bg-black/[0.04] dark:bg-white/[0.04] scale-[0.98]'
@@ -1920,6 +2012,22 @@ export function Sidebar({
         </div>,
         document.body
       )}
+
+      {/* Resize Handle (Borde interactivo para estirar a la derecha y a la izquierda) */}
+      <div
+        onMouseDown={(e) => {
+          e.preventDefault()
+          setIsResizing(true)
+        }}
+        className={`absolute top-0 right-0 w-2 h-full cursor-col-resize z-50 transition-colors group flex items-center justify-center hover:bg-blue-500/20 active:bg-blue-500/30 ${
+          isResizing ? 'bg-blue-500/40 w-2.5' : ''
+        }`}
+        title="Arrastra para redimensionar la barra lateral"
+      >
+        <div className={`w-[2px] h-full transition-colors ${
+          isResizing ? 'bg-blue-500' : 'group-hover:bg-blue-500/60 bg-transparent'
+        }`} />
+      </div>
     </aside>
   )
 }

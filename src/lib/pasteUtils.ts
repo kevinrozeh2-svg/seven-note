@@ -25,6 +25,22 @@ export function isPdfHtml(html: string): boolean {
 }
 
 /**
+ * Detects if text contains legal contract structure, formal clauses or section headers
+ */
+export function isLegalContractOrPdfText(text: string): boolean {
+  if (!text || typeof text !== 'string') return false
+  const trimmed = text.trim()
+  if (trimmed.length < 15) return false
+
+  return (
+    /\b(?:REUNIDOS|CL[ÁA]USULAS|CONTRATO|ANTECEDENTES|ESTIPULACIONES|EXPONEN|MANIFIESTAN|ACUERDAN)\b/i.test(trimmed) ||
+    /\b(?:PRIMERA|SEGUNDA|TERCERA|CUARTA|QUINTA|SEXTA|S[ÉE]PTIMA|OCTAVA|NOVENA|D[ÉE]CIMA)\s*:/i.test(trimmed) ||
+    /\b(?:DE|POR)\s+(?:UNA|OTRA)\s+PARTE\s*:/i.test(trimmed) ||
+    /\b(?:LA\s+CONSULTORA|EMPLEADO\/A|CONTRATO\s+INDIVIDUAL\s+DE\s+TRABAJO)\b/.test(trimmed)
+  )
+}
+
+/**
  * Detects if text contains PDF copying patterns or structured formatting:
  * - Hyphenation across linebreaks (e.g. "infor-\nmación")
  * - Bullet characters (•, ●, ▪, ■, ►, ▸, ○, –, —)
@@ -36,6 +52,10 @@ export function isPdfOrStructuredText(text: string): boolean {
   if (!text || typeof text !== 'string') return false
   const trimmed = text.trim()
   if (trimmed.length < 10) return false
+
+  if (isLegalContractOrPdfText(trimmed)) {
+    return true
+  }
 
   // 1. Hyphenated line breaks: "infor-\nmación"
   if (/[a-záéíóúñA-ZÁÉÍÓÚÑ]{2,}-\s*\n\s*[a-záéíóúñA-ZÁÉÍÓÚÑ]{2,}/i.test(trimmed)) {
@@ -69,18 +89,127 @@ export function isPdfOrStructuredText(text: string): boolean {
   return false
 }
 
+function isStandaloneHeader(line: string): boolean {
+  const trimmed = line.trim()
+  if (!trimmed) return false
+
+  // Standalone uppercase section headers
+  if (/^(?:REUNIDOS|CL[ÁA]USULAS|CONTRATO|ANTECEDENTES|ESTIPULACIONES|EXPONEN|MANIFIESTAN|ACUERDAN|RESUMEN|INTRODUCCI[ÓO]N|OBJETO|DISPOSICIONES|DECLARACIONES)$/i.test(trimmed)) {
+    return true
+  }
+
+  // Ordinal clauses when they stand on their own or are titles: PRIMERA: OBJETO..., SEGUNDA:...
+  if (/^(?:PRIMERA|SEGUNDA|TERCERA|CUARTA|QUINTA|SEXTA|S[ÉE]PTIMA|OCTAVA|NOVENA|D[ÉE]CIMA|UND[ÉE]CIMA|DUOD[ÉE]CIMA|CL[ÁA]USULA\s+[A-Z0-9]+|ART[ÍI]CULO\s+\d+)\s*:[^.]*$/i.test(trimmed)) {
+    return true
+  }
+
+  return false
+}
+
+function isPartyOrClauseStart(line: string): boolean {
+  const trimmed = line.trim()
+  if (!trimmed) return false
+
+  // Party headers: DE UNA PARTE:, DE OTRA PARTE:, etc.
+  if (/^(?:DE|POR)\s+(?:UNA|OTRA|LA\s+PRIMERA|LA\s+SEGUNDA)\s+PARTE\s*:/i.test(trimmed)) {
+    return true
+  }
+
+  // Known paragraph starters in contracts
+  if (/^(?:Ambas partes|En la ciudad de|Por lo tanto|En consecuencia|Las partes)\b/i.test(trimmed)) {
+    return true
+  }
+
+  return false
+}
+
+function shouldStartNewParagraph(prevLine: string, currentLine: string): boolean {
+  if (!prevLine) return true
+  const prevTrimmed = prevLine.trim()
+  const currTrimmed = currentLine.trim()
+
+  if (!currTrimmed) return false
+
+  // If previous line was a standalone heading (e.g. REUNIDOS, CLÁUSULAS, PRIMERA: ...)
+  if (isStandaloneHeader(prevTrimmed)) {
+    return true
+  }
+
+  // If current line is a standalone heading
+  if (isStandaloneHeader(currTrimmed)) {
+    return true
+  }
+
+  // If current line is a party start (DE UNA PARTE:) or section starter
+  if (isPartyOrClauseStart(currTrimmed)) {
+    return true
+  }
+
+  // If previous line ended with period, question mark, or colon
+  if (/[.?!:]$/.test(prevTrimmed)) {
+    if (/^[A-ZÁÉÍÓÚÑ"«“]/.test(currTrimmed)) {
+      return true
+    }
+  }
+
+  return false
+}
+
 /**
- * Formats plain text copied from a PDF reader (Adobe Acrobat, Foxit, Sumatra, Chrome PDF, Preview)
+ * Detects defined terms, clauses, and entity names in contracts & formal documents
+ * and applies bold styling (<strong>) matching the PDF visual design.
+ */
+function boldLegalAndCapitalizedTerms(text: string): string {
+  let result = text
+
+  // 1. Party prefixes with company name: "DE UNA PARTE: Estudio Seven,"
+  result = result.replace(
+    /\b((?:DE|POR)\s+(?:UNA|OTRA|LA\s+PRIMERA|LA\s+SEGUNDA)\s+PARTE\s*:\s*)([A-ZÁÉÍÓÚÑ][a-zA-ZáéíóúñÁÉÍÓÚÑ0-9]+(?:\s+[A-ZÁÉÍÓÚÑ][a-zA-ZáéíóúñÁÉÍÓÚÑ0-9]+)*,)/gi,
+    '<strong>$1$2</strong>'
+  )
+
+  // 1b. Party prefixes alone: "DE UNA PARTE:", "DE OTRA PARTE:"
+  result = result.replace(
+    /\b((?:DE|POR)\s+(?:UNA|OTRA|LA\s+PRIMERA|LA\s+SEGUNDA)\s+PARTE\s*:)/gi,
+    '<strong>$1</strong>'
+  )
+
+  // 2. Standalone legal section headers (e.g. REUNIDOS, CLÁUSULAS)
+  result = result.replace(
+    /^(REUNIDOS|CL[ÁA]USULAS|CONTRATO|ANTECEDENTES|ESTIPULACIONES|EXPONEN|MANIFIESTAN|ACUERDAN)$/gim,
+    '<strong>$1</strong>'
+  )
+
+  // 3. Ordinal clause headings (e.g. PRIMERA: OBJETO DEL CONTRATO Y SUBORDINACIÓN)
+  result = result.replace(
+    /\b((?:PRIMERA|SEGUNDA|TERCERA|CUARTA|QUINTA|SEXTA|S[ÉE]PTIMA|OCTAVA|NOVENA|D[ÉE]CIMA|UND[ÉE]CIMA|DUOD[ÉE]CIMA|CL[ÁA]USULA\s+[A-Z0-9]+|ART[ÍI]CULO\s+\d+)\s*:[^\n<.]+)/gi,
+    '<strong>$1</strong>'
+  )
+
+  // 4. Defined contractual uppercase entities (e.g. LA CONSULTORA, EMPLEADO/A, CONTRATO INDIVIDUAL DE TRABAJO)
+  result = result.replace(
+    /\b(LA\s+CONSULTORA|EL\s+CLIENTE|EL\s+PROVEEDOR|EL\s+TRABAJADOR|EL\s+EMPLEADOR|EL\s+ARRENDADOR|EL\s+ARRENDATARIO|EMPLEADO\/A|CONTRATO\s+INDIVIDUAL\s+DE\s+TRABAJO|CONTRATO\s+DE\s+TRABAJO)\b/g,
+    '<strong>$1</strong>'
+  )
+
+  // 5. Contract numbers in parentheses e.g. (4)
+  result = result.replace(/\((\d+)\)/g, '<strong>($1)</strong>')
+
+  return result
+}
+
+/**
+ * Formats text copied from a PDF reader (Adobe Acrobat, Foxit, Chrome PDF, Sumatra, Preview)
  * into semantic, rich HTML:
- * - Un-breaks wrapped lines inside sentences while keeping paragraph breaks
+ * - Un-breaks wrapped lines inside sentences while keeping distinct paragraph and clause breaks
  * - Fixes hyphenated words across line ends ("conser-\nvación" -> "conservación")
+ * - Bolds headings, clauses, party prefixes, and defined contract terms
  * - Converts bullet points (•, ●, ▪, etc.) to <ul><li>
  * - Converts numbered items (1., 2.) to <ol><li>
  * - Converts multi-column lines to <table>
- * - Detects headings and labels
  * - Turns URLs into clickable links
  */
-export function formatPdfOrStructuredText(text: string): string {
+export function formatPdfOrStructuredText(text: string, sourceHtml?: string): string {
   if (!text || typeof text !== 'string') return ''
 
   // 1. Normalize line endings
@@ -117,36 +246,19 @@ export function formatPdfOrStructuredText(text: string): string {
   }
 
   const rawLines = normalized.split('\n')
-  const htmlParts: string[] = []
+  const paragraphs: string[] = []
+  let currentPara: string[] = []
 
   let currentListType: 'ul' | 'ol' | null = null
   let currentTableRows: string[][] = []
-  let currentParagraphLines: string[] = []
+
+  const htmlParts: string[] = []
 
   const flushParagraph = () => {
-    if (currentParagraphLines.length > 0) {
-      const fullText = currentParagraphLines.join(' ')
-      const trimmed = fullText.trim()
-      if (
-        trimmed.length > 0 &&
-        trimmed.length < 90 &&
-        !/[.?!;]$/.test(trimmed) &&
-        (
-          (trimmed.length > 3 && trimmed === trimmed.toUpperCase() && /[A-ZÁÉÍÓÚÑ]/.test(trimmed)) ||
-          /^(?:cap[íi]tulo|secci[oó]n|tema|unidad|parte|chapter|section)\s+\d+/i.test(trimmed) ||
-          /^(?:[IVXLCDM]+\.|\d+(\.\d+)*)\s+[A-ZÁÉÍÓÚÑ]/.test(trimmed) ||
-          trimmed.endsWith(':')
-        )
-      ) {
-        if (trimmed.endsWith(':')) {
-          htmlParts.push(`<p><strong>${linkify(escapeHtml(trimmed))}</strong></p>`)
-        } else {
-          htmlParts.push(`<h3>${linkify(escapeHtml(trimmed))}</h3>`)
-        }
-      } else {
-        htmlParts.push(`<p>${linkify(escapeHtml(fullText))}</p>`)
-      }
-      currentParagraphLines = []
+    if (currentPara.length > 0) {
+      const fullText = currentPara.join(' ')
+      paragraphs.push(fullText)
+      currentPara = []
     }
   }
 
@@ -223,7 +335,7 @@ export function formatPdfOrStructuredText(text: string): string {
       continue
     }
 
-    // Check for table row (if next or previous line is also table row)
+    // Check for table row
     const isThisTable = isTableLine(rawLine)
     const isPrevTable = currentTableRows.length > 0
     const isNextTable = i + 1 < rawLines.length && isTableLine(rawLines[i + 1])
@@ -247,55 +359,81 @@ export function formatPdfOrStructuredText(text: string): string {
       continue
     }
 
-    // Regular text line
+    // Paragraph accumulation with smart boundary detection
     flushList()
     flushTable()
 
-    if (currentParagraphLines.length > 0) {
-      const lastLine = currentParagraphLines[currentParagraphLines.length - 1]
-      if (
-        /[.?!:]$/.test(lastLine) &&
-        trimmed.length < 50 &&
-        (trimmed === trimmed.toUpperCase() || /^[A-ZÁÉÍÓÚÑ]/.test(trimmed))
-      ) {
-        flushParagraph()
-        currentParagraphLines.push(trimmed)
-      } else {
-        currentParagraphLines.push(trimmed)
-      }
+    if (currentPara.length > 0 && shouldStartNewParagraph(currentPara[currentPara.length - 1], trimmed)) {
+      flushParagraph()
+      currentPara.push(trimmed)
     } else {
-      currentParagraphLines.push(trimmed)
+      currentPara.push(trimmed)
     }
   }
 
   flushAll()
 
-  const result = htmlParts.join('')
+  // Format paragraphs into semantic HTML
+  for (const para of paragraphs) {
+    const escaped = escapeHtml(para)
+    let bolded = boldLegalAndCapitalizedTerms(escaped)
+
+    // Check if sourceHtml has additional bold words to enrich
+    if (sourceHtml && typeof document !== 'undefined') {
+      try {
+        const doc = new DOMParser().parseFromString(sourceHtml, 'text/html')
+        const boldEls = doc.querySelectorAll('strong, b, [style*="bold"], [style*="700"], [style*="800"], [style*="900"]')
+        boldEls.forEach((el) => {
+          const boldText = el.textContent?.trim()
+          if (boldText && boldText.length >= 2 && !bolded.includes(`<strong>${boldText}</strong>`)) {
+            const safe = boldText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+            bolded = bolded.replace(new RegExp(`(?<!<strong>)\\b(${safe})\\b(?!<\\/strong>)`, 'g'), '<strong>$1</strong>')
+          }
+        })
+      } catch {
+        // fallback
+      }
+    }
+
+    const linked = linkify(bolded)
+
+    if (/^<strong>(REUNIDOS|CL[ÁA]USULAS)<\/strong>$/i.test(linked.trim())) {
+      htmlParts.push(`<h3 class="text-center font-bold my-4">${linked}</h3>`)
+    } else if (linked.startsWith('<strong>PRIMERA:') || linked.startsWith('<strong>SEGUNDA:') || linked.startsWith('<strong>TERCERA:') || linked.startsWith('<strong>CUARTA:')) {
+      htmlParts.push(`<p class="font-bold my-3 pb-1 border-b border-zinc-500/30">${linked}</p>`)
+    } else {
+      htmlParts.push(`<p class="my-2 leading-relaxed">${linked}</p>`)
+    }
+  }
+
+  const result = htmlParts.join('\n')
   return sanitizeHtmlContent(result)
 }
 
 /**
- * Cleans PDF HTML or converts PDF plain text to structured HTML
+ * Main entrance for cleaning and structuring PDF content from either HTML or plain text
  */
-export function cleanPdfHtml(html: string, textFallback?: string): string {
-  if (!html && !textFallback) return ''
-
-  // If textFallback has strong PDF text structure, formatPdfOrStructuredText produces
-  // significantly better semantic HTML (real <ul>, <ol>, <h3>, <table>, <p>) than
-  // browser PDF viewers' fragmented absolute position spans and br tags
-  if (textFallback && isPdfOrStructuredText(textFallback)) {
-    return formatPdfOrStructuredText(textFallback)
+export function cleanPdfContent(html: string, text: string): string {
+  if (text && text.trim()) {
+    return formatPdfOrStructuredText(text, html)
   }
 
-  let cleaned = html
-  // Fix PDF line-break hyphenation
-  cleaned = cleaned.replace(/([a-záéíóúñA-ZÁÉÍÓÚÑ]{2,})-\s*(?:<br\s*\/?>|<\/span><span>)\s*([a-záéíóúñA-ZÁÉÍÓÚÑ]{2,})/gi, '$1$2')
-  
-  // Remove absolute positioning and transforms from browser PDF viewers
-  cleaned = cleaned.replace(/position:\s*absolute;?/gi, '')
-  cleaned = cleaned.replace(/transform:[^;]*;?/gi, '')
+  if (html && html.trim()) {
+    let cleaned = html
+    cleaned = cleaned.replace(/([a-záéíóúñA-ZÁÉÍÓÚÑ]{2,})-\s*(?:<br\s*\/?>|<\/span><span>)\s*([a-záéíóúñA-ZÁÉÍÓÚÑ]{2,})/gi, '$1$2')
+    cleaned = cleaned.replace(/position:\s*absolute;?/gi, '')
+    cleaned = cleaned.replace(/transform:[^;]*;?/gi, '')
+    return cleanPastedHtml(cleaned)
+  }
 
-  return cleanPastedHtml(cleaned)
+  return ''
+}
+
+/**
+ * Backward compatibility alias for cleanPdfContent
+ */
+export function cleanPdfHtml(html: string, textFallback?: string): string {
+  return cleanPdfContent(html, textFallback || '')
 }
 
 /**
@@ -309,7 +447,6 @@ export function cleanPastedHtml(html: string): string {
   let cleaned = html
 
   // 1. Remove Google Docs internal wrapper if present
-  // e.g. <b style="font-weight:normal;" id="docs-internal-guid-...">
   cleaned = cleaned.replace(/<b\s+style="font-weight:\s*normal;?"\s+id="docs-internal-guid-[^"]*">([\s\S]*?)<\/b>/gi, '$1')
 
   // 2. Remove Microsoft Office / Word comment blocks, meta tags & Office namespaces
