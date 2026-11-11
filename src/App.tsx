@@ -208,6 +208,21 @@ function MainApp() {
   // Workspaces (Spaces) management
   const spaces = useLiveQuery(() => db.spaces.toArray()) ?? []
   const workspaces = useLiveQuery(() => db.workspaces.toArray()) ?? []
+  const [optimisticWorkspace, setOptimisticWorkspace] = useState<WorkspaceItem | null>(null)
+
+  useEffect(() => {
+    if (optimisticWorkspace && workspaces.some((w) => w.id === optimisticWorkspace.id)) {
+      setOptimisticWorkspace(null)
+    }
+  }, [workspaces, optimisticWorkspace])
+
+  const effectiveWorkspaces = useMemo(() => {
+    if (optimisticWorkspace && !workspaces.some((w) => w.id === optimisticWorkspace.id)) {
+      return [optimisticWorkspace, ...workspaces]
+    }
+    return workspaces
+  }, [workspaces, optimisticWorkspace])
+
   const [currentSpaceId, setCurrentSpaceId] = useState<string>(() => {
     return localStorage.getItem('seven_note_active_space_id') || DEFAULT_SPACE_ID
   })
@@ -346,13 +361,30 @@ function MainApp() {
     })
   }, [workspaces])
 
-  const selectWorkspaceWithTab = (wsId: string) => {
+  const selectWorkspaceWithTab = async (
+    wsId: string,
+    explicitSpaceId?: string,
+    wsItem?: WorkspaceItem
+  ) => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
       setSidebarOpen(false)
     }
-    const ws = workspaces.find((w) => w.id === wsId)
-    const targetSpaceId = ws?.spaceId || DEFAULT_SPACE_ID
-    if (targetSpaceId !== currentSpaceId) {
+    if (wsItem) {
+      setOptimisticWorkspace(wsItem)
+    }
+    let ws = wsItem || effectiveWorkspaces.find((w) => w.id === wsId)
+    if (!ws && wsId) {
+      try {
+        ws = await db.workspaces.get(wsId)
+        if (ws) {
+          setOptimisticWorkspace(ws)
+        }
+      } catch (err) {
+        console.error('Error fetching workspace from db', err)
+      }
+    }
+    const targetSpaceId = explicitSpaceId || ws?.spaceId || (ws ? DEFAULT_SPACE_ID : currentSpaceId)
+    if (targetSpaceId && targetSpaceId !== currentSpaceId) {
       setCurrentSpaceId(targetSpaceId)
       localStorage.setItem('seven_note_active_space_id', targetSpaceId)
       markItemAsRead(targetSpaceId, 'space', currentMember, authUser?.id)
@@ -373,7 +405,7 @@ function MainApp() {
         viewType: 'doc',
         title: ws?.title || 'Documento sin título',
         icon: ws?.icon || '',
-        spaceId: ws?.spaceId || currentSpaceId,
+        spaceId: targetSpaceId || currentSpaceId,
         pinned: false
       }
       setActiveTabId(newTab.id)
@@ -455,7 +487,7 @@ function MainApp() {
   const handleNewTab = async () => {
     const newId = crypto.randomUUID()
     const now = Date.now()
-    await db.workspaces.add({
+    const newWs: WorkspaceItem = {
       id: newId,
       parentId: null,
       spaceId: currentSpaceId,
@@ -475,7 +507,9 @@ function MainApp() {
       userId: authUser?.id || undefined,
       viewedBy: [currentMember.id, currentMember.fullName || currentMember.name, currentMember.email, authUser?.id].filter(Boolean) as string[],
       isNewItem: true
-    })
+    }
+    await db.workspaces.add(newWs)
+    setOptimisticWorkspace(newWs)
     const newTab: WorkbenchTab = {
       id: `tab-${crypto.randomUUID()}`,
       workspaceId: newId,
@@ -749,7 +783,7 @@ function MainApp() {
   }, [visibleSpaces, currentSpaceId, workspaces, currentMember, authUser?.id])
 
   // Select active workspace items belonging to current space and visible to currentMember
-  const currentSpaceWorkspaces = workspaces.filter(
+  const currentSpaceWorkspaces = effectiveWorkspaces.filter(
     (w) =>
       (w.spaceId || DEFAULT_SPACE_ID) === currentSpaceId &&
       isWorkspaceVisible(w, currentMember, authUser?.id)
@@ -762,12 +796,28 @@ function MainApp() {
   useEffect(() => {
     if (activeWorkspaces.length > 0) {
       if (!activeWorkspaces.some((w) => w.id === currentWorkspaceId)) {
-        const first = activeWorkspaces[0]
-        setCurrentWorkspaceId(first.id)
-        setViewMode(first.viewMode || 'doc')
+        let isMounted = true
+        db.workspaces.get(currentWorkspaceId).then((item) => {
+          if (!isMounted) return
+          if (item && !item.isDeleted && (item.spaceId || DEFAULT_SPACE_ID) === currentSpaceId) {
+            return
+          }
+          const first = activeWorkspaces[0]
+          setCurrentWorkspaceId(first.id)
+          setViewMode(first.viewMode || 'doc')
+        }).catch(() => {
+          if (isMounted) {
+            const first = activeWorkspaces[0]
+            setCurrentWorkspaceId(first.id)
+            setViewMode(first.viewMode || 'doc')
+          }
+        })
+        return () => {
+          isMounted = false
+        }
       }
     }
-  }, [activeWorkspaces, currentWorkspaceId])
+  }, [activeWorkspaces, currentWorkspaceId, currentSpaceId])
 
   // Workspaces from all public spaces (for bidirectional links and cross-workspace referencing)
   const publicWorkspaces = useMemo(() => {
@@ -1175,7 +1225,7 @@ function MainApp() {
               onOpenCreateSpace={() => setIsCreateWorkspaceOpen(true)}
               onRenameSpace={handleRenameSpace}
               onDeleteSpace={handleDeleteSpace}
-              workspaces={workspaces}
+              workspaces={effectiveWorkspaces}
               currentWorkspaceId={currentWorkspace?.id || ''}
               onSelectWorkspace={selectWorkspaceWithTab}
               onToggleSidebar={() => setSidebarOpen(false)}

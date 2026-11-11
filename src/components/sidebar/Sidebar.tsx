@@ -75,7 +75,7 @@ export interface SidebarProps {
   onDeleteSpace?: (id: string) => void
   workspaces: WorkspaceItem[]
   currentWorkspaceId: string
-  onSelectWorkspace: (id: string) => void
+  onSelectWorkspace: (id: string, spaceId?: string, workspaceItem?: WorkspaceItem) => void
   onToggleSidebar: () => void
   onOpenSettings: () => void
   onOpenSearch?: () => void
@@ -487,41 +487,54 @@ export function Sidebar({
   ) => {
     const newId = crypto.randomUUID()
     const now = Date.now()
+    const newWs: WorkspaceItem = {
+      id: newId,
+      parentId,
+      spaceId: currentSpace.id,
+      folder: folderName,
+      title: isPrivate
+        ? (viewMode === 'canvas' ? 'Tablero privado sin título' : 'Nota privada sin título')
+        : (viewMode === 'canvas' ? 'Tablero sin título' : 'Nota sin título'),
+      icon: '',
+      color: isPrivate ? activeMember.color : '#1e96eb',
+      viewMode,
+      docContent: '<p></p>',
+      createdAt: now,
+      updatedAt: now,
+      isFavorite: false,
+      isDeleted: false,
+      syncStatus: 'pending',
+      isPrivate,
+      ownerMember: activeMember.id,
+      ownerName: activeMember.name,
+      createdBy: activeMember.name,
+      userId: authUser?.id || undefined,
+      viewedBy: [activeMember.id, activeMember.name, activeMember.email, authUser?.id].filter(Boolean) as string[],
+      isNewItem: true,
+      activeProperties: [
+        'tags',
+        'documentMode',
+        'isJournal',
+        'templateName',
+        'createdAt',
+        'updatedAt'
+      ]
+    }
     try {
-      await db.workspaces.add({
-        id: newId,
-        parentId,
-        spaceId: currentSpace.id,
-        folder: folderName,
-        title: isPrivate
-          ? (viewMode === 'canvas' ? 'Tablero privado sin título' : 'Nota privada sin título')
-          : (viewMode === 'canvas' ? 'Tablero sin título' : 'Nota sin título'),
-        icon: '',
-        color: isPrivate ? activeMember.color : '#1e96eb',
-        viewMode,
-        docContent: '<p></p>',
-        createdAt: now,
-        updatedAt: now,
-        isFavorite: false,
-        isDeleted: false,
-        syncStatus: 'pending',
-        isPrivate,
-        ownerMember: activeMember.id,
-        ownerName: activeMember.name,
-        createdBy: activeMember.name,
-        userId: authUser?.id || undefined,
-        viewedBy: [activeMember.id, activeMember.name, activeMember.email, authUser?.id].filter(Boolean) as string[],
-        isNewItem: true,
-        activeProperties: [
-          'tags',
-          'documentMode',
-          'isJournal',
-          'templateName',
-          'createdAt',
-          'updatedAt'
-        ]
-      })
-      onSelectWorkspace(newId)
+      await db.workspaces.add(newWs)
+      if (folderName) {
+        setFolderOpenMap((prev) => {
+          const next = { ...prev }
+          const parts = folderName.split('/')
+          let curr = ''
+          for (const p of parts) {
+            curr = curr ? `${curr}/${p}` : p
+            next[curr] = true
+          }
+          return next
+        })
+      }
+      onSelectWorkspace(newId, currentSpace.id, newWs)
       if (onSelectNavigation) onSelectNavigation('workspace')
     } catch (err) {
       console.error('Error creating page', err)
@@ -567,7 +580,7 @@ export function Sidebar({
     if (!doc) return
     const newId = crypto.randomUUID()
     const now = Date.now()
-    await db.workspaces.add({
+    const dupWs: WorkspaceItem = {
       ...doc,
       id: newId,
       title: `${doc.title || 'Sin título'} (Copia)`,
@@ -575,8 +588,9 @@ export function Sidebar({
       updatedAt: now,
       syncStatus: 'pending',
       isNewItem: true
-    })
-    onSelectWorkspace(newId)
+    }
+    await db.workspaces.add(dupWs)
+    onSelectWorkspace(newId, doc.spaceId || currentSpace.id, dupWs)
     toast.success('Copia de la nota creada')
   }
 
@@ -956,6 +970,10 @@ export function Sidebar({
     try {
       await db.workspaces.bulkUpdate(updates)
       syncEngine.scheduleSync(500)
+      setDocSortMode('custom')
+      try {
+        localStorage.setItem('seven_note_doc_sort_mode', 'custom')
+      } catch {}
     } catch (err) {
       console.error('Error reordering document', err)
     }
@@ -1030,6 +1048,58 @@ export function Sidebar({
     })
   }
 
+  // Helper to construct a clean, hierarchical full folder order (DFS traversal)
+  // that preserves previous order for all levels while updating the specific target parent level
+  const buildFullFolderOrder = useCallback(
+    (
+      targetParent: string | null,
+      newSiblingsOrder: string[],
+      currentFolderOrder: string[],
+      foldersPool: string[]
+    ): string[] => {
+      const getLevelFolders = (parent: string | null): string[] => {
+        if (parent === targetParent) {
+          return newSiblingsOrder
+        }
+        const siblings = foldersPool.filter((f) => getParentFolderPath(f) === parent)
+        return [...siblings].sort((a, b) => {
+          const idxA = currentFolderOrder.indexOf(a)
+          const idxB = currentFolderOrder.indexOf(b)
+          if (idxA !== -1 && idxB !== -1) return idxA - idxB
+          if (idxA !== -1) return -1
+          if (idxB !== -1) return 1
+          return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+        })
+      }
+
+      const result: string[] = []
+      const visited = new Set<string>()
+
+      const traverse = (parent: string | null) => {
+        const levelItems = getLevelFolders(parent)
+        for (const item of levelItems) {
+          if (!visited.has(item)) {
+            visited.add(item)
+            result.push(item)
+            traverse(item)
+          }
+        }
+      }
+
+      traverse(null)
+
+      for (const f of foldersPool) {
+        if (!visited.has(f)) {
+          visited.add(f)
+          result.push(f)
+        }
+      }
+
+      return result
+    },
+    []
+  )
+
   // Folder header drag and drop handlers
   const handleFolderHeaderDragOver = (e: React.DragEvent, folderName: string) => {
     const currentDraggedDoc = draggedDocIdRef.current || draggedDocId
@@ -1056,9 +1126,9 @@ export function Sidebar({
       const height = rect.height
 
       let position: 'before' | 'after' | 'inside'
-      if (relY < height * 0.25) {
+      if (relY < height * 0.35) {
         position = 'before'
-      } else if (relY > height * 0.75) {
+      } else if (relY > height * 0.65) {
         position = 'after'
       } else {
         position = 'inside'
@@ -1087,7 +1157,7 @@ export function Sidebar({
       draggedDocId ||
       e.dataTransfer.getData('application/seven-note-doc') ||
       (!movingFolder ? e.dataTransfer.getData('text/plain') : null)
-    const currentPosition = dropTarget?.position
+    const currentPosition = dropTarget?.position || 'after'
 
     draggedDocIdRef.current = null
     draggedFolderNameRef.current = null
@@ -1138,22 +1208,58 @@ export function Sidebar({
         effectiveMovingFolder = newPath
       }
 
-      const currentList = [...allFolders]
-      const filtered = currentList.filter((f) => f !== effectiveMovingFolder)
-      const toIndex = filtered.indexOf(folderName)
-      const insertIndex = toIndex === -1
-        ? filtered.length
-        : currentPosition === 'before'
-          ? toIndex
-          : toIndex + 1
+      // Ensure all current folders are in the pool
+      const foldersPoolSet = new Set<string>(allFolders)
+      foldersPoolSet.add(effectiveMovingFolder)
+      foldersPoolSet.add(folderName)
+      const foldersPool = Array.from(foldersPoolSet)
 
-      filtered.splice(insertIndex, 0, effectiveMovingFolder)
-      setFolderOrder(filtered)
+      // Get siblings for this level
+      const siblings = foldersPool.filter((f) => getParentFolderPath(f) === targetParent)
+      // Visual current order of siblings
+      const currentOrderedSiblings = sortFolders(siblings)
+
+      // Remove moving folder from list of siblings
+      const withoutMoving = currentOrderedSiblings.filter(
+        (f) => f !== effectiveMovingFolder && f !== movingFolder
+      )
+
+      // Find index of target folder
+      const targetIdx = withoutMoving.indexOf(folderName)
+      const insertIndex =
+        targetIdx === -1
+          ? withoutMoving.length
+          : currentPosition === 'before'
+            ? targetIdx
+            : targetIdx + 1
+
+      const newSiblingsOrder = [...withoutMoving]
+      newSiblingsOrder.splice(insertIndex, 0, effectiveMovingFolder)
+
+      // Build complete consistent folder order
+      const updatedFolderOrder = buildFullFolderOrder(
+        targetParent,
+        newSiblingsOrder,
+        folderOrder,
+        foldersPool
+      )
+
+      setFolderOrder(updatedFolderOrder)
+      setDocSortMode('custom')
+
       try {
-        localStorage.setItem(`seven_note_folder_order_${currentSpace.id}`, JSON.stringify(filtered))
+        localStorage.setItem(
+          `seven_note_folder_order_${currentSpace.id}`,
+          JSON.stringify(updatedFolderOrder)
+        )
+        localStorage.setItem('seven_note_doc_sort_mode', 'custom')
       } catch (err) {
         console.warn('Error saving folder order', err)
       }
+
+      toast.success(
+        `Carpeta "${leafName}" colocada ${currentPosition === 'before' ? 'encima' : 'debajo'} de "${getFolderLeafName(folderName)}"`
+      )
       return
     }
 
@@ -1293,6 +1399,10 @@ export function Sidebar({
         syncStatus: 'pending'
       })
       syncEngine.scheduleSync(500)
+      setDocSortMode('custom')
+      try {
+        localStorage.setItem('seven_note_doc_sort_mode', 'custom')
+      } catch {}
       toast.success('Documento movido fuera de la carpeta')
     }
   }
