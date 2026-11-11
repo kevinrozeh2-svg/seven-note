@@ -389,7 +389,7 @@ export async function seedInitialData() {
         color: '#1e96eb',
         createdAt: Date.now(),
         updatedAt: Date.now(),
-        syncStatus: 'pending'
+        syncStatus: 'synced'
       }).catch(() => {})
     }
 
@@ -446,7 +446,7 @@ export async function seedInitialData() {
       updatedAt: now,
       isFavorite: false,
       isDeleted: false,
-      syncStatus: 'pending',
+      syncStatus: 'synced',
       activeProperties: [
         'tags',
         'documentMode',

@@ -1186,19 +1186,19 @@ export function DocEditor({
 
   return (
     <div className="flex flex-col h-full bg-[var(--app-bg-primary)] overflow-y-auto text-[var(--app-text-primary)] select-text relative">
-      {/* Top Formatting Toolbar (Notion Minimal Bar) */}
-      <div className="sticky top-0 z-20 min-h-[46px] h-[46px] sm:h-12 px-3 sm:px-6 border-b border-black/[0.08] dark:border-white/[0.1] bg-white/95 dark:bg-[#1a1b1e]/95 backdrop-blur-xl text-xs overflow-x-auto no-scrollbar touch-pan-x flex items-center justify-between gap-2 select-none shrink-0">
-          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 pr-8 sm:pr-0">
+      {/* Top Floating Formatting Toolbar (Floating Buttons Without Solid Background Bar) */}
+      <div className="sticky top-2 z-20 pointer-events-none w-full px-3 sm:px-6 flex items-center justify-between gap-2 select-none shrink-0 mb-1">
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 overflow-x-auto no-scrollbar pointer-events-auto max-w-[calc(100vw-180px)] sm:max-w-none py-1">
             {/* Quick insert block button */}
             <button
               onClick={() => {
                 setSlashMenuOpen(!slashMenuOpen)
                 setSlashFilter('')
               }}
-              className="h-8 px-2.5 sm:px-3 rounded-lg bg-black/[0.04] dark:bg-white/[0.08] hover:bg-black/[0.08] dark:hover:bg-white/[0.15] text-[var(--app-text-primary)] transition flex items-center gap-1.5 font-medium border border-black/[0.06] dark:border-white/[0.08] cursor-pointer active:scale-95 shrink-0"
+              className="h-7 sm:h-7.5 px-2.5 sm:px-3 rounded-full bg-white/80 dark:bg-[#1a1b1e]/80 hover:bg-white dark:hover:bg-[#25262b] backdrop-blur-md text-[var(--app-text-primary)] transition shadow-sm hover:shadow flex items-center gap-1.5 font-medium border border-black/[0.08] dark:border-white/[0.12] cursor-pointer active:scale-95 shrink-0"
               title="Insertar bloques de contenido (/)"
             >
-              <PlusIcon className="w-4 h-4 text-blue-500" />
+              <PlusIcon className="w-3.5 h-3.5 text-blue-500" />
               <span className="text-xs font-semibold">Bloque</span>
             </button>
 
@@ -1206,10 +1206,10 @@ export function DocEditor({
             <div className="relative shrink-0">
               <button
                 onClick={() => setIsNotionMenuOpen(!isNotionMenuOpen)}
-                className="h-8 px-2.5 sm:px-3 rounded-lg bg-black/[0.04] dark:bg-white/[0.08] hover:bg-black/[0.08] dark:hover:bg-white/[0.15] text-[var(--app-text-primary)] transition flex items-center gap-1.5 font-medium border border-black/[0.06] dark:border-white/[0.08] cursor-pointer active:scale-95 shrink-0"
+                className="h-7 sm:h-7.5 px-2.5 sm:px-3 rounded-full bg-white/80 dark:bg-[#1a1b1e]/80 hover:bg-white dark:hover:bg-[#25262b] backdrop-blur-md text-[var(--app-text-primary)] transition shadow-sm hover:shadow flex items-center gap-1.5 font-medium border border-black/[0.08] dark:border-white/[0.12] cursor-pointer active:scale-95 shrink-0"
                 title="Herramientas de Notion (Table, Board, List, Timeline, Calendar, Gallery)"
               >
-                <NotionTableIcon className="w-4 h-4 text-blue-500" />
+                <NotionTableIcon className="w-3.5 h-3.5 text-blue-500" />
                 <span className="text-xs font-semibold">Vistas</span>
                 <ChevronDown className="w-3 h-3 text-neutral-400" />
               </button>
@@ -1223,113 +1223,167 @@ export function DocEditor({
               />
             </div>
 
-            <div className="w-[1px] h-4 bg-black/[0.1] dark:bg-white/[0.2] mx-0.5 sm:mx-1 shrink-0" />
-
-            <button
-              onClick={() => editor.chain().focus().toggleBold().run()}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('bold') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
-              title="Negrita"
-            >
-              <BoldIcon className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => editor.chain().focus().toggleItalic().run()}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('italic') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
-              title="Cursiva"
-            >
-              <ItalicIcon className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => editor.chain().focus().toggleUnderline().run()}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('underline') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
-              title="Subrayado"
-            >
-              <UnderLineIcon className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => editor.chain().focus().toggleCode().run()}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('code') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
-              title="Código en línea"
-            >
-              <CodeIcon className="w-4 h-4" />
-            </button>
-
-            <div className="w-[1px] h-4 bg-black/[0.1] dark:bg-white/[0.2] mx-0.5 sm:mx-1 shrink-0" />
+            {/* Formato de texto: Negrita, Cursiva, Subrayado, Código */}
+            <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-white/80 dark:bg-[#1a1b1e]/80 backdrop-blur-md border border-black/[0.08] dark:border-white/[0.12] shadow-sm">
+              <button
+                onClick={() => editor.chain().focus().toggleBold().run()}
+                className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${
+                  editor.isActive('bold')
+                    ? 'bg-blue-600 text-white shadow-xs font-bold'
+                    : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-300 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
+                }`}
+                title="Negrita (Ctrl+B)"
+              >
+                <BoldIcon className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => editor.chain().focus().toggleItalic().run()}
+                className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${
+                  editor.isActive('italic')
+                    ? 'bg-blue-600 text-white shadow-xs font-bold'
+                    : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-300 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
+                }`}
+                title="Cursiva (Ctrl+I)"
+              >
+                <ItalicIcon className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => editor.chain().focus().toggleUnderline().run()}
+                className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${
+                  editor.isActive('underline')
+                    ? 'bg-blue-600 text-white shadow-xs font-bold'
+                    : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-300 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
+                }`}
+                title="Subrayado (Ctrl+U)"
+              >
+                <UnderLineIcon className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => editor.chain().focus().toggleCode().run()}
+                className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${
+                  editor.isActive('code')
+                    ? 'bg-blue-600 text-white shadow-xs font-bold'
+                    : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-300 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
+                }`}
+                title="Código en línea"
+              >
+                <CodeIcon className="w-3.5 h-3.5" />
+              </button>
+            </div>
 
             {/* Alineación de texto: Izquierda, Centro, Derecha, Justificado */}
-            <button
-              onClick={() => editor.chain().focus().setTextAlign('left').run()}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive({ textAlign: 'left' }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
-              title="Alinear a la izquierda"
-            >
-              <AlignLeft className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => editor.chain().focus().setTextAlign('center').run()}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive({ textAlign: 'center' }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
-              title="Centrar texto"
-            >
-              <AlignCenter className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => editor.chain().focus().setTextAlign('right').run()}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive({ textAlign: 'right' }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
-              title="Alinear a la derecha"
-            >
-              <AlignRight className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => editor.chain().focus().setTextAlign('justify').run()}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive({ textAlign: 'justify' }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
-              title="Justificar texto"
-            >
-              <AlignJustify className="w-4 h-4" />
-            </button>
+            <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-white/80 dark:bg-[#1a1b1e]/80 backdrop-blur-md border border-black/[0.08] dark:border-white/[0.12] shadow-sm">
+              <button
+                onClick={() => editor.chain().focus().setTextAlign('left').run()}
+                className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${
+                  editor.isActive({ textAlign: 'left' })
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-300 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
+                }`}
+                title="Alinear a la izquierda"
+              >
+                <AlignLeft className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => editor.chain().focus().setTextAlign('center').run()}
+                className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${
+                  editor.isActive({ textAlign: 'center' })
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-300 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
+                }`}
+                title="Centrar texto"
+              >
+                <AlignCenter className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => editor.chain().focus().setTextAlign('right').run()}
+                className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${
+                  editor.isActive({ textAlign: 'right' })
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-300 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
+                }`}
+                title="Alinear a la derecha"
+              >
+                <AlignRight className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => editor.chain().focus().setTextAlign('justify').run()}
+                className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${
+                  editor.isActive({ textAlign: 'justify' })
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-300 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
+                }`}
+                title="Justificar texto"
+              >
+                <AlignJustify className="w-3.5 h-3.5" />
+              </button>
+            </div>
 
-            <div className="w-[1px] h-4 bg-black/[0.1] dark:bg-white/[0.2] mx-0.5 sm:mx-1 shrink-0" />
-
-            <button
-              onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('heading', { level: 1 }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
-              title="Encabezado 1"
-            >
-              <Heading1Icon className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('heading', { level: 2 }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
-              title="Encabezado 2 (Subtítulo)"
-            >
-              <Heading2Icon className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('heading', { level: 3 }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
-              title="Encabezado 3 (Sección menor)"
-            >
-              <Heading3Icon className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => editor.chain().focus().toggleBulletList().run()}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('bulletList') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
-              title="Lista de viñetas"
-            >
-              <BulletedListIcon className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => editor.chain().focus().toggleTaskList().run()}
-              className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${editor.isActive('taskList') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-bold' : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
-              title="Lista de tareas"
-            >
-              <CheckBoxCheckSolidIcon className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => editorImageInputRef.current?.click()}
-              className="w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer text-neutral-600 hover:text-neutral-900 dark:text-zinc-200 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15 active:scale-95 shrink-0"
-              title="Añadir foto"
-            >
-              <ImageIcon className="w-4 h-4" />
-            </button>
+            {/* Encabezados y Listas */}
+            <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-white/80 dark:bg-[#1a1b1e]/80 backdrop-blur-md border border-black/[0.08] dark:border-white/[0.12] shadow-sm">
+              <button
+                onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+                className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${
+                  editor.isActive('heading', { level: 1 })
+                    ? 'bg-blue-600 text-white shadow-xs font-bold'
+                    : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-300 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
+                }`}
+                title="Encabezado 1"
+              >
+                <Heading1Icon className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+                className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${
+                  editor.isActive('heading', { level: 2 })
+                    ? 'bg-blue-600 text-white shadow-xs font-bold'
+                    : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-300 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
+                }`}
+                title="Encabezado 2 (Subtítulo)"
+              >
+                <Heading2Icon className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+                className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${
+                  editor.isActive('heading', { level: 3 })
+                    ? 'bg-blue-600 text-white shadow-xs font-bold'
+                    : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-300 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
+                }`}
+                title="Encabezado 3 (Sección menor)"
+              >
+                <Heading3Icon className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => editor.chain().focus().toggleBulletList().run()}
+                className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${
+                  editor.isActive('bulletList')
+                    ? 'bg-blue-600 text-white shadow-xs font-bold'
+                    : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-300 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
+                }`}
+                title="Lista de viñetas"
+              >
+                <BulletedListIcon className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => editor.chain().focus().toggleTaskList().run()}
+                className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${
+                  editor.isActive('taskList')
+                    ? 'bg-blue-600 text-white shadow-xs font-bold'
+                    : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-300 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
+                }`}
+                title="Lista de tareas"
+              >
+                <CheckBoxCheckSolidIcon className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => editorImageInputRef.current?.click()}
+                className="w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer text-neutral-600 hover:text-neutral-900 dark:text-zinc-300 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10 active:scale-95 shrink-0"
+                title="Añadir foto"
+              >
+                <ImageIcon className="w-3.5 h-3.5" />
+              </button>
+            </div>
             <input
               type="file"
               ref={editorImageInputRef}
@@ -1340,11 +1394,11 @@ export function DocEditor({
             />
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 pointer-events-auto py-1">
             {/* Quick toggle page width button */}
             <button
               onClick={handleTogglePageWidth}
-              className="h-8 px-2 sm:px-2.5 rounded-lg bg-black/[0.04] dark:bg-white/[0.08] hover:bg-black/[0.08] dark:hover:bg-white/[0.15] text-[var(--app-text-primary)] transition flex items-center gap-1.5 text-xs font-medium border border-black/[0.06] dark:border-white/[0.08] cursor-pointer active:scale-95 shrink-0"
+              className="h-7 sm:h-7.5 px-2.5 sm:px-3 rounded-full bg-white/80 dark:bg-[#1a1b1e]/80 hover:bg-white dark:hover:bg-[#25262b] backdrop-blur-md text-[var(--app-text-primary)] transition shadow-sm hover:shadow flex items-center gap-1.5 text-xs font-medium border border-black/[0.08] dark:border-white/[0.12] cursor-pointer active:scale-95 shrink-0"
               title={`Ancho de página: ${effectivePageWidth === 'full' ? 'Completo (pantalla extendida)' : effectivePageWidth === 'wide' ? 'Amplio' : 'Estándar'}. Clic para alternar`}
             >
               {effectivePageWidth === 'full' ? (
@@ -1357,7 +1411,7 @@ export function DocEditor({
               </span>
             </button>
 
-            <div className="hidden sm:flex items-center gap-2 text-[11px] text-[var(--app-text-muted)]">
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/60 dark:bg-[#1a1b1e]/60 backdrop-blur-md border border-black/[0.05] dark:border-white/[0.08] text-[11px] text-[var(--app-text-muted)] shadow-xs">
               <span className="font-mono">
                 {saveStatus === 'saving' ? 'Guardando...' : 'Guardado'}
               </span>

@@ -8,7 +8,7 @@ import {
   type TagItem
 } from '../db'
 import { getSupabaseClient, getStoredSupabaseConfig, getAuthUser } from './supabase'
-import { getCurrentMember } from './teamAuth'
+import { getCurrentMember, TEAM_MEMBERS } from './teamAuth'
 
 export type NetworkStatus = 'online' | 'offline'
 export type SyncEngineState = 'idle' | 'syncing' | 'synced' | 'error' | 'offline' | 'unconfigured'
@@ -90,6 +90,15 @@ class SyncEngine {
     localStorage.setItem(SYNC_INTERVAL_KEY, this.syncIntervalSec.toString())
     this.startPeriodicSync()
     this.notify()
+  }
+
+  public resetLastSyncTime() {
+    this.lastSyncTime = null
+    try {
+      localStorage.removeItem(LAST_SYNC_KEY)
+    } catch (e) {
+      console.warn('Error removing sync storage', e)
+    }
   }
 
   public getSyncInterval(): number {
@@ -206,6 +215,14 @@ class SyncEngine {
       const authUser = await getAuthUser()
       const authUserId = authUser?.id || undefined
       const currentMember = getCurrentMember()
+
+      // Si no hay usuario autenticado, NO intentamos sincronizar
+      // ya que las políticas RLS en Supabase bloquearían la consulta y corromperían lastSyncTime
+      if (!authUserId) {
+        this.state = 'idle'
+        this.notify()
+        return { success: true, message: 'Esperando sesión de usuario' }
+      }
 
       // Solo empujar cambios locales si hay sesión autenticada (las políticas RLS requieren usuario autenticado)
       if (authUserId) {
@@ -411,25 +428,44 @@ class SyncEngine {
       }
 
       // ==========================================
-      // 7. PULL REMOTE CHANGES (Delta sync por timestamp)
+      // 7. PULL REMOTE CHANGES (Delta sync o pull completo si dispositivo nuevo)
       // ==========================================
-      const lastSync = this.lastSyncTime || 0
+      const [localWsCount, localSpacesCount] = await Promise.all([
+        db.workspaces.count(),
+        db.spaces.count()
+      ])
+
+      // Si la base local no tiene notas o espacios reales, forzamos un pull completo (lastSync = 0)
+      // para asegurar que dispositivos móviles o navegadores nuevos obtengan todo el contenido.
+      const isInitialDevicePull = localWsCount === 0 || localSpacesCount <= 1
+      const lastSync = isInitialDevicePull ? 0 : (this.lastSyncTime || 0)
+
+      let hasPullErrors = false
 
       // Pull Spaces
-      const { data: remoteSpaces } = await supabase
+      const { data: remoteSpaces, error: spPullErr } = await supabase
         .from('seven_spaces')
         .select('*')
         .gt('updated_at', lastSync)
 
-      if (remoteSpaces && remoteSpaces.length > 0) {
+      if (spPullErr) {
+        console.warn('Error pulling spaces:', spPullErr.message)
+        hasPullErrors = true
+      } else if (remoteSpaces && remoteSpaces.length > 0) {
         for (const rs of remoteSpaces) {
           // Si el espacio remoto es privado y NO pertenece al miembro actual, NO lo guardamos localmente
           // Ni los administradores pueden recibir o ver espacios privados ajenos
           const isSpaceOwner =
             rs.owner_member === currentMember.id ||
+            rs.owner_member === currentMember.name?.toLowerCase() ||
             (currentMember.email && rs.owner_member?.toLowerCase() === currentMember.email.toLowerCase()) ||
             rs.user_id === currentMember.id ||
-            (authUserId && rs.user_id === authUserId)
+            (authUserId && rs.user_id === authUserId) ||
+            TEAM_MEMBERS.some(
+              (tm) =>
+                (tm.id === rs.owner_member || tm.name.toLowerCase() === rs.owner_member?.toLowerCase()) &&
+                (tm.id === currentMember.id || (currentMember.email && tm.email?.toLowerCase() === currentMember.email.toLowerCase()))
+            )
 
           if (rs.is_private && !isSpaceOwner) {
             continue
@@ -455,20 +491,29 @@ class SyncEngine {
       }
 
       // Pull Workspaces
-      const { data: remoteWorkspaces } = await supabase
+      const { data: remoteWorkspaces, error: wsPullErr } = await supabase
         .from('seven_workspaces')
         .select('*')
         .gt('updated_at', lastSync)
 
-      if (remoteWorkspaces && remoteWorkspaces.length > 0) {
+      if (wsPullErr) {
+        console.warn('Error pulling workspaces:', wsPullErr.message)
+        hasPullErrors = true
+      } else if (remoteWorkspaces && remoteWorkspaces.length > 0) {
         for (const rw of remoteWorkspaces) {
           // Si la nota remota es privada y NO pertenece al miembro actual, NO la guardamos localmente
           // ¡Ni siquiera el administrador puede recibir o guardar notas privadas de otros usuarios, y viceversa!
           const isOwner =
             rw.owner_member === currentMember.id ||
+            rw.owner_member === currentMember.name?.toLowerCase() ||
             (currentMember.email && rw.owner_member?.toLowerCase() === currentMember.email.toLowerCase()) ||
             rw.user_id === currentMember.id ||
-            (authUserId && rw.user_id === authUserId)
+            (authUserId && rw.user_id === authUserId) ||
+            TEAM_MEMBERS.some(
+              (tm) =>
+                (tm.id === rw.owner_member || tm.name.toLowerCase() === rw.owner_member?.toLowerCase()) &&
+                (tm.id === currentMember.id || (currentMember.email && tm.email?.toLowerCase() === currentMember.email.toLowerCase()))
+            )
 
           if (rw.is_private && !isOwner) {
             continue
@@ -494,6 +539,7 @@ class SyncEngine {
               syncStatus: 'synced',
               isPrivate: Boolean(rw.is_private),
               ownerMember: rw.owner_member || 'kevin',
+              userId: rw.user_id || undefined,
               isPublicShared: Boolean(rw.is_public_shared),
               shareToken: rw.share_token,
               sharePermission: rw.share_permission || 'view',
@@ -523,12 +569,15 @@ class SyncEngine {
       }
 
       // Pull Canvas Nodes
-      const { data: remoteNodes } = await supabase
+      const { data: remoteNodes, error: nodesPullErr } = await supabase
         .from('seven_canvas_nodes')
         .select('*')
         .gt('updated_at', lastSync)
 
-      if (remoteNodes && remoteNodes.length > 0) {
+      if (nodesPullErr) {
+        console.warn('Error pulling canvas nodes:', nodesPullErr.message)
+        hasPullErrors = true
+      } else if (remoteNodes && remoteNodes.length > 0) {
         for (const rn of remoteNodes) {
           const local = await db.canvasNodes.get(rn.id)
           if (!local || rn.updated_at > local.updatedAt) {
@@ -551,12 +600,15 @@ class SyncEngine {
       }
 
       // Pull Canvas Edges
-      const { data: remoteEdges } = await supabase
+      const { data: remoteEdges, error: edgesPullErr } = await supabase
         .from('seven_canvas_edges')
         .select('*')
         .gt('updated_at', lastSync)
 
-      if (remoteEdges && remoteEdges.length > 0) {
+      if (edgesPullErr) {
+        console.warn('Error pulling canvas edges:', edgesPullErr.message)
+        hasPullErrors = true
+      } else if (remoteEdges && remoteEdges.length > 0) {
         for (const re of remoteEdges) {
           const local = await db.canvasEdges.get(re.id)
           if (!local || re.updated_at > local.updatedAt) {
@@ -582,12 +634,15 @@ class SyncEngine {
       }
 
       // Pull Collections
-      const { data: remoteCollections } = await supabase
+      const { data: remoteCollections, error: colPullErr } = await supabase
         .from('seven_collections')
         .select('*')
         .gt('updated_at', lastSync)
 
-      if (remoteCollections && remoteCollections.length > 0) {
+      if (colPullErr) {
+        console.warn('Error pulling collections:', colPullErr.message)
+        hasPullErrors = true
+      } else if (remoteCollections && remoteCollections.length > 0) {
         for (const rc of remoteCollections) {
           const local = await db.collections.get(rc.id)
           if (!local || rc.updated_at > local.updatedAt) {
@@ -608,11 +663,14 @@ class SyncEngine {
       }
 
       // Pull Tags (incluyendo actualizaciones y eliminaciones)
-      const { data: remoteTags } = await supabase
+      const { data: remoteTags, error: tagPullErr } = await supabase
         .from('seven_tags')
         .select('*')
 
-      if (remoteTags && remoteTags.length > 0) {
+      if (tagPullErr) {
+        console.warn('Error pulling tags:', tagPullErr.message)
+        hasPullErrors = true
+      } else if (remoteTags && remoteTags.length > 0) {
         for (const rt of remoteTags) {
           const local = await db.tags.get(rt.id)
           if (!local || local.syncStatus !== 'pending') {
@@ -629,13 +687,18 @@ class SyncEngine {
         }
       }
 
-      // Actualizar timestamp de última sincronización
-      this.lastSyncTime = Date.now()
-      localStorage.setItem(LAST_SYNC_KEY, this.lastSyncTime.toString())
-      this.state = 'synced'
+      // Actualizar timestamp de última sincronización solo si no hubo errores de red/descarga
+      if (!hasPullErrors) {
+        this.lastSyncTime = Date.now()
+        localStorage.setItem(LAST_SYNC_KEY, this.lastSyncTime.toString())
+        this.state = 'synced'
+      } else {
+        this.state = 'error'
+        this.errorMessage = 'Sincronización completada con advertencias en la descarga remota'
+      }
       await this.updatePendingCount()
 
-      return { success: true, message: 'Sincronización completada' }
+      return { success: !hasPullErrors, message: hasPullErrors ? this.errorMessage! : 'Sincronización completada' }
     } catch (err: any) {
       console.error('Sync failed:', err)
       this.state = 'error'

@@ -268,13 +268,22 @@ export function isSpaceVisible(
   const matchesOwnerMember = Boolean(
     space.ownerMember && (
       space.ownerMember === memberId ||
-      (member?.email && space.ownerMember.toLowerCase() === member.email.toLowerCase())
+      space.ownerMember.toLowerCase() === member?.name?.toLowerCase() ||
+      (member?.email && space.ownerMember.toLowerCase() === member.email.toLowerCase()) ||
+      TEAM_MEMBERS.some(
+        (tm) =>
+          (tm.id === space.ownerMember || tm.name.toLowerCase() === space.ownerMember?.toLowerCase()) &&
+          (tm.id === memberId || (member?.email && tm.email?.toLowerCase() === member.email.toLowerCase()))
+      )
     )
   )
 
+  const spUserId = space.userId || space.user_id
   const matchesUserId = Boolean(
-    (space.userId && (space.userId === memberId || (effectiveAuthId && space.userId === effectiveAuthId))) ||
-    (space.user_id && (space.user_id === memberId || (effectiveAuthId && space.user_id === effectiveAuthId)))
+    spUserId && (
+      spUserId === memberId ||
+      (effectiveAuthId && spUserId === effectiveAuthId)
+    )
   )
 
   return matchesOwnerMember || matchesUserId
@@ -287,7 +296,7 @@ export function isSpaceVisible(
  *   ¡IMPORTANTE: Ni siquiera el administrador puede ver las notas privadas de otros usuarios, y viceversa!
  */
 export function isWorkspaceVisible(
-  workspace: { isPrivate?: boolean; ownerMember?: string; user_id?: string; spaceId?: string },
+  workspace: { isPrivate?: boolean; ownerMember?: string; user_id?: string; userId?: string; spaceId?: string },
   currentMemberOrId?: string | TeamMember | null,
   authUserId?: string
 ): boolean {
@@ -306,14 +315,21 @@ export function isWorkspaceVisible(
   const matchesOwnerMember = Boolean(
     workspace.ownerMember && (
       workspace.ownerMember === memberId ||
-      (member?.email && workspace.ownerMember.toLowerCase() === member.email.toLowerCase())
+      workspace.ownerMember.toLowerCase() === member?.name?.toLowerCase() ||
+      (member?.email && workspace.ownerMember.toLowerCase() === member.email.toLowerCase()) ||
+      TEAM_MEMBERS.some(
+        (tm) =>
+          (tm.id === workspace.ownerMember || tm.name.toLowerCase() === workspace.ownerMember?.toLowerCase()) &&
+          (tm.id === memberId || (member?.email && tm.email?.toLowerCase() === member.email.toLowerCase()))
+      )
     )
   )
 
+  const wsUserId = workspace.userId || workspace.user_id
   const matchesUserId = Boolean(
-    workspace.user_id && (
-      workspace.user_id === memberId ||
-      (effectiveAuthId && workspace.user_id === effectiveAuthId)
+    wsUserId && (
+      wsUserId === memberId ||
+      (effectiveAuthId && wsUserId === effectiveAuthId)
     )
   )
 

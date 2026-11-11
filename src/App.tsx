@@ -102,6 +102,7 @@ function MainApp() {
         const mapped = mapSupabaseUserToMember(user, profile)
         setCurrentMember(mapped)
         setCurrentMemberState(mapped)
+        syncEngine.triggerSync()
       }
       setAuthLoading(false)
     }).catch(() => {
@@ -122,6 +123,10 @@ function MainApp() {
         const mapped = mapSupabaseUserToMember(user, profile)
         setCurrentMember(mapped)
         setCurrentMemberState(mapped)
+        if (event === 'SIGNED_IN') {
+          syncEngine.resetLastSyncTime()
+        }
+        syncEngine.triggerSync()
       }
       setAuthLoading(false)
     })
@@ -146,6 +151,7 @@ function MainApp() {
   const handleSignOut = async () => {
     await signOutUser()
     await clearLocalUserData()
+    syncEngine.resetLastSyncTime()
     localStorage.removeItem('seven_note_workbench_tabs')
     localStorage.removeItem('seven_note_workbench_active_tab')
     localStorage.removeItem('seven_note_active_space_id')
@@ -687,17 +693,41 @@ function MainApp() {
 
   // Filter visible spaces for current member (Strict privacy: private spaces only visible to owner)
   const visibleSpaces = useMemo(() => {
-    return spaces.filter((s: SpaceItem) => !s.isDeleted && isSpaceVisible(s, currentMember, authUser?.id))
+    return spaces
+      .filter((s: SpaceItem) => !s.isDeleted && isSpaceVisible(s, currentMember, authUser?.id))
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
   }, [spaces, currentMember, authUser?.id])
 
-  // Keep currentSpaceId in sync with visible spaces
+  // Keep currentSpaceId in sync with visible spaces and auto-select space with content
   useEffect(() => {
-    if (visibleSpaces.length > 0 && !visibleSpaces.some((s: SpaceItem) => s.id === currentSpaceId)) {
-      const fallbackId = visibleSpaces[0].id
-      setCurrentSpaceId(fallbackId)
-      localStorage.setItem('seven_note_active_space_id', fallbackId)
+    if (visibleSpaces.length === 0) return
+
+    const hasCurrentSpace = visibleSpaces.some((s: SpaceItem) => s.id === currentSpaceId)
+    const savedSpaceId = localStorage.getItem('seven_note_active_space_id')
+
+    if (savedSpaceId && visibleSpaces.some((s) => s.id === savedSpaceId)) {
+      if (currentSpaceId !== savedSpaceId) {
+        setCurrentSpaceId(savedSpaceId)
+      }
+      return
     }
-  }, [visibleSpaces, currentSpaceId])
+
+    // Si el espacio actual no es válido o es el demo-workspace inicial pero existen otros espacios con notas,
+    // cambiamos automáticamente al espacio activo del usuario.
+    if (!hasCurrentSpace || currentSpaceId === DEFAULT_SPACE_ID) {
+      const spaceWithNotes = visibleSpaces.find((s) => {
+        if (s.id === DEFAULT_SPACE_ID) return false
+        return workspaces.some(
+          (w) => !w.isDeleted && (w.spaceId || DEFAULT_SPACE_ID) === s.id && isWorkspaceVisible(w, currentMember, authUser?.id)
+        )
+      })
+      const targetSpace = spaceWithNotes || visibleSpaces.find((s) => s.id !== DEFAULT_SPACE_ID) || visibleSpaces[0]
+      if (targetSpace && targetSpace.id !== currentSpaceId) {
+        setCurrentSpaceId(targetSpace.id)
+        localStorage.setItem('seven_note_active_space_id', targetSpace.id)
+      }
+    }
+  }, [visibleSpaces, currentSpaceId, workspaces, currentMember, authUser?.id])
 
   // Select active workspace items belonging to current space and visible to currentMember
   const currentSpaceWorkspaces = workspaces.filter(
@@ -708,6 +738,17 @@ function MainApp() {
   const activeWorkspaces = currentSpaceWorkspaces.filter((w) => !w.isDeleted)
   const currentWorkspace: WorkspaceItem | undefined =
     activeWorkspaces.find((w) => w.id === currentWorkspaceId) || activeWorkspaces[0]
+
+  // Keep currentWorkspaceId in sync with active workspaces in current space
+  useEffect(() => {
+    if (activeWorkspaces.length > 0) {
+      if (!activeWorkspaces.some((w) => w.id === currentWorkspaceId)) {
+        const first = activeWorkspaces[0]
+        setCurrentWorkspaceId(first.id)
+        setViewMode(first.viewMode || 'doc')
+      }
+    }
+  }, [activeWorkspaces, currentWorkspaceId])
 
   // Workspaces from all public spaces (for bidirectional links and cross-workspace referencing)
   const publicWorkspaces = useMemo(() => {
@@ -1035,6 +1076,8 @@ function MainApp() {
           onClose={() => {}}
           onAuthSuccess={(member) => {
             setCurrentMemberState(member)
+            syncEngine.resetLastSyncTime()
+            syncEngine.triggerSync()
           }}
         />
       </div>
@@ -1213,7 +1256,7 @@ function MainApp() {
 
                 {activeDropdown === 'info' && (
                   <div
-                    className="fixed right-3 top-12 sm:absolute sm:right-auto sm:left-0 sm:top-10 z-50 w-[calc(100vw-24px)] max-w-[270px] sm:w-72 sm:max-w-none bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] rounded-2xl sm:rounded-3xl shadow-2xl backdrop-blur-2xl p-2.5 sm:p-4 text-[11px] sm:text-xs text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 duration-100 max-h-[calc(100vh-64px)] overflow-y-auto custom-scrollbar"
+                    className="fixed right-3 top-12 sm:absolute sm:left-0 sm:right-auto sm:top-10 z-50 w-[calc(100vw-24px)] max-w-[270px] sm:w-72 sm:max-w-none bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] rounded-2xl sm:rounded-3xl shadow-2xl backdrop-blur-2xl p-2.5 sm:p-4 text-[11px] sm:text-xs text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 duration-100 max-h-[calc(100vh-64px)] overflow-y-auto custom-scrollbar"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <div className="font-bold pb-1.5 sm:pb-2.5 border-b border-black/[0.06] dark:border-white/[0.08] mb-1.5 sm:mb-2.5 flex items-center justify-between">
@@ -1259,7 +1302,7 @@ function MainApp() {
 
                 {activeDropdown === 'more' && (
                   <div
-                    className="fixed right-3 top-12 sm:absolute sm:right-auto sm:left-0 sm:top-10 z-50 w-[calc(100vw-24px)] max-w-[260px] sm:w-64 sm:max-w-none bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] rounded-2xl sm:rounded-3xl shadow-2xl backdrop-blur-2xl p-1.5 sm:p-2.5 text-[11px] sm:text-xs text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 duration-100 space-y-0.5 max-h-[calc(100vh-64px)] overflow-y-auto custom-scrollbar"
+                    className="fixed right-3 top-12 sm:absolute sm:left-0 sm:right-auto sm:top-10 z-50 w-[calc(100vw-24px)] max-w-[260px] sm:w-64 sm:max-w-none bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] rounded-2xl sm:rounded-3xl shadow-2xl backdrop-blur-2xl p-1.5 sm:p-2.5 text-[11px] sm:text-xs text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 duration-100 space-y-0.5 max-h-[calc(100vh-64px)] overflow-y-auto custom-scrollbar"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button
@@ -1784,8 +1827,25 @@ function MainApp() {
               </div>
             )
           ) : (
-            <div className="flex-1 flex items-center justify-center text-zinc-500 text-sm">
-              Selecciona o crea una página para comenzar.
+            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-zinc-500 text-sm gap-3 select-none">
+              <div className="w-12 h-12 rounded-2xl bg-black/[0.04] dark:bg-white/[0.06] flex items-center justify-center text-2xl shadow-xs">
+                📝
+              </div>
+              <div className="font-semibold text-neutral-800 dark:text-neutral-200">
+                Selecciona o crea una página para comenzar
+              </div>
+              <p className="text-xs text-neutral-400 max-w-xs">
+                Abre la barra lateral para ver todos tus espacios de trabajo y notas sincronizadas.
+              </p>
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  onClick={() => setSidebarOpen(true)}
+                  className="px-4 py-2 rounded-xl bg-blue-600 text-white font-medium text-xs hover:bg-blue-700 active:scale-95 transition shadow-sm cursor-pointer flex items-center gap-1.5"
+                >
+                  <SidebarSimple size={16} weight="duotone" />
+                  <span>Ver espacios y notas</span>
+                </button>
+              </div>
             </div>
           )}
         </main>
@@ -1855,6 +1915,8 @@ function MainApp() {
         onClose={() => setIsAuthModalOpen(false)}
         onAuthSuccess={(member) => {
           setCurrentMemberState(member)
+          syncEngine.resetLastSyncTime()
+          syncEngine.triggerSync()
         }}
       />
 

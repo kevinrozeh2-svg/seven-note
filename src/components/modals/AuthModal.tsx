@@ -105,6 +105,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         setCurrentMember(member)
         onAuthSuccess?.(member)
         toast.success(`¡Bienvenido, ${member.fullName}! Sesión iniciada correctamente.`)
+        syncEngine.resetLastSyncTime()
         syncEngine.triggerSync()
         onClose()
       }
