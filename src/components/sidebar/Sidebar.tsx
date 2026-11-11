@@ -147,7 +147,11 @@ function DocumentItemIcon({
       case '✨':
       case '✦':
       case 'sparkle':
+      case 'sparkles':
         return <Sparkle size={size} weight="duotone" className={className} />
+      case '⭐':
+      case 'star':
+        return <Star size={size} weight="duotone" className={className} />
       case '📁':
       case 'folder':
         return <Folder size={size} weight="duotone" className={className} />
@@ -163,6 +167,7 @@ function DocumentItemIcon({
       case '📝':
       case '📄':
       case 'doc':
+      case 'file-text':
         return <FileText size={size} weight="duotone" className={className} />
     }
 

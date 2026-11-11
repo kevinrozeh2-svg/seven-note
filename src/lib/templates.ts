@@ -24,9 +24,46 @@ export interface AppTemplate {
   docContent?: string
   nodes?: CanvasTemplateNodeDef[]
   edges?: CanvasTemplateEdgeDef[]
+  hasCover?: boolean
+  coverType?: 'bannerText' | 'color' | 'gradient' | 'image'
+  coverBannerTitle?: string
+  coverBannerSubtitle?: string
+  coverColor?: string
+  coverBannerStyle?: 'minimal-light' | 'minimal-dark' | 'cream' | 'serif'
 }
 
 export const APP_TEMPLATES: AppTemplate[] = [
+  // --- Plantilla Proyectos & Subproyectos (Estilo Notion Minimal) ---
+  {
+    id: 'projects-and-subprojects',
+    title: 'Proyectos y subproyectos',
+    description: 'Cabecera tipográfica estética con banner "PROJECTS & SUB-PROJECTS", icono de carpeta y gestión organizada de proyectos e iniciativas.',
+    icon: 'folder',
+    category: 'Proyectos',
+    type: 'doc',
+    hasCover: true,
+    coverType: 'bannerText',
+    coverBannerTitle: 'PROJECTS &',
+    coverBannerSubtitle: 'SUB-PROJECTS',
+    coverColor: '#ffffff',
+    coverBannerStyle: 'minimal-light',
+    docContent: `
+      <h2>🎯 Visión General de Proyectos</h2>
+      <p>Espacio centralizado para gestionar las iniciativas estratégicas, hojas de ruta y entregables del equipo.</p>
+      
+      <h3>🚀 Iniciativas Activas (Q4)</h3>
+      <ul data-type="taskList">
+        <li data-checked="true"><label><input type="checkbox" checked="checked"><span></span></label><div><strong>Lanzamiento Versión 2.0:</strong> Arquitectura offline-first con sincronización en la nube.</div></li>
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div><strong>Rediseño Estético de Notas:</strong> Portadas tipográficas minimalistas e iconos elevados estilo Notion.</div></li>
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div><strong>Subproyectos & Dependencias:</strong> Tableros interconectados para desglose de tareas complejas.</div></li>
+      </ul>
+
+      <h3>📁 Subproyectos & Hitos</h3>
+      <blockquote>
+        <em>"Un proyecto sin sub-hitos claros es solo una buena intención."</em>
+      </blockquote>
+    `
+  },
   // --- Tableros Milanote Auténticos (Screenshots de Referencia) ---
   {
     id: 'milanote-inspiration',

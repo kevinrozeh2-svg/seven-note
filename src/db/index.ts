@@ -114,6 +114,16 @@ export interface WorkspaceItem {
   viewedBy?: string[]
   isNewItem?: boolean
   userId?: string
+
+  // Cover / Header Banner (Notion Style)
+  hasCover?: boolean
+  coverType?: 'bannerText' | 'color' | 'gradient' | 'image'
+  coverUrl?: string
+  coverColor?: string
+  coverBannerTitle?: string // e.g. "PROJECTS &"
+  coverBannerSubtitle?: string // e.g. "SUB-PROJECTS"
+  coverBannerStyle?: 'minimal-light' | 'minimal-dark' | 'cream' | 'serif'
+  coverPosition?: number
 }
 
 export type CanvasNodeType =

@@ -165,6 +165,54 @@ export const DocThumbnailPreview: React.FC<DocThumbnailPreviewProps> = ({
       ? 'w-16 h-14 rounded-lg'
       : 'w-full h-32 rounded-t-lg'
 
+  // CASE 0: Note Cover (Notion Aesthetic & Banner Text)
+  if (doc?.hasCover) {
+    if (doc.coverType === 'bannerText') {
+      return (
+        <div
+          className={`relative shrink-0 overflow-hidden border border-neutral-300/60 dark:border-neutral-700/60 shadow-xs flex flex-col items-center justify-center p-1 select-none ${sizeClasses} ${className}`}
+          style={{ backgroundColor: doc.coverColor || '#ffffff' }}
+        >
+          <span
+            className="font-serif italic tracking-widest text-[9px] uppercase font-light text-center leading-tight truncate max-w-full"
+            style={{ color: doc.coverColor === '#18181b' ? '#f4f4f5' : '#18181b' }}
+          >
+            {doc.coverBannerTitle || 'PROJECTS &'}
+          </span>
+          <span
+            className="font-serif italic tracking-widest text-[9px] uppercase font-light text-center leading-tight truncate max-w-full"
+            style={{ color: doc.coverColor === '#18181b' ? '#f4f4f5' : '#18181b' }}
+          >
+            {doc.coverBannerSubtitle || 'SUB-PROJECTS'}
+          </span>
+        </div>
+      )
+    }
+    if (doc.coverType === 'image' && doc.coverUrl && !imgError) {
+      return (
+        <div
+          className={`relative shrink-0 overflow-hidden bg-neutral-900 border border-neutral-700/60 shadow-xs flex items-center justify-center select-none ${sizeClasses} ${className}`}
+        >
+          <img
+            src={doc.coverUrl}
+            alt=""
+            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+            loading="lazy"
+            onError={() => setImgError(true)}
+          />
+        </div>
+      )
+    }
+    if (doc.coverType === 'gradient' || doc.coverColor) {
+      return (
+        <div
+          className={`relative shrink-0 overflow-hidden border border-neutral-700/60 shadow-xs flex items-center justify-center select-none ${sizeClasses} ${className}`}
+          style={{ background: doc.coverColor || '#ffffff' }}
+        />
+      )
+    }
+  }
+
   // CASE 1: Image Preview
   if (leadImageUrl && !imgError) {
     return (

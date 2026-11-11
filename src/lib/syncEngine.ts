@@ -298,7 +298,15 @@ class SyncEngine {
               canvasGridVariant: w.canvasGridVariant,
               sortOrder: w.sortOrder,
               viewedBy: w.viewedBy,
-              isNewItem: w.isNewItem
+              isNewItem: w.isNewItem,
+              hasCover: w.hasCover,
+              coverType: w.coverType,
+              coverUrl: w.coverUrl,
+              coverColor: w.coverColor,
+              coverBannerTitle: w.coverBannerTitle,
+              coverBannerSubtitle: w.coverBannerSubtitle,
+              coverBannerStyle: w.coverBannerStyle,
+              coverPosition: w.coverPosition
             }
           }))
 
@@ -562,7 +570,15 @@ class SyncEngine {
               canvasGridVariant: meta.canvasGridVariant,
               sortOrder: meta.sortOrder ?? (rw as any).sort_order ?? (rw as any).sortOrder,
               viewedBy: meta.viewedBy,
-              isNewItem: meta.isNewItem
+              isNewItem: meta.isNewItem,
+              hasCover: meta.hasCover,
+              coverType: meta.coverType,
+              coverUrl: meta.coverUrl,
+              coverColor: meta.coverColor,
+              coverBannerTitle: meta.coverBannerTitle,
+              coverBannerSubtitle: meta.coverBannerSubtitle,
+              coverBannerStyle: meta.coverBannerStyle,
+              coverPosition: meta.coverPosition
             })
           }
         }

@@ -1017,6 +1017,12 @@ function MainApp() {
         icon: template.icon,
         docContent: template.docContent || '<p></p>',
         templateName: template.title,
+        hasCover: template.hasCover,
+        coverType: template.coverType,
+        coverBannerTitle: template.coverBannerTitle,
+        coverBannerSubtitle: template.coverBannerSubtitle,
+        coverColor: template.coverColor,
+        coverBannerStyle: template.coverBannerStyle,
         updatedAt: now,
         syncStatus: 'pending'
       })

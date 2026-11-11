@@ -26,9 +26,25 @@ import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight'
 import { common, createLowlight } from 'lowlight'
 import { toast } from 'sonner'
 import confetti from 'canvas-confetti'
-import { Lock, Unlock, Globe, ChevronDown, Maximize2, Minimize2, AlignLeft, AlignCenter, AlignRight, AlignJustify } from 'lucide-react'
 import {
-  SmileIcon,
+  Lock,
+  Unlock,
+  Globe,
+  ChevronDown,
+  Maximize2,
+  Minimize2,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignJustify,
+  Palette,
+  Edit3,
+  Trash2,
+  Smile
+} from 'lucide-react'
+import { CoverPickerPopover, type CoverConfig } from './CoverPickerPopover'
+import { NoteIconPickerModal, renderNoteIcon } from './NoteIconPickerModal'
+import {
   EdgelessIcon,
   ToggleDownIcon,
   ToggleRightIcon,
@@ -280,7 +296,16 @@ export function DocEditor({
   readOnly = false
 }: DocEditorProps) {
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved')
-  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false)
+  const [isIconModalOpen, setIsIconModalOpen] = useState(false)
+  const [isCoverPickerOpen, setIsCoverPickerOpen] = useState(false)
+  const [isEditingBannerText, setIsEditingBannerText] = useState(false)
+  const [tempBannerTitle, setTempBannerTitle] = useState(workspace.coverBannerTitle || 'PROJECTS &')
+  const [tempBannerSubtitle, setTempBannerSubtitle] = useState(workspace.coverBannerSubtitle || 'SUB-PROJECTS')
+
+  useEffect(() => {
+    setTempBannerTitle(workspace.coverBannerTitle || 'PROJECTS &')
+    setTempBannerSubtitle(workspace.coverBannerSubtitle || 'SUB-PROJECTS')
+  }, [workspace.coverBannerTitle, workspace.coverBannerSubtitle])
   const [isBodyEmojiPickerOpen, setIsBodyEmojiPickerOpen] = useState(false)
   const [isInfoExpanded, setIsInfoExpanded] = useState(workspace.isInformationOpen ?? false)
   const [infoText, setInfoText] = useState(workspace.informationContent || '')
@@ -652,6 +677,53 @@ export function DocEditor({
     handleSaveDatabaseData(nextData)
     const viewOption = NOTION_TOOLS.find((t) => t.id === viewType)
     toast.success(`Vista ${viewOption?.label || viewType} de Notion activada`)
+  }
+
+  // Cover handlers
+  const handleSelectCover = async (config: CoverConfig) => {
+    await db.workspaces.update(workspace.id, {
+      hasCover: config.hasCover,
+      coverType: config.coverType,
+      coverUrl: config.coverUrl,
+      coverColor: config.coverColor,
+      coverBannerTitle: config.coverBannerTitle,
+      coverBannerSubtitle: config.coverBannerSubtitle,
+      coverBannerStyle: config.coverBannerStyle,
+      coverPosition: config.coverPosition,
+      updatedAt: Date.now(),
+      syncStatus: 'pending'
+    })
+    syncEngine.scheduleSync(500)
+  }
+
+  const handleRemoveCover = async () => {
+    await db.workspaces.update(workspace.id, {
+      hasCover: false,
+      coverUrl: undefined,
+      coverColor: undefined,
+      coverBannerTitle: undefined,
+      coverBannerSubtitle: undefined,
+      updatedAt: Date.now(),
+      syncStatus: 'pending'
+    })
+    syncEngine.scheduleSync(500)
+    toast.info('Portada eliminada')
+  }
+
+  const handleAddDefaultCover = async () => {
+    await db.workspaces.update(workspace.id, {
+      hasCover: true,
+      coverType: 'bannerText',
+      coverBannerTitle: 'PROJECTS &',
+      coverBannerSubtitle: 'SUB-PROJECTS',
+      coverColor: '#ffffff',
+      coverBannerStyle: 'minimal-light',
+      icon: workspace.icon || 'folder',
+      updatedAt: Date.now(),
+      syncStatus: 'pending'
+    })
+    syncEngine.scheduleSync(500)
+    toast.success('Portada añadida (Estilo Proyectos)')
   }
 
   // Icon handler
@@ -1978,111 +2050,318 @@ export function DocEditor({
         </div>
       )}
 
-      {/* Main Document Body Container */}
-      <div className={`mx-auto w-full pt-4 sm:pt-8 pb-24 ${pageWidthClass}`}>
-        {/* Top: Add icon Button */}
-        <div className="mb-4 relative">
-          {workspace.icon ? (
-            <div className="flex items-center gap-2 group">
-              <span
-                onClick={() => setIsEmojiPickerOpen(true)}
-                className="cursor-pointer hover:scale-105 transition flex items-center justify-center p-1 rounded-2xl hover:bg-black/5 dark:hover:bg-white/5"
-                title="Cambiar icono"
-              >
-                <AppleEmoji emoji={workspace.icon} size={42} />
-              </span>
-              <button
-                onClick={() => setIsEmojiPickerOpen(true)}
-                className="opacity-0 group-hover:opacity-100 text-[11px] text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] transition"
-              >
-                Cambiar icono
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setIsEmojiPickerOpen(true)}
-              className="flex items-center gap-1.5 text-xs text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] py-1 px-2 rounded-md hover:bg-[var(--affine-hover-color)] transition font-normal"
+      {/* 1. Cover Banner (Notion Style) */}
+      {workspace.hasCover && (
+        <div className="relative w-full h-44 sm:h-52 md:h-64 group/cover select-none shrink-0 overflow-hidden transition-all duration-300 border-b border-black/5 dark:border-white/5">
+          {workspace.coverType === 'bannerText' ? (
+            <div
+              className="absolute inset-0 flex flex-col items-center justify-center transition-colors duration-300"
+              style={{ backgroundColor: workspace.coverColor || '#ffffff' }}
             >
-              <SmileIcon className="w-3.5 h-3.5 text-[var(--affine-text-secondary-color)]" />
-              <span>Add icon</span>
-            </button>
+              {isEditingBannerText ? (
+                <div
+                  className="flex flex-col items-center justify-center gap-2 z-20 px-4"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <input
+                    type="text"
+                    value={tempBannerTitle}
+                    onChange={(e) => setTempBannerTitle(e.target.value)}
+                    placeholder="PROJECTS &"
+                    className="font-serif italic tracking-[0.25em] text-xl sm:text-2xl text-center uppercase bg-black/5 dark:bg-white/10 px-3 py-1 rounded-lg border border-neutral-300 dark:border-neutral-600 outline-none w-72 sm:w-96 text-neutral-900 dark:text-white"
+                  />
+                  <input
+                    type="text"
+                    value={tempBannerSubtitle}
+                    onChange={(e) => setTempBannerSubtitle(e.target.value)}
+                    placeholder="SUB-PROJECTS"
+                    className="font-serif italic tracking-[0.25em] text-xl sm:text-2xl text-center uppercase bg-black/5 dark:bg-white/10 px-3 py-1 rounded-lg border border-neutral-300 dark:border-neutral-600 outline-none w-72 sm:w-96 text-neutral-900 dark:text-white"
+                  />
+                  <div className="flex items-center gap-2 mt-1">
+                    <button
+                      onClick={async () => {
+                        await db.workspaces.update(workspace.id, {
+                          coverBannerTitle: tempBannerTitle.trim() || 'PROJECTS &',
+                          coverBannerSubtitle: tempBannerSubtitle.trim() || 'SUB-PROJECTS',
+                          updatedAt: Date.now(),
+                          syncStatus: 'pending'
+                        })
+                        syncEngine.scheduleSync(500)
+                        setIsEditingBannerText(false)
+                        toast.success('Texto del banner guardado')
+                      }}
+                      className="px-3 py-1 bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 rounded-lg text-xs font-semibold shadow-xs"
+                    >
+                      Guardar
+                    </button>
+                    <button
+                      onClick={() => setIsEditingBannerText(false)}
+                      className="px-2.5 py-1 bg-neutral-200 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 rounded-lg text-xs"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  onClick={() => {
+                    if (!readOnly) setIsEditingBannerText(true)
+                  }}
+                  className="flex flex-col items-center justify-center cursor-pointer hover:opacity-85 transition select-text"
+                  title="Clic para editar el texto del banner"
+                >
+                  <span
+                    className="font-serif italic tracking-[0.25em] text-2xl sm:text-3xl md:text-4xl uppercase font-light leading-snug drop-shadow-2xs text-center"
+                    style={{
+                      color:
+                        workspace.coverColor === '#18181b'
+                          ? '#f4f4f5'
+                          : '#18181b'
+                    }}
+                  >
+                    {workspace.coverBannerTitle || 'PROJECTS &'}
+                  </span>
+                  <span
+                    className="font-serif italic tracking-[0.25em] text-2xl sm:text-3xl md:text-4xl uppercase font-light leading-snug drop-shadow-2xs text-center mt-0.5"
+                    style={{
+                      color:
+                        workspace.coverColor === '#18181b'
+                          ? '#f4f4f5'
+                          : '#18181b'
+                    }}
+                  >
+                    {workspace.coverBannerSubtitle || 'SUB-PROJECTS'}
+                  </span>
+                </div>
+              )}
+            </div>
+          ) : workspace.coverType === 'image' && workspace.coverUrl ? (
+            <img
+              src={workspace.coverUrl}
+              alt=""
+              className="w-full h-full object-cover"
+              style={{ objectPosition: `center ${workspace.coverPosition || 50}%` }}
+            />
+          ) : (
+            <div
+              className="w-full h-full"
+              style={{ background: workspace.coverColor || '#ffffff' }}
+            />
           )}
 
-          {/* Privacy & Sharing Badge Button */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={async () => {
-                const nextPrivate = !workspace.isPrivate
-                await db.workspaces.update(workspace.id, {
-                  isPrivate: nextPrivate,
-                  updatedAt: Date.now(),
-                  syncStatus: 'pending'
-                })
-                syncEngine.scheduleSync(500)
-                toast.success(nextPrivate ? 'Nota cambiada a MODO PRIVADO (Solo tú)' : 'Nota cambiada a MODO PÚBLICO (Todo el equipo)')
-              }}
-              className={`flex items-center gap-1.5 text-xs py-1 px-3 rounded-full transition font-semibold cursor-pointer active:scale-95 shadow-2xs ${
-                workspace.isPrivate
-                  ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 hover:bg-amber-500/25'
-                  : 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-500/20 hover:bg-blue-500/20'
-              }`}
-              title={workspace.isPrivate ? 'Nota privada (solo tú). Clic para hacerla pública para el equipo' : 'Nota pública para el equipo. Clic para hacerla privada'}
-            >
-              {workspace.isPrivate ? <Lock className="w-3.5 h-3.5 text-amber-500" /> : <Unlock className="w-3.5 h-3.5 text-blue-500" />}
-              <span>{workspace.isPrivate ? 'Privada (Solo tú)' : 'Pública (Equipo)'}</span>
-            </button>
+          {/* Banner Hover Floating Controls */}
+          {!readOnly && (
+            <div className="absolute right-4 bottom-3 flex items-center gap-1.5 opacity-0 group-hover/cover:opacity-100 transition-opacity bg-black/60 dark:bg-neutral-900/80 backdrop-blur-md px-2.5 py-1 rounded-xl text-white shadow-lg z-20">
+              <button
+                onClick={() => setIsCoverPickerOpen(true)}
+                className="flex items-center gap-1 px-2.5 py-1 text-xs hover:bg-white/20 rounded-lg transition font-medium cursor-pointer"
+              >
+                <Palette className="w-3.5 h-3.5" />
+                <span>Cambiar portada</span>
+              </button>
+              {workspace.coverType === 'bannerText' && (
+                <button
+                  onClick={() => setIsEditingBannerText(true)}
+                  className="flex items-center gap-1 px-2.5 py-1 text-xs hover:bg-white/20 rounded-lg transition font-medium cursor-pointer"
+                >
+                  <Edit3 className="w-3.5 h-3.5" />
+                  <span>Editar texto</span>
+                </button>
+              )}
+              <button
+                onClick={handleRemoveCover}
+                className="flex items-center gap-1 px-2 py-1 text-xs hover:bg-rose-500/30 text-rose-300 rounded-lg transition cursor-pointer"
+                title="Quitar portada"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
-            {/* Creator attribution pill */}
-            {(workspace.ownerName || workspace.createdBy) && (
-              <span className="flex items-center gap-1.5 text-[11px] py-0.5 px-2.5 rounded-full bg-black/[0.03] dark:bg-white/[0.05] border border-black/[0.05] dark:border-white/[0.08] text-neutral-500 dark:text-neutral-400 font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                <span>Creado por: <strong className="text-neutral-700 dark:text-neutral-200">{workspace.ownerName || workspace.createdBy}</strong></span>
-              </span>
-            )}
+      {/* Main Document Body Container */}
+      <div className={`mx-auto w-full pb-24 ${pageWidthClass} ${workspace.hasCover ? 'pt-0' : 'pt-4 sm:pt-8'}`}>
+        {/* Top: Icon & Actions Area */}
+        <div className={`relative ${workspace.hasCover ? '-mt-10 sm:-mt-12 mb-3' : 'mb-4'}`}>
+          {workspace.icon || workspace.hasCover ? (
+            <div className="flex items-end gap-3 group/icon">
+              {/* Elevated Squircle Card (Pure white with black folder icon, exactly matching the screenshot!) */}
+              <div
+                onClick={() => {
+                  if (!readOnly) setIsIconModalOpen(true)
+                }}
+                className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white text-neutral-900 border border-neutral-200/90 shadow-xl flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95 transition-all duration-200 shrink-0 z-10"
+                title="Cambiar icono de la nota"
+              >
+                {renderNoteIcon(workspace.icon || 'folder', 34)}
 
-            {workspace.isPublicShared && (
-              <span className="flex items-center gap-1 text-[11px] py-0.5 px-2 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-medium">
-                <Globe className="w-3 h-3" />
-                <span>Enlace externo activo</span>
-              </span>
-            )}
-          </div>
+                {!readOnly && (
+                  <div className="absolute -bottom-2 opacity-0 group-hover/icon:opacity-100 transition-opacity bg-neutral-900 text-white text-[10px] font-medium py-0.5 px-2 rounded-full shadow-md whitespace-nowrap pointer-events-none">
+                    Cambiar icono
+                  </div>
+                )}
+              </div>
 
-          {/* Emoji Picker Popover */}
-          <EmojiPickerPopover
-            currentIcon={workspace.icon}
-            isOpen={isEmojiPickerOpen}
-            onClose={() => setIsEmojiPickerOpen(false)}
-            onSelectEmoji={handleSelectIcon}
-            onRemoveEmoji={handleRemoveIcon}
+              {/* Action Buttons alongside icon */}
+              {!readOnly && (
+                <div className="flex items-center gap-1 pb-1 opacity-0 group-hover/icon:opacity-100 transition-opacity">
+                  <button
+                    onClick={() => setIsIconModalOpen(true)}
+                    className="text-[11px] text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] px-2 py-1 rounded-md hover:bg-[var(--affine-hover-color)] transition cursor-pointer"
+                  >
+                    Cambiar icono
+                  </button>
+                  <button
+                    onClick={handleRemoveIcon}
+                    className="text-[11px] text-rose-500 hover:text-rose-600 px-2 py-1 rounded-md hover:bg-rose-500/10 transition cursor-pointer"
+                  >
+                    Quitar icono
+                  </button>
+                  {!workspace.hasCover && (
+                    <button
+                      onClick={handleAddDefaultCover}
+                      className="text-[11px] text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] px-2 py-1 rounded-md hover:bg-[var(--affine-hover-color)] transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <Palette className="w-3 h-3" />
+                      <span>Añadir portada</span>
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Ghost action buttons when neither cover nor icon is present */
+            <div className="flex items-center gap-2 mb-2 group">
+              <button
+                onClick={() => setIsIconModalOpen(true)}
+                className="flex items-center gap-1.5 text-xs text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] py-1 px-2.5 rounded-lg hover:bg-[var(--affine-hover-color)] transition font-normal cursor-pointer"
+              >
+                <Smile className="w-3.5 h-3.5 text-[var(--affine-text-secondary-color)]" />
+                <span>Añadir icono</span>
+              </button>
+              <button
+                onClick={handleAddDefaultCover}
+                className="flex items-center gap-1.5 text-xs text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] py-1 px-2.5 rounded-lg hover:bg-[var(--affine-hover-color)] transition font-normal cursor-pointer"
+              >
+                <Palette className="w-3.5 h-3.5 text-[var(--affine-text-secondary-color)]" />
+                <span>Añadir portada</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Big Title */}
+        <div className="mb-3">
+          <textarea
+            ref={titleTextareaRef}
+            rows={1}
+            value={workspace.title === 'Untitled' ? '' : workspace.title}
+            onChange={(e) => {
+              if (readOnly) return
+              const val = e.target.value
+              onTitleChange?.(val || 'Untitled')
+              e.target.style.height = 'auto'
+              e.target.style.height = `${e.target.scrollHeight}px`
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                editor?.commands.focus('start')
+              }
+            }}
+            readOnly={readOnly}
+            placeholder="Proyectos y subproyectos"
+            className={`w-full text-3xl sm:text-4xl font-bold tracking-tight text-[var(--affine-text-primary-color)] placeholder:text-[var(--affine-placeholder-color)] bg-transparent border-none outline-none focus:outline-none resize-none overflow-hidden leading-tight break-words whitespace-pre-wrap block ${
+              readOnly ? 'cursor-default' : ''
+            }`}
+            style={{ fieldSizing: 'content' }}
           />
         </div>
 
-          {/* Big Title */}
-          <div className="mb-6">
-            <textarea
-              ref={titleTextareaRef}
-              rows={1}
-              value={workspace.title === 'Untitled' ? '' : workspace.title}
-              onChange={(e) => {
-                if (readOnly) return
-                const val = e.target.value
-                onTitleChange?.(val || 'Untitled')
-                e.target.style.height = 'auto'
-                e.target.style.height = `${e.target.scrollHeight}px`
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  editor?.commands.focus('start')
-                }
-              }}
-              readOnly={readOnly}
-              placeholder="Title"
-              className={`w-full text-4xl font-bold tracking-tight text-[var(--affine-text-primary-color)] placeholder:text-[var(--affine-placeholder-color)] bg-transparent border-none outline-none focus:outline-none resize-none overflow-hidden leading-tight break-words whitespace-pre-wrap block ${readOnly ? 'cursor-default' : ''}`}
-              style={{ fieldSizing: 'content' }}
-            />
-          </div>
+        {/* Privacy & Sharing Badge Button */}
+        <div className="flex items-center gap-2 flex-wrap mb-6">
+          <button
+            onClick={async () => {
+              const nextPrivate = !workspace.isPrivate
+              await db.workspaces.update(workspace.id, {
+                isPrivate: nextPrivate,
+                updatedAt: Date.now(),
+                syncStatus: 'pending'
+              })
+              syncEngine.scheduleSync(500)
+              toast.success(
+                nextPrivate
+                  ? 'Nota cambiada a MODO PRIVADO (Solo tú)'
+                  : 'Nota cambiada a MODO PÚBLICO (Todo el equipo)'
+              )
+            }}
+            className={`flex items-center gap-1.5 text-xs py-1 px-3 rounded-full transition font-semibold cursor-pointer active:scale-95 shadow-2xs ${
+              workspace.isPrivate
+                ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 hover:bg-amber-500/25'
+                : 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-500/20 hover:bg-blue-500/20'
+            }`}
+            title={
+              workspace.isPrivate
+                ? 'Nota privada (solo tú). Clic para hacerla pública para el equipo'
+                : 'Nota pública para el equipo. Clic para hacerla privada'
+            }
+          >
+            {workspace.isPrivate ? (
+              <Lock className="w-3.5 h-3.5 text-amber-500" />
+            ) : (
+              <Unlock className="w-3.5 h-3.5 text-blue-500" />
+            )}
+            <span>{workspace.isPrivate ? 'Privada (Solo tú)' : 'Pública (Equipo)'}</span>
+          </button>
+
+          {/* Creator attribution pill */}
+          {(workspace.ownerName || workspace.createdBy) && (
+            <span className="flex items-center gap-1.5 text-[11px] py-0.5 px-2.5 rounded-full bg-black/[0.03] dark:bg-white/[0.05] border border-black/[0.05] dark:border-white/[0.08] text-neutral-500 dark:text-neutral-400 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+              <span>
+                Creado por:{' '}
+                <strong className="text-neutral-700 dark:text-neutral-200">
+                  {workspace.ownerName || workspace.createdBy}
+                </strong>
+              </span>
+            </span>
+          )}
+
+          {workspace.isPublicShared && (
+            <span className="flex items-center gap-1 text-[11px] py-0.5 px-2 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-medium">
+              <Globe className="w-3 h-3" />
+              <span>Enlace externo activo</span>
+            </span>
+          )}
+        </div>
+
+        {/* Cover & Icon Picker Popovers */}
+        <CoverPickerPopover
+          isOpen={isCoverPickerOpen}
+          onClose={() => setIsCoverPickerOpen(false)}
+          currentConfig={{
+            hasCover: workspace.hasCover ?? false,
+            coverType: workspace.coverType || 'bannerText',
+            coverUrl: workspace.coverUrl,
+            coverColor: workspace.coverColor,
+            coverBannerTitle: workspace.coverBannerTitle,
+            coverBannerSubtitle: workspace.coverBannerSubtitle,
+            coverBannerStyle: workspace.coverBannerStyle,
+            coverPosition: workspace.coverPosition
+          }}
+          onSelectCover={handleSelectCover}
+          onRemoveCover={handleRemoveCover}
+          noteTitle={workspace.title}
+        />
+
+        <NoteIconPickerModal
+          isOpen={isIconModalOpen}
+          onClose={() => setIsIconModalOpen(false)}
+          currentIcon={workspace.icon}
+          onSelectIcon={handleSelectIcon}
+          onRemoveIcon={handleRemoveIcon}
+        />
 
         {/* Collapsible: "Información" */}
         <div className="mb-8">

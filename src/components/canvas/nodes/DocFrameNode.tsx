@@ -10,7 +10,8 @@ import {
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
 import { areNodePropsEqual, NodeHandles, SourceNodeBadge } from './nodeUtils'
-import { AppleEmoji, renderWithAppleEmoji } from '../../ui/AppleEmoji'
+import { renderWithAppleEmoji } from '../../ui/AppleEmoji'
+import { renderNoteIcon } from '../../editor/NoteIconPickerModal'
 
 export const DocFrameNode = memo(({ id, data, selected }: any) => {
   const [title, setTitle] = useState(data.title || '')
@@ -118,7 +119,7 @@ export const DocFrameNode = memo(({ id, data, selected }: any) => {
           {!isExpanded && (
             <div className="flex items-center gap-1.5 min-w-0 flex-1 pr-2">
               {data.icon ? (
-                <AppleEmoji emoji={data.icon} size={15} className="shrink-0" />
+                <span className="shrink-0">{renderNoteIcon(data.icon, 14)}</span>
               ) : (
                 <PageIcon className="w-3.5 h-3.5 text-[#1e96eb] shrink-0" />
               )}
@@ -170,17 +171,49 @@ export const DocFrameNode = memo(({ id, data, selected }: any) => {
             className="p-1 rounded-md hover:bg-[var(--affine-hover-color)] hover:text-[var(--affine-text-primary-color)] transition"
             title={copied ? '¡Enlace copiado!' : 'Copiar enlace a nota'}
           >
-            {copied ? <DoneIcon className="w-3.5 h-3.5 text-emerald-500" /> : <LinkIcon className="w-3.5 h-3.5" />}
+            {copied ? <DoneIcon className="w-3.5 h-3.5 text-emerald-500" /> : <LinkIcon className="w-3.5 h-3.5 text-neutral-400" />}
           </button>
         </div>
       </div>
 
+      {/* Mini Cover Banner if note has cover */}
+      {isExpanded && data.hasCover && (
+        <div
+          className="w-full h-18 overflow-hidden flex flex-col items-center justify-center border-b border-black/5 dark:border-white/5 select-none"
+          style={{ backgroundColor: data.coverColor || '#ffffff' }}
+        >
+          {data.coverType === 'bannerText' ? (
+            <div className="flex flex-col items-center justify-center pointer-events-none">
+              <span
+                className="font-serif italic tracking-[0.2em] text-[11px] uppercase font-light leading-tight"
+                style={{ color: data.coverColor === '#18181b' ? '#f4f4f5' : '#18181b' }}
+              >
+                {data.coverBannerTitle || 'PROJECTS &'}
+              </span>
+              <span
+                className="font-serif italic tracking-[0.2em] text-[11px] uppercase font-light leading-tight mt-0.5"
+                style={{ color: data.coverColor === '#18181b' ? '#f4f4f5' : '#18181b' }}
+              >
+                {data.coverBannerSubtitle || 'SUB-PROJECTS'}
+              </span>
+            </div>
+          ) : data.coverType === 'image' && data.coverUrl ? (
+            <img src={data.coverUrl} alt="" className="w-full h-full object-cover" />
+          ) : (
+            <div className="w-full h-full" style={{ background: data.coverColor || '#ffffff' }} />
+          )}
+        </div>
+      )}
+
       {/* Card Body - Only shown if expanded */}
       {isExpanded && (
-        <div className="px-4 py-3 min-h-[90px] flex flex-col justify-start">
-          {data.icon && (
-            <div className="mb-1">
-              <AppleEmoji emoji={data.icon} size={24} />
+        <div className={`px-4 pb-3 min-h-[90px] flex flex-col justify-start ${data.hasCover ? 'pt-0' : 'pt-3'}`}>
+          {/* Overlapping Icon Squircle */}
+          {(data.icon || data.hasCover) && (
+            <div className={`mb-1.5 ${data.hasCover ? '-mt-5 relative z-10' : ''}`}>
+              <div className="w-10 h-10 rounded-xl bg-white text-neutral-900 border border-neutral-200/90 shadow-md flex items-center justify-center">
+                {renderNoteIcon(data.icon || 'folder', 20)}
+              </div>
             </div>
           )}
           <textarea
