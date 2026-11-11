@@ -20,6 +20,41 @@ export const FONT_CATEGORIES = [
 
 export type FontCategory = (typeof FONT_CATEGORIES)[number]
 
+const loadedFontSet = new Set<string>(['Inter'])
+
+/**
+ * Carga dinámicamente una fuente de Google Fonts bajo demanda para mantener
+ * el rendimiento del navegador rápido y evitar descargar 50+ fuentes al inicio.
+ */
+export function loadFontDynamically(fontNameOrFamily: string) {
+  if (!fontNameOrFamily || typeof window === 'undefined') return
+  const clean = fontNameOrFamily.replace(/["']/g, '').trim()
+  if (!clean || clean.toLowerCase() === 'inter' || loadedFontSet.has(clean)) return
+
+  const found = FONT_FAMILIES.find(
+    (f) =>
+      f.name.toLowerCase() === clean.toLowerCase() ||
+      f.family.toLowerCase().includes(clean.toLowerCase())
+  )
+
+  const googleFontName = found ? found.name : clean
+  const systemFonts = ['Georgia', 'Times New Roman', 'Courier New', 'system-ui', 'sans-serif', 'serif', 'monospace']
+  if (systemFonts.some((s) => s.toLowerCase() === googleFontName.toLowerCase())) return
+
+  loadedFontSet.add(clean)
+  loadedFontSet.add(googleFontName)
+
+  const linkId = `google-font-${googleFontName.replace(/\s+/g, '-').toLowerCase()}`
+  if (document.getElementById(linkId)) return
+
+  const link = document.createElement('link')
+  link.id = linkId
+  link.rel = 'stylesheet'
+  const fontParam = encodeURIComponent(googleFontName).replace(/%20/g, '+')
+  link.href = `https://fonts.googleapis.com/css2?family=${fontParam}:wght@400;600;700&display=swap`
+  document.head.appendChild(link)
+}
+
 export const FONT_FAMILIES: FontOption[] = [
   // ==================== SANS-SERIF (Modernas, Limpias & UI) ====================
   {

@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react'
 import { Search, Check, X, Sparkles } from 'lucide-react'
-import { FONT_FAMILIES, FONT_CATEGORIES, type FontCategory } from '../../../lib/fonts'
+import { FONT_FAMILIES, FONT_CATEGORIES, loadFontDynamically, type FontCategory } from '../../../lib/fonts'
 
 interface FontPickerPopoverProps {
   currentFamily: string
@@ -153,7 +153,9 @@ export const FontPickerPopover: React.FC<FontPickerPopoverProps> = ({
             return (
               <button
                 key={f.id}
+                onMouseEnter={() => loadFontDynamically(f.name)}
                 onClick={() => {
+                  loadFontDynamically(f.name)
                   onSelect(f.family)
                   onClose()
                 }}

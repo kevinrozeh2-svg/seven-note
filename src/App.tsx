@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
   FileText,
@@ -21,7 +21,9 @@ import {
   PencilSimpleLine,
   LockKey,
   LockKeyOpen,
-  ArrowsOutLineHorizontal
+  ArrowsOutLineHorizontal,
+  Printer,
+  Sparkle
 } from '@phosphor-icons/react'
 import {
   db,
@@ -37,32 +39,14 @@ import {
 } from './db'
 import { markItemAsRead } from './lib/unreadTracker'
 import { syncEngine, type SyncEngineStatus } from './lib/syncEngine'
+import { ObsidianRibbon } from './components/sidebar/ObsidianRibbon'
 import { Sidebar } from './components/sidebar/Sidebar'
-import { DocEditor } from './components/editor/DocEditor'
-import { CanvasBoard } from './components/canvas/CanvasBoard'
 import { RightSidebar } from './components/sidebar/RightSidebar'
 import { CommandPalette } from './components/modals/CommandPalette'
-import { SettingsModal } from './components/modals/SettingsModal'
 import { initTauriUpdater } from './lib/tauriUpdater'
-import { TrashModal } from './components/modals/TrashModal'
-import { ShareModal } from './components/modals/ShareModal'
-import { TemplatesModal } from './components/modals/TemplatesModal'
-import { AllDocsModal } from './components/modals/AllDocsModal'
-import { ImportModal } from './components/modals/ImportModal'
-import { ShortcutsModal } from './components/modals/ShortcutsModal'
-import { CreateWorkspaceModal } from './components/modals/CreateWorkspaceModal'
-import { KnowledgeGraphModal } from './components/modals/KnowledgeGraphModal'
-import { AuthModal, type AuthMode } from './components/modals/AuthModal'
-import { UserProfileModal } from './components/modals/UserProfileModal'
-import { UserManagementModal } from './components/modals/UserManagementModal'
 import { FindInPage } from './components/search/FindInPage'
 import { WorkbenchTabs, type WorkbenchTab } from './components/tabs/WorkbenchTabs'
-import { PresentationViewer } from './components/presentation/PresentationViewer'
-import { AllDocsPage } from './components/views/AllDocsPage'
-import { KnowledgeGraphPage } from './components/views/KnowledgeGraphPage'
-import { TrashPage } from './components/views/TrashPage'
-import { TemplatesPage } from './components/views/TemplatesPage'
-import { ExternalShareView } from './components/views/ExternalShareView'
+const ExternalShareView = lazy(() => import('./components/views/ExternalShareView').then(m => ({ default: m.ExternalShareView })))
 import { type AppTemplate } from './lib/templates'
 import { getCurrentMember, setCurrentMember, subscribeToMemberChanges, mapSupabaseUserToMember, type TeamMember, isWorkspaceVisible, isSpaceVisible } from './lib/teamAuth'
 import { getAuthUser, onAuthChange, signOutUser, fetchUserProfile } from './lib/supabase'
@@ -70,9 +54,33 @@ import {
   exportDocumentAsMarkdown,
   exportDocumentAsHtml,
   exportDocumentAsJson,
-  copyAsPlainText
+  copyAsPlainText,
+  printDocument
 } from './lib/exportUtils'
 import { Toaster, toast } from 'sonner'
+
+// Lazy-loaded heavy components for instant initial load (code-splitting)
+const DocEditor = lazy(() => import('./components/editor/DocEditor').then(m => ({ default: m.DocEditor })))
+const CanvasBoard = lazy(() => import('./components/canvas/CanvasBoard').then(m => ({ default: m.CanvasBoard })))
+const PresentationViewer = lazy(() => import('./components/presentation/PresentationViewer').then(m => ({ default: m.PresentationViewer })))
+const AllDocsPage = lazy(() => import('./components/views/AllDocsPage').then(m => ({ default: m.AllDocsPage })))
+const KnowledgeGraphPage = lazy(() => import('./components/views/KnowledgeGraphPage').then(m => ({ default: m.KnowledgeGraphPage })))
+const TrashPage = lazy(() => import('./components/views/TrashPage').then(m => ({ default: m.TrashPage })))
+const TemplatesPage = lazy(() => import('./components/views/TemplatesPage').then(m => ({ default: m.TemplatesPage })))
+
+import type { AuthMode } from './components/modals/AuthModal'
+
+const SettingsModal = lazy(() => import('./components/modals/SettingsModal').then(m => ({ default: m.SettingsModal })))
+const ShareModal = lazy(() => import('./components/modals/ShareModal').then(m => ({ default: m.ShareModal })))
+const TemplatesModal = lazy(() => import('./components/modals/TemplatesModal').then(m => ({ default: m.TemplatesModal })))
+const ImportModal = lazy(() => import('./components/modals/ImportModal').then(m => ({ default: m.ImportModal })))
+const ShortcutsModal = lazy(() => import('./components/modals/ShortcutsModal').then(m => ({ default: m.ShortcutsModal })))
+const CreateWorkspaceModal = lazy(() => import('./components/modals/CreateWorkspaceModal').then(m => ({ default: m.CreateWorkspaceModal })))
+const AuthModal = lazy(() => import('./components/modals/AuthModal').then(m => ({ default: m.AuthModal })))
+const UserProfileModal = lazy(() => import('./components/modals/UserProfileModal').then(m => ({ default: m.UserProfileModal })))
+const UserManagementModal = lazy(() => import('./components/modals/UserManagementModal').then(m => ({ default: m.UserManagementModal })))
+const QuickCaptureModal = lazy(() => import('./components/modals/QuickCaptureModal').then(m => ({ default: m.QuickCaptureModal })))
+
 
 function MainApp() {
 
@@ -208,14 +216,13 @@ function MainApp() {
   // Modals state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [isSearchOpen, setIsSearchOpen] = useState(false)
-  const [isTrashOpen, setIsTrashOpen] = useState(false)
   const [isShareOpen, setIsShareOpen] = useState(false)
   const [isTemplatesOpen, setIsTemplatesOpen] = useState(false)
-  const [isAllDocsOpen, setIsAllDocsOpen] = useState(false)
   const [isImportOpen, setIsImportOpen] = useState(false)
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false)
-  const [isKnowledgeGraphOpen, setIsKnowledgeGraphOpen] = useState(false)
   const [isFindInPageOpen, setIsFindInPageOpen] = useState(false)
+  const [isQuickCaptureOpen, setIsQuickCaptureOpen] = useState(false)
+
   const [activeDropdown, setActiveDropdown] = useState<'info' | 'more' | 'export' | null>(null)
   const [focusMode, setFocusMode] = useState(false)
 
@@ -585,7 +592,9 @@ function MainApp() {
 
     // Listen for custom sub-board navigation events
     const handleNavigate = (e: any) => {
-      if (e.detail?.workspaceId) {
+      if (e.detail?.viewType) {
+        openSpecialViewTab(e.detail.viewType, e.detail.title || 'Vista')
+      } else if (e.detail?.workspaceId) {
         selectWorkspaceWithTab(e.detail.workspaceId)
       }
     }
@@ -645,6 +654,12 @@ function MainApp() {
         return
       }
 
+      if (e.altKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault()
+        setIsQuickCaptureOpen((prev) => !prev)
+        return
+      }
+
       if (e.key === '?' || ((e.ctrlKey || e.metaKey) && e.key === '/')) {
         e.preventDefault()
         setIsShortcutsOpen((prev) => !prev)
@@ -664,9 +679,12 @@ function MainApp() {
       }
     }
 
+    const handleOpenQuickCapture = () => setIsQuickCaptureOpen(true)
+
     window.addEventListener('seven-note-navigate-workspace', handleNavigate)
     window.addEventListener('seven-note-switch-mode', handleSwitchMode)
     window.addEventListener('seven-note-start-presentation', handleStartPresentation)
+    window.addEventListener('seven-note-open-quick-capture', handleOpenQuickCapture)
     window.addEventListener('keydown', handleKeyDown)
 
     return () => {
@@ -674,6 +692,7 @@ function MainApp() {
       window.removeEventListener('seven-note-navigate-workspace', handleNavigate)
       window.removeEventListener('seven-note-switch-mode', handleSwitchMode)
       window.removeEventListener('seven-note-start-presentation', handleStartPresentation)
+      window.removeEventListener('seven-note-open-quick-capture', handleOpenQuickCapture)
       window.removeEventListener('keydown', handleKeyDown)
     }
   }, [isPresentationMode, currentWorkspaceId, focusMode])
@@ -1091,7 +1110,45 @@ function MainApp() {
   }
 
   return (
-    <div className="relative flex h-screen w-screen overflow-hidden bg-[#fbfbfa] dark:bg-[#121214] text-[var(--app-text-primary)] font-sans select-none">
+    <div className="relative flex h-screen w-screen overflow-hidden bg-[var(--obsidian-sidebar-bg,#181818)] text-[var(--app-text-primary)] font-sans select-none">
+      {/* 0. Obsidian Left Ribbon (Compact 40px Tool strip) */}
+      {!isPresentationMode && !focusMode && (
+        <ObsidianRibbon
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
+          onNewNote={handleNewTab}
+          onOpenSearch={() => setIsSearchOpen(true)}
+          onOpenKnowledgeGraph={() => openSpecialViewTab('knowledge-graph', 'Grafo de Conocimiento')}
+          onOpenCanvas={() => {
+            if (activeViewMode === 'canvas') {
+              setViewMode('doc')
+            } else {
+              setViewMode('canvas')
+            }
+          }}
+          onOpenAllDocs={() => openSpecialViewTab('all-docs', 'Todos los documentos')}
+          onOpenTemplates={() => openSpecialViewTab('templates', 'Plantillas')}
+          onOpenImport={() => setIsImportOpen(true)}
+          onOpenShortcuts={() => setIsShortcutsOpen(true)}
+          onOpenTrash={() => openSpecialViewTab('trash', 'Papelera')}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          activeView={activeTab?.viewType || activeViewMode}
+          syncStatus={syncStatus}
+          darkMode={darkMode}
+          onToggleDarkMode={() => setDarkMode(!darkMode)}
+          currentMember={currentMember}
+          onSelectMember={handleSelectMember}
+          authUser={authUser}
+          onOpenAuthModal={() => {
+            setAuthModalMode('login')
+            setIsAuthModalOpen(true)
+          }}
+          onOpenProfileModal={() => setIsProfileModalOpen(true)}
+          onOpenUserManagementModal={() => setIsUserManagementModalOpen(true)}
+          onSignOut={handleSignOut}
+        />
+      )}
+
       {/* 1. Left Sidebar Navigation */}
       {sidebarOpen && !isPresentationMode && !focusMode && (
         <>
@@ -1100,7 +1157,7 @@ function MainApp() {
             className="fixed inset-0 bg-black/50 backdrop-blur-xs z-40 md:hidden animate-in fade-in duration-150"
             onClick={() => setSidebarOpen(false)}
           />
-          <div className="fixed inset-y-0 left-0 z-50 md:relative md:z-auto h-full flex shrink-0">
+          <div className="fixed inset-y-0 left-10 md:left-0 z-50 md:relative md:z-auto h-full flex shrink-0">
             <Sidebar
               spaces={visibleSpaces}
               currentSpaceId={currentSpaceId}
@@ -1160,74 +1217,69 @@ function MainApp() {
           />
         )}
 
-        {/* Secondary Header for Document/Split Mode: Notion & Milanote Clean Human-Crafted Tactile Aesthetic */}
-        {!isPresentationMode && !focusMode && (!activeTab || !activeTab.viewType || activeTab.viewType === 'doc') && currentWorkspace && (
-          <header className="relative h-10 sm:h-11 border-b border-black/[0.04] dark:border-white/[0.06] bg-[#fbfbfa]/90 dark:bg-[#161619]/90 backdrop-blur-md px-2.5 sm:px-4 flex items-center justify-between shrink-0 z-15 select-none text-xs transition-colors duration-150">
-            {/* Left section: Sidebar toggle, Mode Switcher [ Page | Edgeless ], Title, Favorite, Info, More */}
-            <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-              {/* Sidebar Toggle (if collapsed) */}
-              {!sidebarOpen && (
-                <button
-                  onClick={() => setSidebarOpen(true)}
-                  className="w-7 h-7 rounded-full bg-white/70 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 border border-black/5 dark:border-white/10 flex items-center justify-center text-neutral-600 dark:text-neutral-300 transition shadow-2xs cursor-pointer active:scale-95"
-                  title="Mostrar barra lateral (Ctrl+\)"
-                >
-                  <SidebarSimple size={15} weight="duotone" />
-                </button>
-              )}
-
-              {/* Notion Segmented Mode Switcher */}
-              <div className="inline-flex items-center bg-white/60 dark:bg-white/10 backdrop-blur-md p-0.5 rounded-full border border-black/5 dark:border-white/10 shadow-2xs">
+        {/* Main Document / Canvas / Full Page Views */}
+        <main className="flex-1 relative flex flex-col overflow-hidden">
+          {/* Secondary Header for Document/Split Mode: Obsidian Minimalist Stealth Header */}
+          {!isPresentationMode && !focusMode && (!activeTab || !activeTab.viewType || activeTab.viewType === 'doc') && currentWorkspace && (
+            <header className={`h-8 sm:h-9 px-2 sm:px-3 flex items-center justify-between select-none text-xs transition-colors duration-150 ${
+              activeViewMode === 'canvas'
+                ? 'absolute top-0 left-0 right-0 z-20 pointer-events-none bg-transparent border-none'
+                : 'relative border-b border-[var(--app-border)] bg-[var(--obsidian-editor-bg,#1e1e1e)] shrink-0 z-15'
+            }`}>
+              {/* Left section: Mode Switcher, Favorite, Privacy */}
+              <div className="flex items-center gap-1 min-w-0 pointer-events-auto">
+              {/* Mode Switcher */}
+              <div className="inline-flex items-center bg-black/5 dark:bg-white/5 p-0.5 rounded-md border border-[var(--app-border)]">
                 <button
                   onClick={() => setViewMode('doc')}
-                  className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-full text-xs transition active:scale-95 cursor-pointer ${
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] transition cursor-pointer ${
                     activeViewMode === 'doc'
-                      ? 'bg-white dark:bg-[#28292d] text-neutral-900 dark:text-white shadow-2xs font-semibold'
-                      : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
+                      ? 'bg-white dark:bg-[#2c2c2c] text-[var(--app-text-primary)] font-medium shadow-xs'
+                      : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)]'
                   }`}
-                  title="Modo Página / Documento (Alt+S)"
+                  title="Modo Documento (Alt+S)"
                 >
-                  <FileText size={14} weight="duotone" />
-                  <span className="hidden sm:inline font-medium">Página</span>
+                  <FileText size={13} />
+                  <span className="hidden sm:inline">Nota</span>
                 </button>
                 <button
                   onClick={() => setViewMode('canvas')}
-                  className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 rounded-full text-xs transition active:scale-95 cursor-pointer ${
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] transition cursor-pointer ${
                     activeViewMode === 'canvas'
-                      ? 'bg-white dark:bg-[#28292d] text-neutral-900 dark:text-white shadow-2xs font-semibold'
-                      : 'text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
+                      ? 'bg-white dark:bg-[#2c2c2c] text-[var(--app-text-primary)] font-medium shadow-xs'
+                      : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)]'
                   }`}
-                  title="Modo Tablero de Tarjetas (Milanote)"
+                  title="Modo Lienzo / Canvas"
                 >
-                  <Kanban size={14} weight="duotone" />
-                  <span className="hidden sm:inline font-medium">Tablero</span>
+                  <Kanban size={13} />
+                  <span className="hidden sm:inline">Lienzo</span>
                 </button>
               </div>
 
               {/* Star Favorite Button */}
               <button
                 onClick={handleToggleFavorite}
-                className={`w-7 h-7 rounded-full bg-white/70 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 border border-black/5 dark:border-white/10 flex items-center justify-center transition shadow-2xs cursor-pointer active:scale-95 ${
+                className={`w-6 h-6 rounded flex items-center justify-center transition cursor-pointer ${
                   currentWorkspace?.isFavorite
-                    ? 'text-amber-500 bg-amber-500/10 border-amber-500/20 shadow-xs'
-                    : 'text-neutral-600 dark:text-neutral-300'
+                    ? 'text-amber-400 hover:text-amber-300'
+                    : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5'
                 }`}
                 title={currentWorkspace?.isFavorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
               >
                 {currentWorkspace?.isFavorite ? (
-                  <Star size={15} weight="fill" className="text-amber-500" />
+                  <Star size={14} weight="fill" />
                 ) : (
-                  <Star size={15} weight="duotone" />
+                  <Star size={14} />
                 )}
               </button>
 
               {/* Privacy Selector Button (Pública / Privada) */}
               <button
                 onClick={handleTogglePrivacy}
-                className={`h-7 px-2.5 rounded-full border flex items-center gap-1.5 text-xs font-medium transition shadow-2xs cursor-pointer active:scale-95 select-none ${
+                className={`h-6 px-2 rounded flex items-center gap-1 text-[11px] font-normal transition cursor-pointer select-none ${
                   currentWorkspace?.isPrivate
-                    ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300 hover:bg-amber-500/20'
-                    : 'border-black/5 dark:border-white/10 bg-white/70 dark:bg-white/10 text-blue-600 dark:text-blue-400 hover:bg-white dark:hover:bg-white/20'
+                    ? 'text-amber-400 hover:bg-amber-400/10'
+                    : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5'
                 }`}
                 title={
                   currentWorkspace?.isPrivate
@@ -1236,13 +1288,23 @@ function MainApp() {
                 }
               >
                 {currentWorkspace?.isPrivate ? (
-                  <LockKey size={14} weight="fill" className="text-amber-600 dark:text-amber-400 shrink-0" />
+                  <LockKey size={13} weight="fill" className="text-amber-400 shrink-0" />
                 ) : (
-                  <LockKeyOpen size={14} weight="duotone" className="text-blue-600 dark:text-blue-400 shrink-0" />
+                  <LockKeyOpen size={13} className="shrink-0" />
                 )}
-                <span className="hidden sm:inline font-semibold">
+                <span className="hidden sm:inline">
                   {currentWorkspace?.isPrivate ? 'Privada' : 'Pública'}
                 </span>
+              </button>
+
+              {/* Quick Scratchpad / Captura Rápida (Alt + N) */}
+              <button
+                onClick={() => setIsQuickCaptureOpen(true)}
+                className="h-6 px-2 rounded text-[11px] text-[var(--app-text-muted)] hover:text-amber-400 hover:bg-amber-400/10 flex items-center gap-1 transition cursor-pointer"
+                title="Captura Rápida (Alt + N)"
+              >
+                <Sparkle size={13} />
+                <span className="hidden md:inline">Rápida</span>
               </button>
 
               {/* Info Button ⓘ */}
@@ -1252,12 +1314,14 @@ function MainApp() {
                     e.stopPropagation()
                     setActiveDropdown(activeDropdown === 'info' ? null : 'info')
                   }}
-                  className={`w-7 h-7 rounded-full bg-white/70 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 border border-black/5 dark:border-white/10 flex items-center justify-center text-neutral-600 dark:text-neutral-300 transition shadow-2xs cursor-pointer active:scale-95 ${
-                    activeDropdown === 'info' ? 'bg-white dark:bg-[#28292d] shadow-xs' : ''
+                  className={`w-6 h-6 rounded flex items-center justify-center transition cursor-pointer ${
+                    activeDropdown === 'info'
+                      ? 'bg-white/10 text-[var(--app-text-primary)]'
+                      : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5'
                   }`}
-                  title="Información del documento"
+                  title="Información de la nota"
                 >
-                  <Info size={15} weight="duotone" />
+                  <Info size={14} />
                 </button>
 
                 {activeDropdown === 'info' && (
@@ -1298,12 +1362,14 @@ function MainApp() {
                     e.stopPropagation()
                     setActiveDropdown(activeDropdown === 'more' ? null : 'more')
                   }}
-                  className={`w-7 h-7 rounded-full bg-white/70 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 border border-black/5 dark:border-white/10 flex items-center justify-center text-neutral-600 dark:text-neutral-300 transition shadow-2xs cursor-pointer active:scale-95 ${
-                    activeDropdown === 'more' ? 'bg-white dark:bg-[#28292d] shadow-xs' : ''
+                  className={`w-6 h-6 rounded flex items-center justify-center transition cursor-pointer ${
+                    activeDropdown === 'more'
+                      ? 'bg-white/10 text-[var(--app-text-primary)]'
+                      : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5'
                   }`}
-                  title="Más acciones"
+                  title="Más acciones de la nota"
                 >
-                  <DotsThree size={18} weight="bold" />
+                  <DotsThree size={16} weight="bold" />
                 </button>
 
                 {activeDropdown === 'more' && (
@@ -1484,6 +1550,17 @@ function MainApp() {
                     </button>
 
                     <button
+                      onClick={() => {
+                        printDocument()
+                        setActiveDropdown(null)
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
+                    >
+                      <Printer size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
+                      <span className="truncate">Imprimir / Guardar como PDF</span>
+                    </button>
+
+                    <button
                       onClick={async () => {
                         if (currentWorkspace) {
                           const nodes = await db.canvasNodes.where('workspaceId').equals(currentWorkspace.id).and((n) => !n.isDeleted).toArray()
@@ -1608,48 +1685,45 @@ function MainApp() {
               </div>
             )}
 
-            {/* Right section: Presentation Icon, Exportar, Collabs + Compartir */}
-            <div className="flex items-center gap-1.5 shrink-0">
-              {/* Focus mode (board only) */}
-              {activeViewMode === 'canvas' && (
-                <button
-                  onClick={() => setFocusMode(true)}
-                  className="hidden sm:inline-flex h-7 px-3 rounded-full bg-white/70 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 border border-black/5 dark:border-white/10 text-xs font-medium text-neutral-700 dark:text-neutral-200 transition shadow-2xs cursor-pointer active:scale-95 select-none"
-                  title="Ocultar herramientas y menús (solo tablero)"
-                >
-                  Solo tablero
-                </button>
-              )}
+            {/* Right section: Modo Focus, Presentation, Exportar, Compartir */}
+            <div className="flex items-center gap-1 shrink-0 pointer-events-auto">
+              {/* Focus mode toggle */}
+              <button
+                onClick={() => setFocusMode(true)}
+                className="w-6 h-6 rounded flex items-center justify-center text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5 transition cursor-pointer"
+                title="Modo Concentración Zen (Ctrl+Shift+F)"
+              >
+                <ArrowsOutLineHorizontal size={14} />
+              </button>
 
               {/* Presentation Icon */}
               <button
                 onClick={() => setIsPresentationMode(true)}
-                className="w-7 h-7 rounded-full bg-white/70 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 border border-black/5 dark:border-white/10 flex items-center justify-center text-neutral-600 dark:text-neutral-300 transition shadow-2xs cursor-pointer active:scale-95"
-                title="Modo Presentación pantalla completa (F5)"
+                className="w-6 h-6 rounded flex items-center justify-center text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5 transition cursor-pointer"
+                title="Modo Presentación (F5)"
               >
-                <Presentation size={15} weight="duotone" />
+                <Presentation size={14} />
               </button>
 
-              {/* Milanote Exportar ⌵ Dropdown */}
+              {/* Exportar ⌵ Dropdown */}
               <div className="relative">
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
                     setActiveDropdown(activeDropdown === 'export' ? null : 'export')
                   }}
-                  className={`h-7 px-2 sm:px-3 rounded-full bg-white/70 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 border border-black/5 dark:border-white/10 flex items-center gap-1 sm:gap-1.5 text-xs font-medium text-neutral-700 dark:text-neutral-200 transition shadow-2xs cursor-pointer active:scale-95 select-none ${
-                    activeDropdown === 'export' ? 'bg-white dark:bg-[#28292d] shadow-xs' : ''
+                  className={`h-6 px-2 rounded flex items-center gap-1 text-[11px] text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5 transition cursor-pointer select-none ${
+                    activeDropdown === 'export' ? 'bg-white/10 text-[var(--app-text-primary)]' : ''
                   }`}
-                  title="Exportar tablero"
+                  title="Exportar documento o tablero"
                 >
-                  <DownloadSimple size={14} weight="duotone" className="sm:hidden text-neutral-700 dark:text-neutral-300" />
+                  <DownloadSimple size={13} />
                   <span className="hidden sm:inline">Exportar</span>
-                  <span className="text-[10px] opacity-60 hidden sm:inline">⌵</span>
                 </button>
 
                 {activeDropdown === 'export' && (
                   <div
-                    className="fixed right-3 top-12 sm:absolute sm:right-0 sm:top-9 z-50 w-[calc(100vw-24px)] max-w-[240px] sm:w-56 bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] rounded-2xl sm:rounded-3xl shadow-2xl backdrop-blur-2xl p-1.5 sm:p-2 text-[11px] sm:text-xs text-neutral-800 dark:text-neutral-200 animate-in fade-in zoom-in-95 space-y-0.5 max-h-[calc(100vh-60px)] overflow-y-auto custom-scrollbar"
+                    className="fixed right-3 top-12 sm:absolute sm:right-0 sm:top-8 z-50 w-[calc(100vw-24px)] max-w-[240px] sm:w-56 bg-[var(--app-bg-overlay)] border border-[var(--app-border)] rounded-xl shadow-2xl p-1.5 text-xs text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 space-y-0.5"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button
@@ -1673,6 +1747,16 @@ function MainApp() {
                       <span className="truncate">Exportar como HTML (.html)</span>
                     </button>
                     <button
+                      onClick={() => {
+                        printDocument()
+                        setActiveDropdown(null)
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
+                    >
+                      <Printer size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
+                      <span className="truncate">Imprimir / Guardar como PDF</span>
+                    </button>
+                    <button
                       onClick={async () => {
                         if (currentWorkspace) {
                           const nodes = await db.canvasNodes.where('workspaceId').equals(currentWorkspace.id).and((n) => !n.isDeleted).toArray()
@@ -1689,129 +1773,91 @@ function MainApp() {
                 )}
               </div>
 
-              {/* Milanote Collaborators & Compartir Button */}
+              {/* Compartir Button */}
               <button
                 onClick={() => setIsShareOpen(true)}
-                className="h-7 px-2.5 sm:px-3 rounded-full bg-white/70 dark:bg-white/10 hover:bg-white dark:hover:bg-white/20 border border-black/5 dark:border-white/10 text-xs font-medium text-neutral-700 dark:text-neutral-200 flex items-center gap-1.5 sm:gap-2 transition shadow-2xs cursor-pointer active:scale-95 select-none"
-                title="Compartir tablero con colaboradores"
+                className="h-6 px-2 rounded text-[11px] text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5 flex items-center gap-1 transition cursor-pointer select-none"
+                title="Compartir con colaboradores"
               >
-                <div className="hidden sm:flex items-center -space-x-1.5">
-                  <div className="w-4.5 h-4.5 rounded-full bg-amber-500 text-white font-bold text-[9px] flex items-center justify-center ring-1 ring-white dark:ring-neutral-900 shadow-2xs" title="Natali">
-                    N
-                  </div>
-                  <div className="w-4.5 h-4.5 rounded-full bg-blue-600 text-white font-bold text-[9px] flex items-center justify-center ring-1 ring-white dark:ring-neutral-900 shadow-2xs" title="Kevin">
-                    K
-                  </div>
-                </div>
-                <span className="hidden xs:inline sm:inline">Compartir</span>
-                <ShareNetwork size={14} weight="duotone" className="text-neutral-500 dark:text-neutral-400" />
+                <ShareNetwork size={13} />
+                <span className="hidden sm:inline">Compartir</span>
               </button>
             </div>
           </header>
         )}
-
-        {/* Main Document / Canvas / Full Page Views */}
-        <main className="flex-1 relative flex overflow-hidden">
           {/* Find In Page Floating Search (Ctrl+F) */}
           <FindInPage
             isOpen={isFindInPageOpen}
             onClose={() => setIsFindInPageOpen(false)}
           />
 
-          {activeTab?.viewType === 'all-docs' ? (
-            <AllDocsPage
-              workspaces={currentSpaceWorkspaces}
-              currentWorkspaceId={currentWorkspace?.id}
-              currentSpaceId={currentSpaceId}
-              onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
-              onCreateWorkspace={() => {
-                const newId = crypto.randomUUID()
-                const now = Date.now()
-                db.workspaces.add({
-                  id: newId,
-                  parentId: null,
-                  spaceId: currentSpaceId,
-                  title: 'Untitled',
-                  icon: '',
-                  color: '#3b82f6',
-                  viewMode: 'canvas',
-                  docContent: '<p></p>',
-                  createdAt: now,
-                  updatedAt: now,
-                  isFavorite: false,
-                  isDeleted: false,
-                  syncStatus: 'pending',
-                  ownerMember: currentMember.id,
-                  ownerName: currentMember.name,
-                  createdBy: currentMember.name,
-                  userId: authUser?.id || undefined,
-                  viewedBy: [currentMember.id, currentMember.fullName || currentMember.name, currentMember.email, authUser?.id].filter(Boolean) as string[],
-                  isNewItem: true
-                })
-                selectWorkspaceWithTab(newId)
-              }}
-              onToggleFavorite={async (e, ws) => {
-                e.stopPropagation()
-                await db.workspaces.update(ws.id, { isFavorite: !ws.isFavorite })
-              }}
-              onDeleteWorkspace={async (e, id) => {
-                e.stopPropagation()
-                await db.workspaces.update(id, { isDeleted: true })
-              }}
-            />
-          ) : activeTab?.viewType === 'knowledge-graph' ? (
-            <KnowledgeGraphPage
-              workspaces={currentSpaceWorkspaces}
-              currentWorkspaceId={currentWorkspace?.id}
-              onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
-            />
-          ) : activeTab?.viewType === 'trash' ? (
-            <TrashPage
-              onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
-            />
-          ) : activeTab?.viewType === 'templates' ? (
-            <TemplatesPage
-              onSelectTemplate={(template) => {
-                handleApplyTemplate(template)
-                selectWorkspaceWithTab(currentWorkspace?.id || '')
-              }}
-            />
-          ) : currentWorkspace ? (
-            activeViewMode === 'doc' ? (
-              <div className="flex-1 h-full overflow-hidden">
-                <DocEditor
-                  workspace={currentWorkspace}
-                  allWorkspaces={publicWorkspaces}
-                  spaces={spaces}
-                  onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
-                  onTitleChange={handleTitleChange}
-                  onToggleViewMode={() => setViewMode('canvas')}
-                  onOpenTemplatesModal={() => setIsTemplatesOpen(true)}
-                />
-              </div>
-            ) : activeViewMode === 'canvas' ? (
-              <div className="flex-1 h-full overflow-hidden relative">
-                <CanvasBoard
-                  workspaceId={currentWorkspace.id}
-                  currentWorkspace={currentWorkspace}
-                  onSwitchToDoc={handleSwitchToDoc}
-                  darkMode={darkMode}
-                  hideChrome={focusMode}
-                />
-                {focusMode && (
-                  <button
-                    onClick={() => setFocusMode(false)}
-                    className="absolute top-3 right-3 z-50 h-7 px-2.5 rounded-md bg-[var(--app-bg-overlay)] border border-[var(--app-border)] text-xs font-medium text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] opacity-40 hover:opacity-100 transition shadow-[var(--app-shadow-popover)]"
-                    title="Mostrar herramientas y menús (Esc)"
-                  >
-                    Mostrar herramientas
-                  </button>
-                )}
-              </div>
-            ) : (
-              /* Split View */
-              <div className="flex-1 flex h-full overflow-hidden">
-                <div className="w-1/2 h-full overflow-hidden border-r border-[#242428]">
+          <Suspense fallback={
+            <div className="flex-1 flex flex-col items-center justify-center p-8 text-neutral-400 dark:text-neutral-500 text-xs animate-pulse gap-2">
+              <div className="w-8 h-8 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] animate-spin" />
+              <span>Cargando vista...</span>
+            </div>
+          }>
+            {activeTab?.viewType === 'all-docs' ? (
+              <AllDocsPage
+                workspaces={currentSpaceWorkspaces}
+                currentWorkspaceId={currentWorkspace?.id}
+                currentSpaceId={currentSpaceId}
+                onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
+                onCreateWorkspace={() => {
+                  const newId = crypto.randomUUID()
+                  const now = Date.now()
+                  db.workspaces.add({
+                    id: newId,
+                    parentId: null,
+                    spaceId: currentSpaceId,
+                    title: 'Untitled',
+                    icon: '',
+                    color: '#3b82f6',
+                    viewMode: 'canvas',
+                    docContent: '<p></p>',
+                    createdAt: now,
+                    updatedAt: now,
+                    isFavorite: false,
+                    isDeleted: false,
+                    syncStatus: 'pending',
+                    ownerMember: currentMember.id,
+                    ownerName: currentMember.name,
+                    createdBy: currentMember.name,
+                    userId: authUser?.id || undefined,
+                    viewedBy: [currentMember.id, currentMember.fullName || currentMember.name, currentMember.email, authUser?.id].filter(Boolean) as string[],
+                    isNewItem: true
+                  })
+                  selectWorkspaceWithTab(newId)
+                }}
+                onToggleFavorite={async (e, ws) => {
+                  e.stopPropagation()
+                  await db.workspaces.update(ws.id, { isFavorite: !ws.isFavorite })
+                }}
+                onDeleteWorkspace={async (e, id) => {
+                  e.stopPropagation()
+                  await db.workspaces.update(id, { isDeleted: true })
+                }}
+              />
+            ) : activeTab?.viewType === 'knowledge-graph' ? (
+              <KnowledgeGraphPage
+                workspaces={currentSpaceWorkspaces}
+                currentWorkspaceId={currentWorkspace?.id}
+                onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
+              />
+            ) : activeTab?.viewType === 'trash' ? (
+              <TrashPage
+                onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
+              />
+            ) : activeTab?.viewType === 'templates' ? (
+              <TemplatesPage
+                onSelectTemplate={(template) => {
+                  handleApplyTemplate(template)
+                  selectWorkspaceWithTab(currentWorkspace?.id || '')
+                }}
+              />
+            ) : currentWorkspace ? (
+              activeViewMode === 'doc' ? (
+                <div className="flex-1 h-full overflow-hidden">
                   <DocEditor
                     workspace={currentWorkspace}
                     allWorkspaces={publicWorkspaces}
@@ -1822,38 +1868,72 @@ function MainApp() {
                     onOpenTemplatesModal={() => setIsTemplatesOpen(true)}
                   />
                 </div>
-                <div className="w-1/2 h-full overflow-hidden">
+              ) : activeViewMode === 'canvas' ? (
+                <div className="flex-1 h-full overflow-hidden relative">
                   <CanvasBoard
                     workspaceId={currentWorkspace.id}
                     currentWorkspace={currentWorkspace}
                     onSwitchToDoc={handleSwitchToDoc}
                     darkMode={darkMode}
+                    hideChrome={focusMode}
                   />
+                  {focusMode && (
+                    <button
+                      onClick={() => setFocusMode(false)}
+                      className="absolute top-3 right-3 z-50 h-7 px-2.5 rounded-md bg-[var(--app-bg-overlay)] border border-[var(--app-border)] text-xs font-medium text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] opacity-40 hover:opacity-100 transition shadow-[var(--app-shadow-popover)]"
+                      title="Mostrar herramientas y menús (Esc)"
+                    >
+                      Mostrar herramientas
+                    </button>
+                  )}
+                </div>
+              ) : (
+                /* Split View */
+                <div className="flex-1 flex h-full overflow-hidden">
+                  <div className="w-1/2 h-full overflow-hidden border-r border-[#242428]">
+                    <DocEditor
+                      workspace={currentWorkspace}
+                      allWorkspaces={publicWorkspaces}
+                      spaces={spaces}
+                      onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
+                      onTitleChange={handleTitleChange}
+                      onToggleViewMode={() => setViewMode('canvas')}
+                      onOpenTemplatesModal={() => setIsTemplatesOpen(true)}
+                    />
+                  </div>
+                  <div className="w-1/2 h-full overflow-hidden">
+                    <CanvasBoard
+                      workspaceId={currentWorkspace.id}
+                      currentWorkspace={currentWorkspace}
+                      onSwitchToDoc={handleSwitchToDoc}
+                      darkMode={darkMode}
+                    />
+                  </div>
+                </div>
+              )
+            ) : (
+              <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-zinc-500 text-sm gap-3 select-none">
+                <div className="w-12 h-12 rounded-2xl bg-black/[0.04] dark:bg-white/[0.06] flex items-center justify-center text-2xl shadow-xs">
+                  📝
+                </div>
+                <div className="font-semibold text-neutral-800 dark:text-neutral-200">
+                  Selecciona o crea una página para comenzar
+                </div>
+                <p className="text-xs text-neutral-400 max-w-xs">
+                  Abre la barra lateral para ver todos tus espacios de trabajo y notas sincronizadas.
+                </p>
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    onClick={() => setSidebarOpen(true)}
+                    className="px-4 py-2 rounded-xl bg-blue-600 text-white font-medium text-xs hover:bg-blue-700 active:scale-95 transition shadow-sm cursor-pointer flex items-center gap-1.5"
+                  >
+                    <SidebarSimple size={16} weight="duotone" />
+                    <span>Ver espacios y notas</span>
+                  </button>
                 </div>
               </div>
-            )
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-zinc-500 text-sm gap-3 select-none">
-              <div className="w-12 h-12 rounded-2xl bg-black/[0.04] dark:bg-white/[0.06] flex items-center justify-center text-2xl shadow-xs">
-                📝
-              </div>
-              <div className="font-semibold text-neutral-800 dark:text-neutral-200">
-                Selecciona o crea una página para comenzar
-              </div>
-              <p className="text-xs text-neutral-400 max-w-xs">
-                Abre la barra lateral para ver todos tus espacios de trabajo y notas sincronizadas.
-              </p>
-              <div className="flex items-center gap-2 pt-2">
-                <button
-                  onClick={() => setSidebarOpen(true)}
-                  className="px-4 py-2 rounded-xl bg-blue-600 text-white font-medium text-xs hover:bg-blue-700 active:scale-95 transition shadow-sm cursor-pointer flex items-center gap-1.5"
-                >
-                  <SidebarSimple size={16} weight="duotone" />
-                  <span>Ver espacios y notas</span>
-                </button>
-              </div>
-            </div>
-          )}
+            )}
+          </Suspense>
         </main>
       </div>
 
@@ -1907,136 +1987,91 @@ function MainApp() {
         onToggleViewMode={() => setViewMode(activeViewMode === 'canvas' ? 'doc' : 'canvas')}
       />
 
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
-        syncStatus={syncStatus}
-        uiScale={uiScale}
-        onUiScaleChange={setUiScale}
-      />
+      <Suspense fallback={null}>
+        <SettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          syncStatus={syncStatus}
+          uiScale={uiScale}
+          onUiScaleChange={setUiScale}
+        />
 
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        initialMode={authModalMode}
-        onClose={() => setIsAuthModalOpen(false)}
-        onAuthSuccess={(member) => {
-          setCurrentMemberState(member)
-          syncEngine.resetLastSyncTime()
-          syncEngine.triggerSync()
-        }}
-      />
+        <AuthModal
+          isOpen={isAuthModalOpen}
+          initialMode={authModalMode}
+          onClose={() => setIsAuthModalOpen(false)}
+          onAuthSuccess={(member) => {
+            setCurrentMemberState(member)
+            syncEngine.resetLastSyncTime()
+            syncEngine.triggerSync()
+          }}
+        />
 
-      <UserProfileModal
-        isOpen={isProfileModalOpen}
-        onClose={() => setIsProfileModalOpen(false)}
-        currentMember={currentMember}
-        onProfileUpdated={(updated) => {
-          setCurrentMemberState(updated)
-        }}
-        onSignOut={handleSignOut}
-      />
+        <UserProfileModal
+          isOpen={isProfileModalOpen}
+          onClose={() => setIsProfileModalOpen(false)}
+          currentMember={currentMember}
+          onProfileUpdated={(updated) => {
+            setCurrentMemberState(updated)
+          }}
+          onSignOut={handleSignOut}
+        />
 
-      <UserManagementModal
-        isOpen={isUserManagementModalOpen}
-        onClose={() => setIsUserManagementModalOpen(false)}
-        currentUserId={currentMember.id}
-      />
+        <UserManagementModal
+          isOpen={isUserManagementModalOpen}
+          onClose={() => setIsUserManagementModalOpen(false)}
+          currentUserId={currentMember.id}
+        />
 
-      <TrashModal
-        isOpen={isTrashOpen}
-        onClose={() => setIsTrashOpen(false)}
-      />
+        <ShareModal
+          isOpen={isShareOpen}
+          onClose={() => setIsShareOpen(false)}
+          workspace={currentWorkspace}
+        />
 
-      <ShareModal
-        isOpen={isShareOpen}
-        onClose={() => setIsShareOpen(false)}
-        workspace={currentWorkspace}
-      />
+        <TemplatesModal
+          isOpen={isTemplatesOpen}
+          onClose={() => setIsTemplatesOpen(false)}
+          onSelectTemplate={handleApplyTemplate}
+        />
 
-      <TemplatesModal
-        isOpen={isTemplatesOpen}
-        onClose={() => setIsTemplatesOpen(false)}
-        onSelectTemplate={handleApplyTemplate}
-      />
+        <ImportModal
+          isOpen={isImportOpen}
+          onClose={() => setIsImportOpen(false)}
+          onWorkspaceImported={(newId) => selectWorkspaceWithTab(newId)}
+          currentSpaceId={currentSpaceId}
+        />
 
-      <AllDocsModal
-        isOpen={isAllDocsOpen}
-        onClose={() => setIsAllDocsOpen(false)}
-        workspaces={currentSpaceWorkspaces}
-        currentWorkspaceId={currentWorkspace?.id || ''}
-        onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
-        onCreateWorkspace={() => {
-          const newId = crypto.randomUUID()
-          const now = Date.now()
-          db.workspaces.add({
-            id: newId,
-            parentId: null,
-            spaceId: currentSpaceId,
-            title: 'Untitled',
-            icon: '',
-            color: '#3b82f6',
-            viewMode: 'canvas',
-            docContent: '<p></p>',
-            createdAt: now,
-            updatedAt: now,
-            isFavorite: false,
-            isDeleted: false,
-            syncStatus: 'pending',
-            ownerMember: currentMember.id,
-            ownerName: currentMember.name,
-            createdBy: currentMember.name,
-            userId: authUser?.id || undefined,
-            viewedBy: [currentMember.id, currentMember.fullName || currentMember.name, currentMember.email, authUser?.id].filter(Boolean) as string[],
-            isNewItem: true
-          })
-          selectWorkspaceWithTab(newId)
-        }}
-        onToggleFavorite={async (e, ws) => {
-          e.stopPropagation()
-          await db.workspaces.update(ws.id, { isFavorite: !ws.isFavorite })
-        }}
-        onDeleteWorkspace={async (e, id) => {
-          e.stopPropagation()
-          await db.workspaces.update(id, { isDeleted: true })
-        }}
-      />
+        <CreateWorkspaceModal
+          isOpen={isCreateWorkspaceOpen}
+          onClose={() => setIsCreateWorkspaceOpen(false)}
+          onCreate={handleCreateSpace}
+        />
 
-      <ImportModal
-        isOpen={isImportOpen}
-        onClose={() => setIsImportOpen(false)}
-        onWorkspaceImported={(newId) => selectWorkspaceWithTab(newId)}
-        currentSpaceId={currentSpaceId}
-      />
+        <ShortcutsModal
+          isOpen={isShortcutsOpen}
+          onClose={() => setIsShortcutsOpen(false)}
+        />
 
-      <CreateWorkspaceModal
-        isOpen={isCreateWorkspaceOpen}
-        onClose={() => setIsCreateWorkspaceOpen(false)}
-        onCreate={handleCreateSpace}
-      />
+        <QuickCaptureModal
+          isOpen={isQuickCaptureOpen}
+          onClose={() => setIsQuickCaptureOpen(false)}
+          currentWorkspaceId={currentWorkspace?.id}
+        />
 
-      <ShortcutsModal
-        isOpen={isShortcutsOpen}
-        onClose={() => setIsShortcutsOpen(false)}
-      />
-
-      <KnowledgeGraphModal
-        isOpen={isKnowledgeGraphOpen}
-        onClose={() => setIsKnowledgeGraphOpen(false)}
-        workspaces={activeWorkspaces}
-        currentWorkspaceId={currentWorkspaceId}
-        onSelectWorkspace={selectWorkspaceWithTab}
-      />
-
-      {/* 5. AFFiNE Fullscreen Presentation Mode Player */}
-      <PresentationViewer
-        isOpen={isPresentationMode}
-        onClose={() => {
-          setIsPresentationMode(false)
-          setPresentationFrameId(undefined)
-        }}
-        workspace={currentWorkspace}
-        initialFrameId={presentationFrameId}
-      />
+        {/* 5. AFFiNE Fullscreen Presentation Mode Player */}
+        {isPresentationMode && (
+          <PresentationViewer
+            isOpen={isPresentationMode}
+            onClose={() => {
+              setIsPresentationMode(false)
+              setPresentationFrameId(undefined)
+            }}
+            workspace={currentWorkspace}
+            initialFrameId={presentationFrameId}
+          />
+        )}
+      </Suspense>
 
       {/* 6. Pro Sonner Notification Toaster */}
       <Toaster richColors position="bottom-right" closeButton theme={darkMode ? 'dark' : 'light'} />
@@ -2050,7 +2085,11 @@ export default function App() {
   const externalToken = urlParams?.get('token')
 
   if (externalShareId && externalToken) {
-    return <ExternalShareView workspaceId={externalShareId} token={externalToken} />
+    return (
+      <Suspense fallback={<div className="h-screen w-screen flex items-center justify-center p-8 text-neutral-400 text-xs">Cargando nota compartida...</div>}>
+        <ExternalShareView workspaceId={externalShareId} token={externalToken} />
+      </Suspense>
+    )
   }
 
   return <MainApp />

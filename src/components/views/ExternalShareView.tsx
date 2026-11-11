@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, lazy, Suspense } from 'react'
 import { db, type WorkspaceItem } from '../../db'
 import { getSupabaseClient } from '../../lib/supabase'
-import { DocEditor } from '../editor/DocEditor'
-import { CanvasBoard } from '../canvas/CanvasBoard'
 import { Globe, Download, Check, AlertCircle } from 'lucide-react'
 import { exportDocumentAsMarkdown } from '../../lib/exportUtils'
 import { toast } from 'sonner'
+
+const DocEditor = lazy(() => import('../editor/DocEditor').then(m => ({ default: m.DocEditor })))
+const CanvasBoard = lazy(() => import('../canvas/CanvasBoard').then(m => ({ default: m.CanvasBoard })))
 
 interface ExternalShareViewProps {
   workspaceId: string
@@ -269,21 +270,23 @@ export const ExternalShareView: React.FC<ExternalShareViewProps> = ({ workspaceI
 
       {/* Editor or Canvas */}
       <main className="flex-1 overflow-hidden relative">
-        {viewMode === 'doc' ? (
-          <DocEditor
-            workspace={workspace}
-            allWorkspaces={[workspace]}
-            onTitleChange={isReadOnly ? undefined : handleTitleChange}
-            readOnly={isReadOnly}
-          />
-        ) : (
-          <CanvasBoard
-            workspaceId={workspace.id}
-            currentWorkspace={workspace}
-            darkMode={false}
-            readOnly={isReadOnly}
-          />
-        )}
+        <Suspense fallback={<div className="flex-1 flex items-center justify-center p-8 text-neutral-400 text-xs animate-pulse">Cargando nota compartida...</div>}>
+          {viewMode === 'doc' ? (
+            <DocEditor
+              workspace={workspace}
+              allWorkspaces={[workspace]}
+              onTitleChange={isReadOnly ? undefined : handleTitleChange}
+              readOnly={isReadOnly}
+            />
+          ) : (
+            <CanvasBoard
+              workspaceId={workspace.id}
+              currentWorkspace={workspace}
+              darkMode={false}
+              readOnly={isReadOnly}
+            />
+          )}
+        </Suspense>
       </main>
     </div>
   )

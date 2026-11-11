@@ -108,5 +108,31 @@ export default defineConfig({
         ]
       }
     })
-  ]
+  ],
+  build: {
+    chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('@xyflow')) {
+              return 'vendor-xyflow'
+            }
+            if (id.includes('@tiptap') || id.includes('prosemirror') || id.includes('lowlight')) {
+              return 'vendor-editor'
+            }
+            if (id.includes('@phosphor-icons') || id.includes('lucide-react')) {
+              return 'vendor-icons'
+            }
+            if (id.includes('@supabase')) {
+              return 'vendor-supabase'
+            }
+            if (id.includes('dexie')) {
+              return 'vendor-dexie'
+            }
+          }
+        }
+      }
+    }
+  }
 })

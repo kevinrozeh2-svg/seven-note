@@ -7,26 +7,15 @@ import {
   Trash,
   Folder,
   FolderSimplePlus,
-  Gear,
-  Sun,
-  Moon,
   CaretDown,
   CaretRight,
-  FileText,
   CalendarBlank,
-  Graph,
   Tag,
-  Books,
-  DownloadSimple,
-  Keyboard,
-  CloudCheck,
-  CloudSlash,
   ArrowsClockwise,
   SidebarSimple,
   PencilSimple,
   Check,
   Lock,
-  LockOpen,
   FilmSlate,
   RocketLaunch,
   Lightning,
@@ -35,8 +24,18 @@ import {
   ChartBar,
   PushPin,
   Kanban,
-  Columns,
-  X
+  Copy,
+  ArrowSquareOut,
+  DotsThree,
+  Vault,
+  NotePencil,
+  ArrowsDownUp,
+  CaretDoubleUp,
+  SortAscending,
+  SortDescending,
+  Clock,
+  Calendar,
+  Folders
 } from '@phosphor-icons/react'
 import {
   db,
@@ -47,9 +46,16 @@ import {
 } from '../../db'
 import { isItemUnread, NewBadge, NewDot, useUnreadTrigger } from '../../lib/unreadTracker'
 import { type SyncEngineStatus, syncEngine } from '../../lib/syncEngine'
-import { TeamMemberSwitcher } from './TeamMemberSwitcher'
 import { AppleEmoji, isEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
 import { EmojiPickerPopover } from '../modals/EmojiPickerPopover'
+import {
+  PastelFolderIcon,
+  PastelFileIcon,
+  FOLDER_PALETTE,
+  folderColorIndex,
+  setFolderColor,
+  useFolderColors
+} from '../ui/PastelIcons'
 import { getCurrentMember, type TeamMember, isWorkspaceVisible, isSpaceVisible } from '../../lib/teamAuth'
 import { toast } from 'sonner'
 
@@ -72,12 +78,12 @@ export interface SidebarProps {
   onSelectWorkspace: (id: string) => void
   onToggleSidebar: () => void
   onOpenSettings: () => void
-  onOpenSearch: () => void
-  onOpenAllDocs: () => void
-  onOpenTrash: () => void
-  onOpenImport: () => void
-  onOpenTemplates: () => void
-  onOpenShortcuts: () => void
+  onOpenSearch?: () => void
+  onOpenAllDocs?: () => void
+  onOpenTrash?: () => void
+  onOpenImport?: () => void
+  onOpenTemplates?: () => void
+  onOpenShortcuts?: () => void
 
   onOpenKnowledgeGraph?: () => void
   syncStatus: SyncEngineStatus
@@ -107,6 +113,22 @@ function DocumentItemIcon({
   const renderIcon = () => {
     if (isPrivate && (!icon || icon === '🔒')) {
       return <Lock size={size} weight="duotone" className={className} />
+    }
+
+    // Sidebar: always use the unified file-style icon by type
+    const s = size + 3
+    const CANVAS_ICONS = ['🎨', '🖼️', '🖼', 'canvas', 'palette', 'board', 'whiteboard']
+    if (viewMode === 'canvas' || (icon && CANVAS_ICONS.includes(icon))) {
+      return <PastelFileIcon kind="canvas" size={s} />
+    }
+    if (viewMode === 'split') return <PastelFileIcon kind="split" size={s} />
+    if (s > 0) return <PastelFileIcon kind="doc" size={s} />
+    const NOTE_ICONS = ['📝', '📄', '📃', '🗒️', '🗒', '📋', '🧾', 'doc', 'file-text', 'note', 'page']
+    if (!icon || NOTE_ICONS.includes(icon) || CANVAS_ICONS.includes(icon)) {
+      if (icon && CANVAS_ICONS.includes(icon)) return <PastelFileIcon kind="canvas" size={s} />
+      if (viewMode === 'canvas') return <PastelFileIcon kind="canvas" size={s} />
+      if (viewMode === 'split') return <PastelFileIcon kind="split" size={s} />
+      return <PastelFileIcon kind="doc" size={s} />
     }
 
     if (icon && isEmoji(icon)) {
@@ -154,7 +176,7 @@ function DocumentItemIcon({
         return <Star size={size} weight="duotone" className={className} />
       case '📁':
       case 'folder':
-        return <Folder size={size} weight="duotone" className={className} />
+        return <PastelFolderIcon name={title || ''} size={size + 3} />
       case '🏷️':
       case 'tag':
         return <Tag size={size} weight="duotone" className={className} />
@@ -168,7 +190,7 @@ function DocumentItemIcon({
       case '📄':
       case 'doc':
       case 'file-text':
-        return <FileText size={size} weight="duotone" className={className} />
+        return <PastelFileIcon kind="doc" size={size + 3} />
     }
 
     const lower = (title || '').toLowerCase()
@@ -182,17 +204,17 @@ function DocumentItemIcon({
       return <FilmSlate size={size} weight="duotone" className={className} />
     }
     if (lower.includes('tablero') || lower.includes('inspiraci')) {
-      return <Kanban size={size} weight="duotone" className={className} />
+      return <PastelFileIcon kind="canvas" size={size + 3} />
     }
 
     if (viewMode === 'canvas') {
-      return <Kanban size={size} weight="duotone" className={className} />
+      return <PastelFileIcon kind="canvas" size={size + 3} />
     }
     if (viewMode === 'split') {
-      return <Columns size={size} weight="duotone" className={className} />
+      return <PastelFileIcon kind="split" size={size + 3} />
     }
 
-    return <FileText size={size} weight="duotone" className={className} />
+    return <PastelFileIcon kind="doc" size={size + 3} />
   }
 
   if (onClick) {
@@ -210,17 +232,43 @@ function DocumentItemIcon({
   return renderIcon()
 }
 
+export type DocSortMode =
+  | 'custom'
+  | 'title-asc'
+  | 'title-desc'
+  | 'updated-desc'
+  | 'updated-asc'
+  | 'created-desc'
+  | 'created-asc'
+
+export interface SortOptionItem {
+  id: DocSortMode
+  label: string
+  desc?: string
+  icon: React.ReactNode
+}
+
+export const SORT_OPTIONS: SortOptionItem[] = [
+  { id: 'custom', label: 'Personalizado', desc: 'Arrastrar y soltar libremente', icon: <ArrowsDownUp size={14} /> },
+  { id: 'title-asc', label: 'Título / Nombre (A → Z)', desc: 'Alfabético ascendente', icon: <SortAscending size={14} /> },
+  { id: 'title-desc', label: 'Título / Nombre (Z → A)', desc: 'Alfabético descendente', icon: <SortDescending size={14} /> },
+  { id: 'updated-desc', label: 'Última edición (Recientes)', desc: 'Notas modificadas recientemente', icon: <Clock size={14} /> },
+  { id: 'updated-asc', label: 'Última edición (Antiguos)', desc: 'Notas menos recientes primero', icon: <Clock size={14} /> },
+  { id: 'created-desc', label: 'Fecha de creación (Nuevos)', desc: 'Notas creadas recientemente', icon: <Calendar size={14} /> },
+  { id: 'created-asc', label: 'Fecha de creación (Antiguos)', desc: 'Notas más antiguas primero', icon: <Calendar size={14} /> }
+]
+
 export function Sidebar({
   spaces = [],
   currentSpaceId = DEFAULT_SPACE_ID,
   onSelectSpace,
   currentMember,
-  onSelectMember,
+  onSelectMember: _onSelectMember,
   authUser,
-  onOpenAuthModal,
-  onOpenProfileModal,
-  onOpenUserManagementModal,
-  onSignOut,
+  onOpenAuthModal: _onOpenAuthModal,
+  onOpenProfileModal: _onOpenProfileModal,
+  onOpenUserManagementModal: _onOpenUserManagementModal,
+  onSignOut: _onSignOut,
   onOpenCreateSpace,
   onRenameSpace,
   onDeleteSpace,
@@ -228,18 +276,18 @@ export function Sidebar({
   currentWorkspaceId,
   onSelectWorkspace,
   onToggleSidebar,
-  onOpenSettings,
-  onOpenSearch,
-  onOpenAllDocs,
-  onOpenTrash,
-  onOpenImport,
-  onOpenTemplates,
-  onOpenShortcuts,
-  onOpenKnowledgeGraph,
-  syncStatus,
-  darkMode,
-  onToggleDarkMode,
-  activeNavigation,
+  onOpenSettings: _onOpenSettings,
+  onOpenSearch: _onOpenSearch,
+  onOpenAllDocs: _onOpenAllDocs,
+  onOpenTrash: _onOpenTrash,
+  onOpenImport: _onOpenImport,
+  onOpenTemplates: _onOpenTemplates,
+  onOpenShortcuts: _onOpenShortcuts,
+  onOpenKnowledgeGraph: _onOpenKnowledgeGraph,
+  syncStatus: _syncStatus,
+  darkMode: _darkMode,
+  onToggleDarkMode: _onToggleDarkMode,
+  activeNavigation: _activeNavigation,
   onSelectNavigation
 }: SidebarProps) {
   // Collapsible sections state
@@ -247,11 +295,77 @@ export function Sidebar({
   const [privateNotesOpen, setPrivateNotesOpen] = useState(true)
   const [pagesOpen, setPagesOpen] = useState(true)
   const [folderOpenMap, setFolderOpenMap] = useState<Record<string, boolean>>({ 'First Folder': true })
+  const folderColors = useFolderColors()
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
   const [creatingSubfolderParent, setCreatingSubfolderParent] = useState<string | null>(null)
   const [newSubfolderName, setNewSubfolderName] = useState('')
-  const [toolsOpen, setToolsOpen] = useState(false)
+
+  const [docSortMode, setDocSortMode] = useState<DocSortMode>(() => {
+    try {
+      const saved = localStorage.getItem('seven_note_doc_sort_mode')
+      if (saved) {
+        if (saved === 'title') return 'title-asc'
+        if (saved === 'date') return 'updated-desc'
+        return saved as DocSortMode
+      }
+    } catch {}
+    return 'custom'
+  })
+  const [sortFoldersToo, setSortFoldersToo] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('seven_note_sort_folders_too')
+      if (saved !== null) return saved === 'true'
+    } catch {}
+    return true
+  })
+  const [foldersFirst, setFoldersFirst] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('seven_note_folders_first')
+      if (saved !== null) return saved === 'true'
+    } catch {}
+    return true
+  })
+  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false)
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('seven_note_doc_sort_mode', docSortMode)
+    } catch {}
+  }, [docSortMode])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('seven_note_sort_folders_too', String(sortFoldersToo))
+    } catch {}
+  }, [sortFoldersToo])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('seven_note_folders_first', String(foldersFirst))
+    } catch {}
+  }, [foldersFirst])
+
+  // Context / Click Menu for Notes and Folders (Obsidian style)
+  const [activeItemMenu, setActiveItemMenu] = useState<{
+    type: 'doc' | 'folder'
+    id?: string
+    path?: string
+    name?: string
+    x: number
+    y: number
+    isPrivate?: boolean
+  } | null>(null)
+
+  useEffect(() => {
+    const handleCloseMenu = () => setActiveItemMenu(null)
+    window.addEventListener('click', handleCloseMenu)
+    window.addEventListener('contextmenu', handleCloseMenu)
+    return () => {
+      window.removeEventListener('click', handleCloseMenu)
+      window.removeEventListener('contextmenu', handleCloseMenu)
+    }
+  }, [])
 
   // Resizable sidebar state (min: 200px, max: 600px)
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -447,6 +561,25 @@ export function Sidebar({
     }
   }
 
+  // Duplicate a note
+  const handleDuplicateWorkspace = async (docId: string) => {
+    const doc = workspaces.find((w) => w.id === docId)
+    if (!doc) return
+    const newId = crypto.randomUUID()
+    const now = Date.now()
+    await db.workspaces.add({
+      ...doc,
+      id: newId,
+      title: `${doc.title || 'Sin título'} (Copia)`,
+      createdAt: now,
+      updatedAt: now,
+      syncStatus: 'pending',
+      isNewItem: true
+    })
+    onSelectWorkspace(newId)
+    toast.success('Copia de la nota creada')
+  }
+
   // Move to trash
   const handleDeleteWorkspace = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
@@ -471,11 +604,44 @@ export function Sidebar({
     return typeof item.sortOrder === 'number' && !isNaN(item.sortOrder) ? item.sortOrder : (item.createdAt || 0)
   }
 
-  const sortByOrder = (a: WorkspaceItem, b: WorkspaceItem) => {
-    const diff = getSortOrder(a) - getSortOrder(b)
-    if (diff !== 0) return diff
-    return (a.createdAt || 0) - (b.createdAt || 0)
-  }
+  const sortByOrder = useCallback(
+    (a: WorkspaceItem, b: WorkspaceItem) => {
+      if (docSortMode === 'title-asc' || (docSortMode as string) === 'title') {
+        return (a.title || '').localeCompare(b.title || '', undefined, { numeric: true, sensitivity: 'base' })
+      }
+      if (docSortMode === 'title-desc') {
+        return (b.title || '').localeCompare(a.title || '', undefined, { numeric: true, sensitivity: 'base' })
+      }
+      if (docSortMode === 'updated-desc' || (docSortMode as string) === 'date') {
+        const timeA = a.updatedAt || a.createdAt || 0
+        const timeB = b.updatedAt || b.createdAt || 0
+        if (timeB !== timeA) return timeB - timeA
+        return (a.title || '').localeCompare(b.title || '')
+      }
+      if (docSortMode === 'updated-asc') {
+        const timeA = a.updatedAt || a.createdAt || 0
+        const timeB = b.updatedAt || b.createdAt || 0
+        if (timeA !== timeB) return timeA - timeB
+        return (a.title || '').localeCompare(b.title || '')
+      }
+      if (docSortMode === 'created-desc') {
+        const timeA = a.createdAt || 0
+        const timeB = b.createdAt || 0
+        if (timeB !== timeA) return timeB - timeA
+        return (a.title || '').localeCompare(b.title || '')
+      }
+      if (docSortMode === 'created-asc') {
+        const timeA = a.createdAt || 0
+        const timeB = b.createdAt || 0
+        if (timeA !== timeB) return timeA - timeB
+        return (a.title || '').localeCompare(b.title || '')
+      }
+      const diff = getSortOrder(a) - getSortOrder(b)
+      if (diff !== 0) return diff
+      return (a.createdAt || 0) - (b.createdAt || 0)
+    },
+    [docSortMode]
+  )
 
   // Filter: Visible items for activeMember (Team docs OR private docs owned by activeMember)
   const activeWorkspaces = workspaces.filter(
@@ -488,6 +654,26 @@ export function Sidebar({
   const teamDocs = activeWorkspaces.filter((w) => !w.isPrivate)
   const favorites = activeWorkspaces.filter((w) => w.isFavorite)
 
+  // Helper: folder date statistics based on notes inside it
+  const getFolderTimestamps = useCallback(
+    (folderPath: string) => {
+      const insideDocs = teamDocs.filter(
+        (w) => w.folder === folderPath || (w.folder && w.folder.startsWith(folderPath + '/'))
+      )
+      if (insideDocs.length === 0) {
+        return { maxUpdated: 0, minUpdated: 0, maxCreated: 0, minCreated: 0 }
+      }
+      const updatedTimes = insideDocs.map((w) => w.updatedAt || w.createdAt || 0)
+      const createdTimes = insideDocs.map((w) => w.createdAt || 0)
+      return {
+        maxUpdated: Math.max(...updatedTimes),
+        minUpdated: Math.min(...updatedTimes),
+        maxCreated: Math.max(...createdTimes),
+        minCreated: Math.min(...createdTimes)
+      }
+    },
+    [teamDocs]
+  )
 
   const getFolderLeafName = (path: string): string => {
     const parts = path.split('/')
@@ -529,15 +715,103 @@ export function Sidebar({
   const sortFolders = useCallback(
     (folders: string[]) => {
       return [...folders].sort((a, b) => {
-        const idxA = folderOrder.indexOf(a)
-        const idxB = folderOrder.indexOf(b)
-        if (idxA !== -1 && idxB !== -1) return idxA - idxB
-        if (idxA !== -1) return -1
-        if (idxB !== -1) return 1
-        return a.localeCompare(b)
+        if (!sortFoldersToo || docSortMode === 'custom') {
+          const idxA = folderOrder.indexOf(a)
+          const idxB = folderOrder.indexOf(b)
+          if (idxA !== -1 && idxB !== -1) return idxA - idxB
+          if (idxA !== -1) return -1
+          if (idxB !== -1) return 1
+          return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+        }
+
+        const nameA = getFolderLeafName(a)
+        const nameB = getFolderLeafName(b)
+
+        if (docSortMode === 'title-asc' || (docSortMode as string) === 'title') {
+          return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' })
+        }
+        if (docSortMode === 'title-desc') {
+          return nameB.localeCompare(nameA, undefined, { numeric: true, sensitivity: 'base' })
+        }
+
+        const statsA = getFolderTimestamps(a)
+        const statsB = getFolderTimestamps(b)
+
+        if (docSortMode === 'updated-desc' || (docSortMode as string) === 'date') {
+          if (statsB.maxUpdated !== statsA.maxUpdated) return statsB.maxUpdated - statsA.maxUpdated
+          return nameA.localeCompare(nameB)
+        }
+        if (docSortMode === 'updated-asc') {
+          if (statsA.minUpdated !== statsB.minUpdated) return statsA.minUpdated - statsB.minUpdated
+          return nameA.localeCompare(nameB)
+        }
+        if (docSortMode === 'created-desc') {
+          if (statsB.maxCreated !== statsA.maxCreated) return statsB.maxCreated - statsA.maxCreated
+          return nameA.localeCompare(nameB)
+        }
+        if (docSortMode === 'created-asc') {
+          if (statsA.minCreated !== statsB.minCreated) return statsA.minCreated - statsB.minCreated
+          return nameA.localeCompare(nameB)
+        }
+
+        return nameA.localeCompare(nameB)
       })
     },
-    [folderOrder]
+    [folderOrder, docSortMode, sortFoldersToo, getFolderTimestamps]
+  )
+
+  type MixedExplorerItem =
+    | { type: 'folder'; path: string; name: string; updated: number; created: number }
+    | { type: 'doc'; doc: WorkspaceItem; name: string; updated: number; created: number }
+
+  const sortMixedItems = useCallback(
+    (items: MixedExplorerItem[]) => {
+      return [...items].sort((a, b) => {
+        if (foldersFirst) {
+          if (a.type !== b.type) {
+            return a.type === 'folder' ? -1 : 1
+          }
+        }
+
+        if (docSortMode === 'title-asc' || (docSortMode as string) === 'title') {
+          return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+        }
+        if (docSortMode === 'title-desc') {
+          return b.name.localeCompare(a.name, undefined, { numeric: true, sensitivity: 'base' })
+        }
+        if (docSortMode === 'updated-desc' || (docSortMode as string) === 'date') {
+          if (b.updated !== a.updated) return b.updated - a.updated
+          return a.name.localeCompare(b.name)
+        }
+        if (docSortMode === 'updated-asc') {
+          if (a.updated !== b.updated) return a.updated - b.updated
+          return a.name.localeCompare(b.name)
+        }
+        if (docSortMode === 'created-desc') {
+          if (b.created !== a.created) return b.created - a.created
+          return a.name.localeCompare(b.name)
+        }
+        if (docSortMode === 'created-asc') {
+          if (a.created !== b.created) return a.created - b.created
+          return a.name.localeCompare(b.name)
+        }
+
+        // custom:
+        if (a.type === 'folder' && b.type === 'folder') {
+          const idxA = folderOrder.indexOf(a.path)
+          const idxB = folderOrder.indexOf(b.path)
+          if (idxA !== -1 && idxB !== -1) return idxA - idxB
+          if (idxA !== -1) return -1
+          if (idxB !== -1) return 1
+          return a.name.localeCompare(b.name)
+        }
+        if (a.type === 'doc' && b.type === 'doc') {
+          return sortByOrder(a.doc, b.doc)
+        }
+        return a.type === 'folder' ? -1 : 1
+      })
+    },
+    [foldersFirst, docSortMode, folderOrder, sortByOrder]
   )
 
   const rootPages = teamDocs
@@ -1144,6 +1418,201 @@ export function Sidebar({
     }
   }
 
+  // Document row renderer with subpages support
+  const renderDocNode = (doc: WorkspaceItem, folderPath: string | null = null) => {
+    const isActive = doc.id === currentWorkspaceId
+    const isBeingDragged = draggedDocId === doc.id
+    const isDropTargetBefore = dropTarget?.id === doc.id && dropTarget?.position === 'before'
+    const isDropTargetAfter = dropTarget?.id === doc.id && dropTarget?.position === 'after'
+    const subpages = activeWorkspaces
+      .filter((w) => w.parentId === doc.id)
+      .sort(sortByOrder)
+
+    return (
+      <div key={doc.id} className="space-y-0.5">
+        <div
+          draggable={true}
+          onDragStart={(e) => handleDocDragStart(e, doc)}
+          onDragEnd={handleDocDragEnd}
+          onDragOver={(e) => handleDocDragOver(e, doc, folderPath)}
+          onDrop={(e) => handleDocDrop(e, doc, folderPath)}
+          onClick={() => {
+            if (hasJustDraggedRef.current) return
+            onSelectWorkspace(doc.id)
+          }}
+          onContextMenu={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            setActiveItemMenu({
+              type: 'doc',
+              id: doc.id,
+              name: doc.title,
+              x: e.clientX,
+              y: e.clientY,
+              isPrivate: doc.isPrivate
+            })
+          }}
+          className={`group relative flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-grab active:cursor-grabbing transition select-none ${
+            isBeingDragged
+              ? 'opacity-40 bg-black/[0.04] dark:bg-white/[0.04] scale-[0.98]'
+              : isActive
+              ? 'bg-white dark:bg-[#202024] text-neutral-900 dark:text-neutral-100 font-semibold shadow-xs border border-black/[0.04] dark:border-white/[0.06]'
+              : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-black/[0.03] dark:hover:bg-white/[0.05] font-medium'
+          }`}
+        >
+          {isDropTargetBefore && (
+            <div className="absolute -top-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
+              <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
+            </div>
+          )}
+          {isDropTargetAfter && (
+            <div className="absolute -bottom-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
+              <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <DocumentItemIcon
+              icon={doc.icon}
+              viewMode={doc.viewMode}
+              title={doc.title}
+              isPrivate={doc.isPrivate}
+              onClick={(e) => {
+                e.stopPropagation()
+                setEmojiPickerTarget({ id: doc.id, type: 'doc', currentIcon: doc.icon })
+              }}
+            />
+            <span className="truncate flex-1 text-[13px] select-none pointer-events-none">
+              {renderWithAppleEmoji(doc.title || 'Untitled')}
+            </span>
+            {isItemUnread(doc, 'workspace', activeMember, authUser?.id) && (
+              <NewBadge className="ml-1.5" />
+            )}
+          </div>
+          <div
+            className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                const rect = e.currentTarget.getBoundingClientRect()
+                setActiveItemMenu({
+                  type: 'doc',
+                  id: doc.id,
+                  name: doc.title,
+                  x: rect.right + 4,
+                  y: rect.top,
+                  isPrivate: doc.isPrivate
+                })
+              }}
+              className="p-1 rounded text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
+              title="Opciones de nota"
+            >
+              <DotsThree size={14} weight="bold" />
+            </button>
+          </div>
+        </div>
+
+        {/* Subpages indented */}
+        {subpages.length > 0 && (
+          <div className="pl-4 space-y-0.5 border-l border-black/[0.04] dark:border-white/[0.06] ml-3.5 my-0.5">
+            {subpages.map((sub) => {
+              const isSubActive = sub.id === currentWorkspaceId
+              const isSubBeingDragged = draggedDocId === sub.id
+              const isSubDropTargetBefore = dropTarget?.id === sub.id && dropTarget?.position === 'before'
+              const isSubDropTargetAfter = dropTarget?.id === sub.id && dropTarget?.position === 'after'
+
+              return (
+                <div
+                  key={sub.id}
+                  draggable={true}
+                  onDragStart={(e) => handleDocDragStart(e, sub)}
+                  onDragEnd={handleDocDragEnd}
+                  onDragOver={(e) => handleDocDragOver(e, sub, folderPath)}
+                  onDrop={(e) => handleDocDrop(e, sub, folderPath)}
+                  onClick={() => onSelectWorkspace(sub.id)}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setActiveItemMenu({
+                      type: 'doc',
+                      id: sub.id,
+                      name: sub.title,
+                      x: e.clientX,
+                      y: e.clientY,
+                      isPrivate: sub.isPrivate
+                    })
+                  }}
+                  className={`group relative flex items-center justify-between px-2.5 py-1 rounded-xl cursor-grab active:cursor-grabbing transition select-none ${
+                    isSubBeingDragged
+                      ? 'opacity-40 bg-black/[0.04] dark:bg-white/[0.04] scale-[0.98]'
+                      : isSubActive
+                      ? 'bg-white dark:bg-[#202024] text-neutral-900 dark:text-neutral-100 font-semibold shadow-xs border border-black/[0.04] dark:border-white/[0.06]'
+                      : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-black/[0.03] dark:hover:bg-white/[0.05] font-medium'
+                  }`}
+                >
+                  {isSubDropTargetBefore && (
+                    <div className="absolute -top-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
+                      <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
+                    </div>
+                  )}
+                  {isSubDropTargetAfter && (
+                    <div className="absolute -bottom-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
+                      <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <DocumentItemIcon
+                      icon={sub.icon}
+                      viewMode={sub.viewMode}
+                      title={sub.title}
+                      isPrivate={sub.isPrivate}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setEmojiPickerTarget({ id: sub.id, type: 'doc', currentIcon: sub.icon })
+                      }}
+                    />
+                    <span className="truncate flex-1 select-none pointer-events-none">
+                      {renderWithAppleEmoji(sub.title || 'Untitled')}
+                    </span>
+                    {isItemUnread(sub, 'workspace', activeMember, authUser?.id) && (
+                      <NewBadge className="ml-1.5" />
+                    )}
+                  </div>
+                  <div
+                    className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                    onMouseDown={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        setActiveItemMenu({
+                          type: 'doc',
+                          id: sub.id,
+                          name: sub.title,
+                          x: rect.right + 4,
+                          y: rect.top,
+                          isPrivate: sub.isPrivate
+                        })
+                      }}
+                      className="p-1 rounded text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
+                      title="Opciones de nota"
+                    >
+                      <DotsThree size={14} weight="bold" />
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   // Recursive renderer for folders and subfolders
   const renderFolderItem = (folderPath: string, level = 0): React.ReactNode => {
     const leafName = getFolderLeafName(folderPath)
@@ -1176,8 +1645,19 @@ export function Sidebar({
             if (hasJustDraggedRef.current) return
             toggleFolder(folderPath)
           }}
+          onContextMenu={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            setActiveItemMenu({
+              type: 'folder',
+              path: folderPath,
+              name: leafName,
+              x: e.clientX,
+              y: e.clientY
+            })
+          }}
           style={{ paddingLeft: `${10 + level * 14}px` }}
-          className={`group relative flex items-center justify-between pr-2.5 py-1.5 rounded-xl cursor-grab active:cursor-grabbing hover:bg-black/[0.03] dark:hover:bg-white/[0.05] text-neutral-600 dark:text-neutral-400 font-medium transition select-none ${
+          className={`group relative flex items-center justify-between pr-2.5 py-1.5 rounded-[10px] cursor-grab active:cursor-grabbing hover:bg-black/[0.05] dark:hover:bg-white/[0.06] text-neutral-600 dark:text-neutral-400 font-medium transition select-none ${
             isBeingDraggedFolder ? 'opacity-40 bg-black/[0.04] dark:bg-white/[0.04]' : ''
           } ${
             isFolderTarget
@@ -1197,13 +1677,13 @@ export function Sidebar({
           )}
 
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            {isFolderOpen ? (
-              <CaretDown size={11} className="text-neutral-400 shrink-0" />
-            ) : (
-              <CaretRight size={11} className="text-neutral-400 shrink-0" />
-            )}
-            <Folder size={15} weight="duotone" className="text-neutral-700 dark:text-neutral-300 shrink-0" />
-            <span className="truncate text-xs font-semibold select-none pointer-events-none">{leafName}</span>
+            <CaretRight
+              size={11}
+              weight="bold"
+              className={`text-neutral-400 shrink-0 transition-transform duration-200 ${isFolderOpen ? 'rotate-90' : ''}`}
+            />
+            <PastelFolderIcon name={folderPath} size={19} open={isFolderOpen} />
+            <span className="truncate text-[13px] font-medium text-neutral-800 dark:text-neutral-200 select-none pointer-events-none">{leafName}</span>
             {folderDocs.some((d) => isItemUnread(d, 'workspace', activeMember, authUser?.id)) && !isFolderOpen && (
               <NewBadge className="ml-1" />
             )}
@@ -1217,10 +1697,10 @@ export function Sidebar({
             className="flex items-center gap-1"
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <span className="text-[10px] text-neutral-400 font-mono">
+            <span className="text-[11px] text-neutral-400 dark:text-neutral-500 tabular-nums group-hover:hidden">
               {folderDocs.length}
             </span>
-            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="hidden group-hover:flex items-center gap-0.5">
               <button
                 onClick={(e) => {
                   e.stopPropagation()
@@ -1246,23 +1726,19 @@ export function Sidebar({
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  const newName = prompt(`Renombrar carpeta "${leafName}":`, leafName)
-                  if (newName) handleRenameFolder(folderPath, newName)
+                  const rect = e.currentTarget.getBoundingClientRect()
+                  setActiveItemMenu({
+                    type: 'folder',
+                    path: folderPath,
+                    name: leafName,
+                    x: rect.right + 4,
+                    y: rect.top
+                  })
                 }}
                 className="p-1 rounded text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
-                title="Renombrar carpeta"
+                title="Opciones de carpeta"
               >
-                <PencilSimple size={12} weight="duotone" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleDeleteFolder(folderPath)
-                }}
-                className="p-1 rounded text-neutral-400 hover:text-rose-500"
-                title="Eliminar carpeta"
-              >
-                <Trash size={12} weight="duotone" />
+                <DotsThree size={14} weight="bold" />
               </button>
             </div>
           </div>
@@ -1275,7 +1751,7 @@ export function Sidebar({
             className="py-1 pr-2 my-0.5"
           >
             <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] border border-blue-500/40">
-              <Folder size={14} weight="duotone" className="text-blue-500 shrink-0" />
+              <PastelFolderIcon name="nueva" size={17} />
               <input
                 type="text"
                 value={newSubfolderName}
@@ -1304,13 +1780,6 @@ export function Sidebar({
           </div>
         )}
 
-        {/* Child subfolders */}
-        {isFolderOpen && childFolders.length > 0 && (
-          <div className="space-y-0.5 my-0.5">
-            {childFolders.map((childPath: string) => renderFolderItem(childPath, level + 1))}
-          </div>
-        )}
-
         {/* Empty placeholder */}
         {isFolderOpen &&
           folderDocs.length === 0 &&
@@ -1326,87 +1795,67 @@ export function Sidebar({
             </div>
           )}
 
-        {/* Direct docs inside this folder */}
-        {isFolderOpen && folderDocs.length > 0 && (
-          <div
-            style={{ marginLeft: `${14 + level * 14}px` }}
-            className="pl-3.5 space-y-0.5 border-l border-black/[0.04] dark:border-white/[0.06] my-0.5"
-          >
-            {folderDocs.map((doc) => {
-              const isActive = doc.id === currentWorkspaceId
-              const isBeingDragged = draggedDocId === doc.id
-              const isDropTargetBefore = dropTarget?.id === doc.id && dropTarget?.position === 'before'
-              const isDropTargetAfter = dropTarget?.id === doc.id && dropTarget?.position === 'after'
-
-              return (
-                <div
-                  key={doc.id}
-                  draggable={true}
-                  onDragStart={(e) => handleDocDragStart(e, doc)}
-                  onDragEnd={handleDocDragEnd}
-                  onDragOver={(e) => handleDocDragOver(e, doc, folderPath)}
-                  onDrop={(e) => handleDocDrop(e, doc, folderPath)}
-                  onClick={() => {
-                    if (hasJustDraggedRef.current) return
-                    onSelectWorkspace(doc.id)
-                  }}
-                  className={`group relative flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-grab active:cursor-grabbing transition select-none ${
-                    isBeingDragged
-                      ? 'opacity-40 bg-black/[0.04] dark:bg-white/[0.04] scale-[0.98]'
-                      : isActive
-                      ? 'bg-white dark:bg-[#202024] text-neutral-900 dark:text-neutral-100 font-semibold shadow-xs border border-black/[0.04] dark:border-white/[0.06]'
-                      : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-black/[0.03] dark:hover:bg-white/[0.05] font-medium'
-                  }`}
-                >
-                  {isDropTargetBefore && (
-                    <div className="absolute -top-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
-                      <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
-                    </div>
-                  )}
-                  {isDropTargetAfter && (
-                    <div className="absolute -bottom-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
-                      <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <DocumentItemIcon
-                      icon={doc.icon}
-                      viewMode={doc.viewMode}
-                      title={doc.title}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setEmojiPickerTarget({ id: doc.id, type: 'doc', currentIcon: doc.icon })
-                      }}
-                    />
-                    <span className="truncate flex-1 text-xs select-none pointer-events-none">{renderWithAppleEmoji(doc.title || 'Untitled')}</span>
-                    {isItemUnread(doc, 'workspace', activeMember, authUser?.id) && (
-                      <NewBadge className="ml-1.5" />
-                    )}
+        {/* Folders and documents content */}
+        {isFolderOpen && (
+          <>
+            {foldersFirst ? (
+              <>
+                {/* Child subfolders */}
+                {childFolders.length > 0 && (
+                  <div className="space-y-0.5 my-0.5">
+                    {childFolders.map((childPath: string) => renderFolderItem(childPath, level + 1))}
                   </div>
+                )}
+                {/* Direct docs inside this folder */}
+                {folderDocs.length > 0 && (
                   <div
-                    className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                    onMouseDown={(e) => e.stopPropagation()}
+                    style={{ marginLeft: `${19 + level * 14}px` }}
+                    className="space-y-0.5 my-0.5 mr-0.5"
                   >
-                    <button
-                      onClick={(e) => handleToggleFavorite(e, doc)}
-                      className="p-1 rounded text-neutral-400 hover:text-amber-500"
-                      title="Favorito"
-                    >
-                      <Star size={13} weight={doc.isFavorite ? 'fill' : 'duotone'} className={doc.isFavorite ? 'text-amber-500' : 'text-neutral-400'} />
-                    </button>
-                    <button
-                      onClick={(e) => handleDeleteWorkspace(e, doc.id)}
-                      className="p-1 rounded text-neutral-400 hover:text-rose-500"
-                      title="Eliminar"
-                    >
-                      <Trash size={13} weight="duotone" />
-                    </button>
+                    {folderDocs.map((doc) => renderDocNode(doc, folderPath))}
                   </div>
+                )}
+              </>
+            ) : (
+              /* Interleaved folders and documents */
+              (childFolders.length > 0 || folderDocs.length > 0) && (
+                <div className="space-y-0.5 my-0.5">
+                  {sortMixedItems([
+                    ...childFolders.map((p) => {
+                      const stats = getFolderTimestamps(p)
+                      return {
+                        type: 'folder' as const,
+                        path: p,
+                        name: getFolderLeafName(p),
+                        updated: stats.maxUpdated,
+                        created: stats.maxCreated
+                      }
+                    }),
+                    ...folderDocs.map((doc) => ({
+                      type: 'doc' as const,
+                      doc,
+                      name: doc.title || 'Untitled',
+                      updated: doc.updatedAt || doc.createdAt || 0,
+                      created: doc.createdAt || 0
+                    }))
+                  ]).map((item) => {
+                    if (item.type === 'folder') {
+                      return renderFolderItem(item.path, level + 1)
+                    }
+                    return (
+                      <div
+                        key={item.doc.id}
+                        style={{ marginLeft: `${19 + level * 14}px` }}
+                        className="mr-0.5"
+                      >
+                        {renderDocNode(item.doc, folderPath)}
+                      </div>
+                    )
+                  })}
                 </div>
               )
-            })}
-          </div>
+            )}
+          </>
         )}
       </div>
     )
@@ -1415,74 +1864,37 @@ export function Sidebar({
   return (
     <aside
       style={{ width: `${sidebarWidth}px` }}
-      className={`relative h-full flex flex-col bg-[#fbfbfa] dark:bg-[#161619] border-r border-black/[0.05] dark:border-white/[0.06] text-neutral-800 dark:text-neutral-200 select-none shrink-0 text-xs font-sans shadow-2xl md:shadow-none max-w-[85vw] ${
+      className={`relative h-full flex flex-col bg-[var(--obsidian-sidebar-bg,#181818)] border-r border-[var(--app-border)] text-[var(--app-text-primary)] select-none shrink-0 text-xs font-sans shadow-2xl md:shadow-none max-w-[85vw] ${
         isResizing ? '' : 'transition-[width] duration-75'
       }`}
     >
-      {/* 1. Header: Brand & Collapse Sidebar */}
-      <div className="h-10 px-3 pt-2 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded-md bg-neutral-900 dark:bg-white text-white dark:text-neutral-900 flex items-center justify-center font-bold text-xs shadow-xs">
-            7
-          </div>
-          <span className="font-semibold text-xs tracking-tight text-neutral-800 dark:text-neutral-200">
-            Seven Note
-          </span>
-        </div>
-
-        {/* Right buttons: Collapse on desktop, Close on mobile */}
-        <div className="flex items-center gap-0.5 shrink-0">
-          <button
-            onClick={onToggleSidebar}
-            className="p-1.5 rounded-lg text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-black/[0.04] dark:hover:bg-white/[0.06] transition cursor-pointer"
-            title="Cerrar barra lateral"
-          >
-            <X size={16} weight="bold" className="md:hidden text-neutral-600 dark:text-neutral-300" />
-            <SidebarSimple size={15} weight="duotone" className="hidden md:block" />
-          </button>
-        </div>
-      </div>
-
-      {/* 2. Workspace Bar (Arriba de Nueva Nota) */}
+      {/* 1. Workspace Bar (Minimalist Obsidian Vault style) */}
       <div className="px-3 pt-2 pb-1 relative">
         <button
           type="button"
           onClick={() => setShowSpaceMenu(!showSpaceMenu)}
-          className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl border border-black/[0.06] dark:border-white/[0.08] hover:border-black/[0.12] dark:hover:border-white/[0.15] bg-black/[0.02] dark:bg-white/[0.03] hover:bg-black/[0.05] dark:hover:bg-white/[0.06] cursor-pointer transition text-left group shadow-2xs"
+          className="w-full flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-black/[0.04] dark:hover:bg-white/[0.06] cursor-pointer transition text-left group"
           title="Cambiar espacio de trabajo"
         >
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <div
-              className="w-5 h-5 rounded-lg flex items-center justify-center text-white shrink-0 shadow-2xs font-semibold text-[11px] transition-transform group-hover:scale-105"
-              style={{ backgroundColor: currentSpace.color || '#1e96eb' }}
-            >
-              <AppleEmoji emoji={currentSpace.icon || currentSpace.name.charAt(0) || '✦'} size={13} />
-            </div>
-            <div className="flex flex-col min-w-0 flex-1 leading-tight">
-              <div className="flex items-center gap-1 min-w-0">
-                <span className="font-semibold text-neutral-900 dark:text-neutral-100 truncate text-xs">
-                  {currentSpace.name}
-                </span>
-                {isCurrentSpacePrivate && (
-                  <span className="text-amber-500 shrink-0" title="Espacio privado: Solo visible para ti">
-                    <Lock size={11} weight="bold" />
-                  </span>
-                )}
-              </div>
-              <span className="text-[10px] text-neutral-400 dark:text-neutral-500 truncate">
-                {isCurrentSpacePrivate ? 'Espacio privado' : 'Espacio de trabajo'}
+          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+            <span className="font-semibold text-neutral-800 dark:text-neutral-200 truncate text-[13px] tracking-tight">
+              {currentSpace.name}
+            </span>
+            {isCurrentSpacePrivate && (
+              <span className="text-amber-500 shrink-0" title="Espacio privado: Solo visible para ti">
+                <Lock size={12} weight="bold" />
               </span>
-            </div>
+            )}
           </div>
-          <div className="flex items-center gap-1.5 shrink-0 ml-1.5">
+          <div className="flex items-center gap-1 shrink-0 ml-1">
             {visibleSpaces.some((s) => s.id !== currentSpace.id && isItemUnread(s, 'space', activeMember, authUser?.id)) && (
               <NewDot title="Nuevos espacios de trabajo disponibles" />
             )}
-            <CaretDown size={14} className="text-neutral-400 group-hover:text-neutral-700 dark:group-hover:text-neutral-200 transition shrink-0" />
+            <CaretDown size={12} className="text-neutral-400 group-hover:text-neutral-700 dark:group-hover:text-neutral-300 transition shrink-0" />
           </div>
         </button>
 
-        {/* Space Switcher Popover Dropdown */}
+        {/* Space Switcher Popover Dropdown (Obsidian Vaults Popover) */}
         {showSpaceMenu && (
           <>
             <div
@@ -1493,24 +1905,12 @@ export function Sidebar({
               }}
             />
             <div
-              className="absolute left-3 right-3 top-12 z-50 bg-white dark:bg-[#1e1f23] border border-black/[0.08] dark:border-white/[0.1] rounded-xl sm:rounded-2xl shadow-2xl p-1.5 sm:p-2 animate-in fade-in zoom-in-95 duration-100 flex flex-col gap-1 max-h-[60vh] overflow-y-auto custom-scrollbar"
+              className="absolute left-3 right-3 top-10 z-50 bg-[#252525] dark:bg-[#202020] text-neutral-200 border border-black/20 dark:border-white/10 rounded-lg shadow-xl p-1 animate-in fade-in zoom-in-95 duration-100 flex flex-col max-h-[60vh] overflow-y-auto custom-scrollbar"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between px-2.5 py-1">
-                <span className="text-[10px] uppercase font-bold text-neutral-400 tracking-wider">
-                  Espacios
-                </span>
-                <span className="text-[10px] bg-black/5 dark:bg-white/10 text-neutral-500 px-1.5 py-0.5 rounded-full font-mono">
-                  {visibleSpaces.length}
-                </span>
-              </div>
-
               <div className="space-y-0.5 max-h-48 overflow-y-auto custom-scrollbar">
                 {visibleSpaces.map((sp) => {
                   const isSelected = sp.id === currentSpace.id
-                  const docsInSpace = workspaces.filter(
-                    (w) => !w.isDeleted && (w.spaceId || DEFAULT_SPACE_ID) === sp.id && isWorkspaceVisible(w, activeMember, authUser?.id)
-                  ).length
                   const isEditingThis = editingSpaceId === sp.id
 
                   if (isEditingThis) {
@@ -1537,7 +1937,7 @@ export function Sidebar({
                             }
                           }}
                           autoFocus
-                          className="w-full bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-600 rounded-lg px-2.5 py-1 text-xs outline-none ring-1 ring-blue-500"
+                          className="w-full bg-black/30 border border-white/20 rounded px-2 py-1 text-xs text-white outline-none"
                         />
                       </div>
                     )
@@ -1550,70 +1950,29 @@ export function Sidebar({
                         if (onSelectSpace) onSelectSpace(sp.id)
                         setShowSpaceMenu(false)
                       }}
-                      className={`group w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs cursor-pointer transition ${
+                      className={`group w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs cursor-pointer transition ${
                         isSelected
-                          ? 'bg-black/[0.05] dark:bg-white/[0.08] text-neutral-900 dark:text-neutral-100 font-semibold'
-                          : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
+                          ? 'bg-white/10 text-white font-medium'
+                          : 'text-neutral-300 hover:text-white hover:bg-white/5'
                       }`}
                     >
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <div
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setShowSpaceMenu(false)
-                            setEmojiPickerTarget({ id: sp.id, type: 'space', currentIcon: sp.icon })
-                          }}
-                          className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] text-white shrink-0 shadow-2xs font-bold hover:scale-115 active:scale-95 transition-transform cursor-pointer"
-                          style={{ backgroundColor: sp.color || '#1e96eb' }}
-                          title="Cambiar icono de este espacio"
-                        >
-                          <AppleEmoji emoji={sp.icon || sp.name.charAt(0)} size={12} />
-                        </div>
-                        <span className="truncate min-w-0 flex-1 text-left">{sp.name}</span>
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                        <span className="truncate text-left text-[13px]">{sp.name}</span>
                         {isItemUnread(sp, 'space', activeMember, authUser?.id) && (
-                          <NewBadge className="ml-1.5" />
+                          <NewBadge className="ml-1" />
                         )}
                         {sp.isPrivate && (
                           <span
-                            className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full text-[9px] font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 shrink-0"
+                            className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[9px] font-semibold bg-amber-500/20 text-amber-400 shrink-0"
                             title="Espacio privado: Solo visible para ti"
                           >
                             <Lock size={9} weight="bold" />
-                            <span>Privado</span>
                           </span>
                         )}
                       </div>
 
                       <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                        <span className="text-[10px] opacity-60 font-mono tabular-nums">
-                          {docsInSpace}
-                        </span>
-                        {isSelected && <Check size={14} weight="bold" className="text-neutral-900 dark:text-white shrink-0" />}
-                        <button
-                          type="button"
-                          onClick={async (e) => {
-                            e.stopPropagation()
-                            const nextPrivate = !sp.isPrivate
-                            await updateSpace(sp.id, {
-                              isPrivate: nextPrivate,
-                              ownerMember: nextPrivate ? (sp.ownerMember || activeMember.id) : sp.ownerMember,
-                              ownerName: nextPrivate ? (sp.ownerName || activeMember.name) : sp.ownerName,
-                              userId: nextPrivate ? (sp.userId || authUser?.id) : sp.userId,
-                              updatedAt: Date.now(),
-                              syncStatus: 'pending'
-                            })
-                            syncEngine.scheduleSync(500)
-                            toast.success(nextPrivate ? `Espacio "${sp.name}" cambiado a MODO PRIVADO (solo tú)` : `Espacio "${sp.name}" cambiado a MODO EQUIPO (público)`)
-                          }}
-                          className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 transition"
-                          title={sp.isPrivate ? 'Hacer público para el equipo' : 'Hacer privado (solo tú)'}
-                        >
-                          {sp.isPrivate ? (
-                            <LockOpen size={13} weight="duotone" className="text-amber-500" />
-                          ) : (
-                            <Lock size={13} weight="duotone" className="text-neutral-400 hover:text-amber-500" />
-                          )}
-                        </button>
+                        {isSelected && <Check size={14} weight="bold" className="text-white shrink-0" />}
                         <button
                           type="button"
                           onClick={(e) => {
@@ -1621,10 +1980,10 @@ export function Sidebar({
                             setEditingSpaceId(sp.id)
                             setEditingSpaceName(sp.name)
                           }}
-                          className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 transition"
+                          className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/10 text-neutral-400 hover:text-white transition"
                           title="Renombrar espacio"
                         >
-                          <PencilSimple size={13} weight="duotone" />
+                          <PencilSimple size={12} weight="bold" />
                         </button>
                         {visibleSpaces.length > 1 && (
                           <button
@@ -1633,10 +1992,10 @@ export function Sidebar({
                               e.stopPropagation()
                               if (onDeleteSpace) onDeleteSpace(sp.id)
                             }}
-                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-rose-500/10 text-neutral-400 hover:text-rose-500 transition"
+                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-rose-500/20 text-neutral-400 hover:text-rose-400 transition"
                             title="Eliminar espacio"
                           >
-                            <Trash size={13} weight="duotone" />
+                            <Trash size={12} weight="bold" />
                           </button>
                         )}
                       </div>
@@ -1645,7 +2004,7 @@ export function Sidebar({
                 })}
               </div>
 
-              <div className="h-[1px] bg-black/[0.06] dark:border-white/[0.06] my-1" />
+              <div className="h-px bg-white/10 my-1" />
 
               <button
                 type="button"
@@ -1653,100 +2012,193 @@ export function Sidebar({
                   setShowSpaceMenu(false)
                   if (onOpenCreateSpace) onOpenCreateSpace()
                 }}
-                className="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-black/[0.04] dark:hover:bg-white/[0.06] text-neutral-900 dark:text-neutral-100 font-semibold transition text-xs flex items-center gap-2 cursor-pointer"
+                className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-white/5 text-neutral-200 hover:text-white transition text-xs flex items-center gap-2 cursor-pointer font-medium"
               >
-                <Plus size={14} weight="bold" className="shrink-0" />
-                <span>Nuevo espacio de trabajo</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setShowSpaceMenu(false)
-                  onOpenSettings()
-                }}
-                className="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-black/[0.04] dark:hover:bg-white/[0.06] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 transition text-xs flex items-center gap-2 cursor-pointer"
-              >
-                <Gear size={14} weight="duotone" className="shrink-0" />
-                <span>Ajustes del espacio</span>
+                <Vault size={14} weight="regular" className="shrink-0 text-neutral-400" />
+                <span>Administrar bóvedas...</span>
               </button>
             </div>
           </>
         )}
       </div>
 
-      {/* 2. Tactile Pill Button: "+ Nueva Nota / Página" */}
-      <div className="px-3 py-2">
-        <button
-          onClick={() => handleCreateWorkspace(null, null, 'doc', isCurrentSpacePrivate)}
-          className="w-full flex items-center justify-center gap-2 py-2 px-3 rounded-2xl bg-neutral-900 hover:bg-black dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 font-semibold text-xs shadow-md hover:shadow-lg transition-all active:scale-[0.98] cursor-pointer group"
-          title={isCurrentSpacePrivate ? 'Crear nueva nota en espacio privado' : 'Crear nueva página o nota'}
-        >
-          <Plus size={14} weight="bold" className="transition-transform group-hover:rotate-90" />
-          <span>{isCurrentSpacePrivate ? 'Nueva Nota Privada' : 'Nueva Nota'}</span>
-        </button>
-      </div>
-
-      {/* 4. Search Input Button */}
-      <div className="px-3 pb-2">
-        <div
-          onClick={onOpenSearch}
-          className="flex items-center justify-between px-3 py-1.5 rounded-xl bg-black/[0.03] dark:bg-white/[0.05] hover:bg-black/[0.05] dark:hover:bg-white/[0.08] border border-black/[0.04] dark:border-white/[0.06] text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 cursor-pointer transition"
-        >
-          <div className="flex items-center gap-2">
-            <MagnifyingGlass size={14} weight="duotone" />
-            <span className="text-xs">Buscar...</span>
-          </div>
-          <kbd className="px-1.5 py-0.5 rounded-md bg-white dark:bg-neutral-800 text-[10px] font-mono text-neutral-500 border border-black/5 dark:border-white/10 shadow-2xs">
-            Ctrl K
-          </kbd>
-        </div>
-      </div>
-
-      {/* 5. Primary Views Navigation */}
-      <div className="px-2 space-y-0.5">
-        {/* All Docs */}
-        <button
-          onClick={onOpenAllDocs}
-          className={`w-full flex items-center justify-between px-3 py-2 rounded-xl font-medium transition cursor-pointer ${
-            activeNavigation === 'all-docs'
-              ? 'bg-black/[0.06] dark:bg-white/[0.08] text-neutral-900 dark:text-neutral-100 font-semibold'
-              : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-black/[0.03] dark:hover:bg-white/[0.05]'
-          }`}
-        >
-          <div className="flex items-center gap-2.5">
-            <FileText size={16} weight="duotone" className="text-neutral-700 dark:text-neutral-300 shrink-0" />
-            <span>Todos los documentos</span>
-          </div>
-          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-black/5 dark:bg-white/10 text-neutral-500 font-medium">
-            {activeWorkspaces.length}
-          </span>
-        </button>
-
-        {/* Knowledge Graph */}
-        {onOpenKnowledgeGraph && (
+      {/* 2. Obsidian Action Toolbar (agrupado en el medio justo debajo de los espacios) */}
+      <div className="px-3 py-1 flex items-center justify-center border-b border-black/[0.04] dark:border-white/[0.04] shrink-0 mb-1 relative">
+        <div className="flex items-center gap-1 text-neutral-400">
           <button
-            onClick={onOpenKnowledgeGraph}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-black/[0.03] dark:hover:bg-white/[0.05] font-medium transition cursor-pointer text-left"
+            type="button"
+            onClick={() => handleCreateWorkspace(null, null, 'doc', isCurrentSpacePrivate)}
+            className="p-1.5 rounded hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-black/[0.04] dark:hover:bg-white/[0.06] transition cursor-pointer"
+            title="Nueva nota"
           >
-            <Graph size={16} weight="duotone" className="text-neutral-700 dark:text-neutral-300 shrink-0" />
-            <span>Grafo de Conocimiento</span>
+            <NotePencil size={16} weight="regular" />
           </button>
+          <button
+            type="button"
+            onClick={() => setIsCreatingFolder(true)}
+            className="p-1.5 rounded hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-black/[0.04] dark:hover:bg-white/[0.06] transition cursor-pointer"
+            title="Nueva carpeta"
+          >
+            <FolderSimplePlus size={16} weight="regular" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
+            className={`p-1.5 rounded hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-black/[0.04] dark:hover:bg-white/[0.06] transition cursor-pointer ${
+              isSortMenuOpen || docSortMode !== 'custom'
+                ? 'text-blue-500 dark:text-blue-400 bg-blue-500/10'
+                : ''
+            }`}
+            title={`Cambiar orden de notas y carpetas (Activo: ${
+              SORT_OPTIONS.find((o) => o.id === docSortMode)?.label || 'Personalizado'
+            })`}
+          >
+            <ArrowsDownUp size={16} weight={docSortMode !== 'custom' ? 'bold' : 'regular'} />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              // Collapse all folders & sections
+              setFolderOpenMap({})
+              setPagesOpen(false)
+              setPrivateNotesOpen(false)
+              setFavoritesOpen(false)
+            }}
+            className="p-1.5 rounded hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-black/[0.04] dark:hover:bg-white/[0.06] transition cursor-pointer"
+            title="Plegar todo"
+          >
+            <CaretDoubleUp size={16} weight="regular" />
+          </button>
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            className="p-1.5 rounded hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-black/[0.04] dark:hover:bg-white/[0.06] transition cursor-pointer"
+            title="Ocultar explorador (Ctrl+\)"
+          >
+            <SidebarSimple size={16} weight="regular" />
+          </button>
+        </div>
+
+        {/* Popover / Menú desplegable para ordenar notas y carpetas */}
+        {isSortMenuOpen && (
+          <>
+            <div
+              className="fixed inset-0 z-40"
+              onClick={() => setIsSortMenuOpen(false)}
+            />
+            <div className="absolute left-2 right-2 top-full mt-1 bg-white dark:bg-[#1e1e22] border border-black/10 dark:border-white/10 rounded-xl shadow-2xl p-1.5 z-50 text-xs backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 max-h-[460px] overflow-y-auto custom-scrollbar">
+              <div className="px-2 py-1 text-[10px] font-semibold tracking-wider uppercase text-neutral-400 dark:text-neutral-500">
+                Ordenar notas y carpetas
+              </div>
+              <div className="space-y-0.5">
+                {SORT_OPTIONS.map((opt) => {
+                  const isSelected = docSortMode === opt.id
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => {
+                        setDocSortMode(opt.id)
+                        toast.success(`Orden: ${opt.label}`)
+                        setIsSortMenuOpen(false)
+                      }}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left transition cursor-pointer ${
+                        isSelected
+                          ? 'bg-blue-500/10 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400 font-medium'
+                          : 'hover:bg-black/[0.04] dark:hover:bg-white/[0.06] text-neutral-700 dark:text-neutral-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={isSelected ? 'text-blue-500 dark:text-blue-400' : 'text-neutral-400'}>
+                          {opt.icon}
+                        </span>
+                        <div className="truncate">
+                          <div className="truncate text-xs">{opt.label}</div>
+                          {opt.desc && (
+                            <div className="text-[10px] text-neutral-400 dark:text-neutral-500 truncate">
+                              {opt.desc}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {isSelected && (
+                        <Check size={14} weight="bold" className="text-blue-500 dark:text-blue-400 shrink-0 ml-2" />
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+
+              <div className="pt-1.5 mt-1.5 border-t border-black/[0.06] dark:border-white/[0.08] space-y-0.5">
+                <div className="px-2 py-0.5 text-[10px] font-semibold tracking-wider uppercase text-neutral-400 dark:text-neutral-500">
+                  Opciones de carpetas
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextVal = !sortFoldersToo
+                    setSortFoldersToo(nextVal)
+                    toast.info(nextVal ? 'Las carpetas seguirán el orden seleccionado' : 'Carpetas en orden manual')
+                  }}
+                  className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left text-xs hover:bg-black/[0.04] dark:hover:bg-white/[0.06] transition text-neutral-700 dark:text-neutral-300 cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <Folders size={14} className="text-neutral-400 shrink-0" />
+                    <div className="flex flex-col">
+                      <span>Ordenar también carpetas</span>
+                      <span className="text-[10px] text-neutral-400 dark:text-neutral-500">Aplica el criterio a las carpetas</span>
+                    </div>
+                  </div>
+                  <div
+                    className={`w-4 h-4 rounded border flex items-center justify-center transition shrink-0 ml-2 ${
+                      sortFoldersToo
+                        ? 'bg-blue-500 border-blue-500 text-white'
+                        : 'border-neutral-300 dark:border-neutral-600'
+                    }`}
+                  >
+                    {sortFoldersToo && <Check size={12} weight="bold" />}
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nextVal = !foldersFirst
+                    setFoldersFirst(nextVal)
+                    toast.info(nextVal ? 'Carpetas agrupadas al inicio' : 'Carpetas y notas ordenadas juntas')
+                  }}
+                  className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-left text-xs hover:bg-black/[0.04] dark:hover:bg-white/[0.06] transition text-neutral-700 dark:text-neutral-300 cursor-pointer"
+                >
+                  <div className="flex items-center gap-2">
+                    <Folder size={14} className="text-neutral-400 shrink-0" />
+                    <div className="flex flex-col">
+                      <span>Carpetas siempre arriba</span>
+                      <span className="text-[10px] text-neutral-400 dark:text-neutral-500">Mantener carpetas sobre las notas</span>
+                    </div>
+                  </div>
+                  <div
+                    className={`w-4 h-4 rounded border flex items-center justify-center transition shrink-0 ml-2 ${
+                      foldersFirst
+                        ? 'bg-blue-500 border-blue-500 text-white'
+                        : 'border-neutral-300 dark:border-neutral-600'
+                    }`}
+                  >
+                    {foldersFirst && <Check size={12} weight="bold" />}
+                  </div>
+                </button>
+              </div>
+            </div>
+          </>
         )}
       </div>
 
-      {/* Divider */}
-      <div className="px-4 py-2">
-        <div className="h-[1px] bg-black/[0.04] dark:bg-white/[0.06]" />
-      </div>
-
-      {/* 6. Scrollable Structure: Favorites, Documents, Tags, Tools */}
+      {/* 6. Scrollable Structure: Favorites, Documents, Tags */}
       <div className="flex-1 overflow-y-auto px-2 space-y-4 custom-scrollbar">
         {/* FAVORITES */}
         <div>
           <div
             onClick={() => setFavoritesOpen(!favoritesOpen)}
-            className="flex items-center justify-between px-2.5 py-1 text-[11px] font-semibold tracking-wider uppercase text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 cursor-pointer transition group"
+            className="flex items-center justify-between px-2.5 py-1 text-[12px] font-medium text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 cursor-pointer transition group"
           >
             <div className="flex items-center gap-1.5">
               {favoritesOpen ? (
@@ -1816,7 +2268,7 @@ export function Sidebar({
         <div>
           <div
             onClick={() => setPrivateNotesOpen(!privateNotesOpen)}
-            className="flex items-center justify-between px-2.5 py-1 text-[11px] font-semibold tracking-wider uppercase text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 cursor-pointer transition group"
+            className="flex items-center justify-between px-2.5 py-1 text-[12px] font-medium text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 cursor-pointer transition group"
           >
             <div className="flex items-center gap-1.5">
               {privateNotesOpen ? (
@@ -1824,7 +2276,6 @@ export function Sidebar({
               ) : (
                 <CaretRight size={13} className="text-neutral-400 transition-transform" />
               )}
-              <Lock size={13} weight="duotone" className="text-neutral-500 dark:text-neutral-400 shrink-0" />
               <span>Mis Notas Privadas</span>
             </div>
             <div className="flex items-center gap-1">
@@ -1875,6 +2326,18 @@ export function Sidebar({
                         if (hasJustDraggedRef.current) return
                         onSelectWorkspace(doc.id)
                       }}
+                      onContextMenu={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setActiveItemMenu({
+                          type: 'doc',
+                          id: doc.id,
+                          name: doc.title,
+                          x: e.clientX,
+                          y: e.clientY,
+                          isPrivate: true
+                        })
+                      }}
                       className={`group relative flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-grab active:cursor-grabbing transition select-none ${
                         isBeingDragged
                           ? 'opacity-40 bg-black/[0.04] dark:bg-white/[0.04] scale-[0.98]'
@@ -1905,7 +2368,7 @@ export function Sidebar({
                             setEmojiPickerTarget({ id: doc.id, type: 'doc', currentIcon: doc.icon })
                           }}
                         />
-                        <span className="truncate flex-1 text-xs select-none pointer-events-none">{renderWithAppleEmoji(doc.title || 'Untitled')}</span>
+                        <span className="truncate flex-1 text-[13px] select-none pointer-events-none">{renderWithAppleEmoji(doc.title || 'Untitled')}</span>
                     {isItemUnread(doc, 'workspace', activeMember, authUser?.id) && (
                       <NewBadge className="ml-1.5" />
                     )}
@@ -1918,25 +2381,22 @@ export function Sidebar({
                         onMouseDown={(e) => e.stopPropagation()}
                       >
                         <button
-                          onClick={(e) => handleTogglePrivateWorkspace(e, doc)}
-                          className="p-1 rounded text-neutral-400 hover:text-blue-500"
-                          title="Hacer pública para el equipo"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            const rect = e.currentTarget.getBoundingClientRect()
+                            setActiveItemMenu({
+                              type: 'doc',
+                              id: doc.id,
+                              name: doc.title,
+                              x: rect.right + 4,
+                              y: rect.top,
+                              isPrivate: true
+                            })
+                          }}
+                          className="p-1 rounded text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
+                          title="Opciones de nota"
                         >
-                          <LockOpen size={13} weight="duotone" />
-                        </button>
-                        <button
-                          onClick={(e) => handleToggleFavorite(e, doc)}
-                          className="p-1 rounded text-neutral-400 hover:text-amber-500"
-                          title="Favorito"
-                        >
-                          <Star size={13} weight={doc.isFavorite ? 'fill' : 'duotone'} className={doc.isFavorite ? 'text-amber-500' : 'text-neutral-400'} />
-                        </button>
-                        <button
-                          onClick={(e) => handleDeleteWorkspace(e, doc.id)}
-                          className="p-1 rounded text-neutral-400 hover:text-rose-500"
-                          title="Eliminar"
-                        >
-                          <Trash size={13} weight="duotone" />
+                          <DotsThree size={14} weight="bold" />
                         </button>
                       </div>
                     </div>
@@ -1953,7 +2413,7 @@ export function Sidebar({
             onClick={() => setPagesOpen(!pagesOpen)}
             onDragOver={handleRootHeaderDragOver}
             onDrop={handleRootHeaderDrop}
-            className={`flex items-center justify-between px-2.5 py-1 text-[11px] font-semibold tracking-wider uppercase text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 cursor-pointer transition group rounded-lg ${
+            className={`flex items-center justify-between px-2.5 py-1 text-[12px] font-medium text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 cursor-pointer transition group rounded-lg ${
               dropTarget?.type === 'root'
                 ? 'bg-blue-500/15 dark:bg-blue-500/25 ring-1 ring-blue-500/50 text-blue-600 dark:text-blue-400'
                 : ''
@@ -2004,7 +2464,7 @@ export function Sidebar({
               {isCreatingFolder && (
                 <div className="px-2 py-1 mb-1">
                   <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-white dark:bg-[#202024] border border-blue-500/40 shadow-xs">
-                    <Folder size={14} weight="duotone" className="text-blue-500 shrink-0" />
+                    <PastelFolderIcon name="nueva" size={17} />
                     <input
                       type="text"
                       value={newFolderName}
@@ -2033,284 +2493,51 @@ export function Sidebar({
                 </div>
               )}
 
-              {/* Dynamic recursive folders list */}
-              {sortFolders(allFolders.filter((f: string) => getParentFolderPath(f) === null)).map((folderName: string) =>
-                renderFolderItem(folderName, 0)
-              )}
+              {foldersFirst ? (
+                <>
+                  {/* Dynamic recursive folders list */}
+                  {sortFolders(allFolders.filter((f: string) => getParentFolderPath(f) === null)).map((folderName: string) =>
+                    renderFolderItem(folderName, 0)
+                  )}
 
-              {/* Root pages */}
-              {rootPages.map((page) => {
-                const isActive = page.id === currentWorkspaceId
-                const subpages = activeWorkspaces
-                  .filter((w) => w.parentId === page.id)
-                  .sort(sortByOrder)
-                const isBeingDragged = draggedDocId === page.id
-                const isDropTargetBefore = dropTarget?.id === page.id && dropTarget?.position === 'before'
-                const isDropTargetAfter = dropTarget?.id === page.id && dropTarget?.position === 'after'
-
-                return (
-                  <div key={page.id} className="space-y-0.5">
-                    <div
-                      draggable={true}
-                      onDragStart={(e) => handleDocDragStart(e, page)}
-                      onDragEnd={handleDocDragEnd}
-                      onDragOver={(e) => handleDocDragOver(e, page, null)}
-                      onDrop={(e) => handleDocDrop(e, page, null)}
-                      onClick={() => {
-                        if (hasJustDraggedRef.current) return
-                        onSelectWorkspace(page.id)
-                      }}
-                      className={`group relative flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-grab active:cursor-grabbing transition select-none ${
-                        isBeingDragged
-                          ? 'opacity-40 bg-black/[0.04] dark:bg-white/[0.04] scale-[0.98]'
-                          : isActive
-                          ? 'bg-white dark:bg-[#202024] text-neutral-900 dark:text-neutral-100 font-semibold shadow-xs border border-black/[0.04] dark:border-white/[0.06]'
-                          : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-black/[0.03] dark:hover:bg-white/[0.05] font-medium'
-                      }`}
-                    >
-                      {isDropTargetBefore && (
-                        <div className="absolute -top-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
-                          <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
-                        </div>
-                      )}
-                      {isDropTargetAfter && (
-                        <div className="absolute -bottom-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
-                          <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
-                        </div>
-                      )}
-
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <DocumentItemIcon
-                          icon={page.icon}
-                          viewMode={page.viewMode}
-                          title={page.title}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setEmojiPickerTarget({ id: page.id, type: 'doc', currentIcon: page.icon })
-                          }}
-                        />
-                        <span className="truncate flex-1 select-none pointer-events-none">{renderWithAppleEmoji(page.title || 'Untitled')}</span>
-                        {isItemUnread(page, 'workspace', activeMember, authUser?.id) && (
-                          <NewBadge className="ml-1.5" />
-                        )}
-                      </div>
-                      <div
-                        className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                        onMouseDown={(e) => e.stopPropagation()}
-                      >
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleCreateWorkspace(page.id, null, 'doc')
-                          }}
-                          className="p-1 rounded text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
-                          title="Añadir subpágina"
-                        >
-                          <Plus size={12} />
-                        </button>
-                        <button
-                          onClick={(e) => handleToggleFavorite(e, page)}
-                          className="p-1 rounded text-neutral-400 hover:text-amber-500"
-                          title="Favorito"
-                        >
-                          <Star size={13} weight={page.isFavorite ? 'fill' : 'duotone'} className={page.isFavorite ? 'text-amber-500' : 'text-neutral-400'} />
-                        </button>
-                        <button
-                          onClick={(e) => handleDeleteWorkspace(e, page.id)}
-                          className="p-1 rounded text-neutral-400 hover:text-rose-500"
-                          title="Eliminar"
-                        >
-                          <Trash size={13} weight="duotone" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Subpages indented */}
-                    {subpages.length > 0 && (
-                      <div className="pl-4 space-y-0.5 border-l border-black/[0.04] dark:border-white/[0.06] ml-3.5 my-0.5">
-                        {subpages.map((sub) => {
-                          const isSubActive = sub.id === currentWorkspaceId
-                          const isSubBeingDragged = draggedDocId === sub.id
-                          const isSubDropTargetBefore = dropTarget?.id === sub.id && dropTarget?.position === 'before'
-                          const isSubDropTargetAfter = dropTarget?.id === sub.id && dropTarget?.position === 'after'
-
-                          return (
-                            <div
-                              key={sub.id}
-                              draggable={true}
-                              onDragStart={(e) => handleDocDragStart(e, sub)}
-                              onDragEnd={handleDocDragEnd}
-                              onDragOver={(e) => handleDocDragOver(e, sub, null)}
-                              onDrop={(e) => handleDocDrop(e, sub, null)}
-                              onClick={() => onSelectWorkspace(sub.id)}
-                              className={`group relative flex items-center justify-between px-2.5 py-1 rounded-xl cursor-grab active:cursor-grabbing transition select-none ${
-                                isSubBeingDragged
-                                  ? 'opacity-40 bg-black/[0.04] dark:bg-white/[0.04] scale-[0.98]'
-                                  : isSubActive
-                                  ? 'bg-white dark:bg-[#202024] text-neutral-900 dark:text-neutral-100 font-semibold shadow-xs border border-black/[0.04] dark:border-white/[0.06]'
-                                  : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-black/[0.03] dark:hover:bg-white/[0.05] font-medium'
-                              }`}
-                            >
-                              {isSubDropTargetBefore && (
-                                <div className="absolute -top-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
-                                  <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
-                                </div>
-                              )}
-                              {isSubDropTargetAfter && (
-                                <div className="absolute -bottom-1 left-1.5 right-1.5 h-[3px] bg-blue-500 dark:bg-blue-400 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(59,130,246,1)]">
-                                  <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-blue-500 dark:bg-blue-400" />
-                                </div>
-                              )}
-
-                              <div className="flex items-center gap-2 min-w-0 flex-1">
-                                <DocumentItemIcon
-                                  icon={sub.icon}
-                                  viewMode={sub.viewMode}
-                                  title={sub.title}
-                                  size={14}
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setEmojiPickerTarget({ id: sub.id, type: 'doc', currentIcon: sub.icon })
-                                  }}
-                                />
-                                <span className="truncate flex-1 text-xs select-none pointer-events-none">{renderWithAppleEmoji(sub.title || 'Untitled')}</span>
-                              </div>
-                              <div
-                                className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
-                                onMouseDown={(e) => e.stopPropagation()}
-                              >
-                                <button
-                                  onClick={(e) => handleDeleteWorkspace(e, sub.id)}
-                                  className="p-0.5 rounded text-neutral-400 hover:text-rose-500"
-                                  title="Eliminar"
-                                >
-                                  <Trash size={13} weight="duotone" />
-                                </button>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
-
-        {/* TOOLS & MORE */}
-        <div>
-          <div
-            onClick={() => setToolsOpen(!toolsOpen)}
-            className="flex items-center justify-between px-2.5 py-1 text-[11px] font-semibold tracking-wider uppercase text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 cursor-pointer transition group"
-          >
-            <div className="flex items-center gap-1.5">
-              {toolsOpen ? (
-                <CaretDown size={13} className="text-neutral-400 transition-transform" />
+                  {/* Root pages */}
+                  {rootPages.map((page) => renderDocNode(page, null))}
+                </>
               ) : (
-                <CaretRight size={13} className="text-neutral-400 transition-transform" />
+                <div className="space-y-0.5">
+                  {sortMixedItems([
+                    ...allFolders
+                      .filter((f: string) => getParentFolderPath(f) === null)
+                      .map((p) => {
+                        const stats = getFolderTimestamps(p)
+                        return {
+                          type: 'folder' as const,
+                          path: p,
+                          name: getFolderLeafName(p),
+                          updated: stats.maxUpdated,
+                          created: stats.maxCreated
+                        }
+                      }),
+                    ...rootPages.map((page) => ({
+                      type: 'doc' as const,
+                      doc: page,
+                      name: page.title || 'Untitled',
+                      updated: page.updatedAt || page.createdAt || 0,
+                      created: page.createdAt || 0
+                    }))
+                  ]).map((item) => {
+                    if (item.type === 'folder') {
+                      return renderFolderItem(item.path, 0)
+                    }
+                    return renderDocNode(item.doc, null)
+                  })}
+                </div>
               )}
-              <span>Herramientas</span>
-            </div>
-          </div>
-
-          {toolsOpen && (
-            <div className="mt-1 space-y-0.5">
-              <button
-                onClick={onOpenTemplates}
-                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl hover:bg-black/[0.03] dark:hover:bg-white/[0.05] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 font-medium transition cursor-pointer text-left"
-              >
-                <Books size={15} weight="duotone" className="text-neutral-700 dark:text-neutral-300 shrink-0" />
-                <span>Plantillas</span>
-              </button>
-
-              <button
-                onClick={onOpenImport}
-                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl hover:bg-black/[0.03] dark:hover:bg-white/[0.05] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 font-medium transition cursor-pointer text-left"
-              >
-                <DownloadSimple size={15} weight="duotone" className="text-neutral-700 dark:text-neutral-300 shrink-0" />
-                <span>Importar / Exportar</span>
-              </button>
-
-              <button
-                onClick={onOpenShortcuts}
-                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl hover:bg-black/[0.03] dark:hover:bg-white/[0.05] text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 font-medium transition cursor-pointer text-left"
-              >
-                <Keyboard size={15} weight="duotone" className="text-neutral-700 dark:text-neutral-300 shrink-0" />
-                <span>Atajos de teclado</span>
-              </button>
-
-              <button
-                onClick={onOpenTrash}
-                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/30 text-neutral-600 dark:text-neutral-400 hover:text-rose-600 dark:hover:text-rose-400 font-medium transition cursor-pointer text-left"
-              >
-                <Trash size={15} weight="duotone" className="text-neutral-700 dark:text-neutral-300 group-hover:text-rose-500 shrink-0" />
-                <span>Papelera</span>
-              </button>
             </div>
           )}
         </div>
-      </div>
 
-      {/* 7. Footer: Sync Status, Dark Mode Toggle & Bottom Controls */}
-      <div className="p-3 border-t border-black/[0.04] dark:border-white/[0.06] flex items-center justify-between text-neutral-500 shrink-0">
-        {/* Sync Status indicator */}
-        <div className="flex items-center gap-2 text-[11px] font-medium">
-          {syncStatus?.state === 'syncing' ? (
-            <ArrowsClockwise size={15} weight="duotone" className="text-blue-500 animate-spin" />
-          ) : syncStatus?.state === 'error' ? (
-            <CloudSlash size={15} weight="duotone" className="text-rose-500" />
-          ) : syncStatus?.state === 'offline' ? (
-            <CloudSlash size={15} weight="duotone" className="text-amber-500" />
-          ) : (
-            <CloudCheck size={15} weight="duotone" className="text-emerald-500" />
-          )}
-          <span className="capitalize">
-            {syncStatus?.state === 'syncing'
-              ? 'Sincronizando'
-              : syncStatus?.state === 'error'
-              ? 'Error'
-              : syncStatus?.state === 'offline'
-              ? 'Offline'
-              : syncStatus?.state === 'unconfigured'
-              ? 'Local (Offline)'
-              : 'Sincronizado'}
-          </span>
-        </div>
 
-        {/* Controls: Dark mode, Account & Settings */}
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={onToggleDarkMode}
-            className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-black/[0.05] dark:hover:bg-white/[0.08] text-neutral-600 dark:text-neutral-300 transition cursor-pointer"
-            title={darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-          >
-            {darkMode ? <Sun size={15} weight="duotone" /> : <Moon size={15} weight="duotone" />}
-          </button>
-
-          <TeamMemberSwitcher
-            variant="circular"
-            popoverDirection="up"
-            currentMember={activeMember}
-            onSelectMember={(id) => onSelectMember && onSelectMember(id)}
-            privateNotesCount={privateDocs.length}
-            authUser={authUser}
-            onOpenAuthModal={onOpenAuthModal}
-            onOpenProfileModal={onOpenProfileModal}
-            onOpenUserManagementModal={onOpenUserManagementModal}
-            onSignOut={onSignOut}
-          />
-
-          <button
-            onClick={onOpenSettings}
-            className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-black/[0.05] dark:hover:bg-white/[0.08] text-neutral-600 dark:text-neutral-300 transition cursor-pointer"
-            title="Ajustes de la aplicación"
-          >
-            <Gear size={15} weight="duotone" />
-          </button>
-        </div>
       </div>
 
       {/* Apple Emoji Picker Modal for Spaces and Documents (Rendered in Portal to avoid clipping) */}
@@ -2375,6 +2602,243 @@ export function Sidebar({
           isResizing ? 'bg-blue-500' : 'group-hover:bg-blue-500/60 bg-transparent'
         }`} />
       </div>
+
+      {/* Obsidian-Style Context / Dropdown Menu for Notes & Folders */}
+      {activeItemMenu && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed z-[99999] bg-[#252525] dark:bg-[#202020] border border-white/[0.08] text-[var(--app-text-primary)] rounded-xl shadow-2xl p-1 text-xs select-none w-52 animate-in fade-in zoom-in-95 duration-75"
+          style={{
+            left: `${Math.min(activeItemMenu.x, window.innerWidth - 220)}px`,
+            top: `${Math.min(activeItemMenu.y, window.innerHeight - 340)}px`
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {activeItemMenu.type === 'folder' ? (
+            /* FOLDER ACTIONS (Identical to user's photo!) */
+            <div className="space-y-0.5">
+              <button
+                onClick={() => {
+                  if (activeItemMenu.path) {
+                    handleCreateWorkspace(null, activeItemMenu.path, 'doc', false)
+                  }
+                  setActiveItemMenu(null)
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-white/10 text-left transition cursor-pointer"
+              >
+                <PencilSimple size={15} />
+                <span>Nueva nota</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (activeItemMenu.path) {
+                    setCreatingSubfolderParent(activeItemMenu.path)
+                    setFolderOpenMap((prev) => ({ ...prev, [activeItemMenu.path!]: true }))
+                    setNewSubfolderName('')
+                  }
+                  setActiveItemMenu(null)
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-white/10 text-left transition cursor-pointer"
+              >
+                <Folder size={15} />
+                <span>Nueva carpeta</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (activeItemMenu.path) {
+                    handleCreateWorkspace(null, activeItemMenu.path, 'canvas', false)
+                  }
+                  setActiveItemMenu(null)
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-white/10 text-left transition cursor-pointer"
+              >
+                <Kanban size={15} />
+                <span>Nuevo lienzo</span>
+              </button>
+
+              <div className="h-px bg-white/[0.06] my-1" />
+
+              <div className="px-3 pt-1 pb-1.5">
+                <div className="text-[10px] text-white/40 mb-1.5">Color de carpeta</div>
+                <div className="grid grid-cols-9 gap-1">
+                  {FOLDER_PALETTE.map((c, i) => {
+                    const path = activeItemMenu.path || ''
+                    const current = folderColors[path] ?? folderColorIndex(path)
+                    return (
+                      <button
+                        key={c.label}
+                        title={c.label}
+                        onClick={() => {
+                          if (activeItemMenu.path) setFolderColor(activeItemMenu.path, i)
+                        }}
+                        className={`w-4 h-4 rounded-full border transition hover:scale-110 cursor-pointer ${
+                          current === i ? 'ring-2 ring-white/80 ring-offset-1 ring-offset-[#252525]' : ''
+                        }`}
+                        style={{ background: c.bottom, borderColor: c.stroke }}
+                      />
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="h-px bg-white/[0.06] my-1" />
+
+              <button
+                onClick={() => {
+                  if (activeItemMenu.path) {
+                    navigator.clipboard.writeText(activeItemMenu.path)
+                    toast.success('Ruta de carpeta copiada')
+                  }
+                  setActiveItemMenu(null)
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-white/10 text-left transition cursor-pointer"
+              >
+                <Copy size={15} />
+                <span>Copiar ruta</span>
+              </button>
+
+              <div className="h-px bg-white/[0.06] my-1" />
+
+              <button
+                onClick={() => {
+                  if (activeItemMenu.path && activeItemMenu.name) {
+                    const newName = prompt(`Renombrar carpeta "${activeItemMenu.name}":`, activeItemMenu.name)
+                    if (newName) handleRenameFolder(activeItemMenu.path, newName)
+                  }
+                  setActiveItemMenu(null)
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-white/10 text-left transition cursor-pointer"
+              >
+                <PencilSimple size={15} />
+                <span>Renombrar</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (activeItemMenu.path) {
+                    handleDeleteFolder(activeItemMenu.path)
+                  }
+                  setActiveItemMenu(null)
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-rose-500/20 text-rose-400 text-left transition cursor-pointer"
+              >
+                <Trash size={15} />
+                <span>Borrar</span>
+              </button>
+            </div>
+          ) : (
+            /* NOTE / DOCUMENT ACTIONS (Obsidian Style) */
+            <div className="space-y-0.5">
+              <button
+                onClick={() => {
+                  if (activeItemMenu.id) {
+                    onSelectWorkspace(activeItemMenu.id)
+                  }
+                  setActiveItemMenu(null)
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-white/10 text-left transition cursor-pointer"
+              >
+                <ArrowSquareOut size={15} />
+                <span>Abrir nota</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (activeItemMenu.id) {
+                    handleDuplicateWorkspace(activeItemMenu.id)
+                  }
+                  setActiveItemMenu(null)
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-white/10 text-left transition cursor-pointer"
+              >
+                <Copy size={15} />
+                <span>Hacer una copia</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  const doc = workspaces.find((w) => w.id === activeItemMenu.id)
+                  if (doc) {
+                    handleToggleFavorite({ stopPropagation: () => {} } as any, doc)
+                    toast.success(doc.isFavorite ? 'Quitado de favoritos' : 'Añadido a favoritos')
+                  }
+                  setActiveItemMenu(null)
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-white/10 text-left transition cursor-pointer"
+              >
+                <Star size={15} />
+                <span>Marcar favorito</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  const doc = workspaces.find((w) => w.id === activeItemMenu.id)
+                  if (doc) {
+                    handleTogglePrivateWorkspace({ stopPropagation: () => {} } as any, doc)
+                  }
+                  setActiveItemMenu(null)
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-white/10 text-left transition cursor-pointer"
+              >
+                <Lock size={15} />
+                <span>{activeItemMenu.isPrivate ? 'Hacer pública (Equipo)' : 'Hacer privada (Solo tú)'}</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (activeItemMenu.id) {
+                    setEmojiPickerTarget({ id: activeItemMenu.id, type: 'doc' })
+                  }
+                  setActiveItemMenu(null)
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-white/10 text-left transition cursor-pointer"
+              >
+                <Tag size={15} />
+                <span>Cambiar icono...</span>
+              </button>
+
+              <div className="h-px bg-white/[0.06] my-1" />
+
+              <button
+                onClick={() => {
+                  if (activeItemMenu.id) {
+                    const currentTitle = activeItemMenu.name || 'Untitled'
+                    const newTitle = prompt('Renombrar nota:', currentTitle)
+                    if (newTitle && newTitle.trim()) {
+                      db.workspaces.update(activeItemMenu.id, {
+                        title: newTitle.trim(),
+                        updatedAt: Date.now(),
+                        syncStatus: 'pending'
+                      })
+                      syncEngine.scheduleSync(500)
+                    }
+                  }
+                  setActiveItemMenu(null)
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-white/10 text-left transition cursor-pointer"
+              >
+                <PencilSimple size={15} />
+                <span>Renombrar</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (activeItemMenu.id) {
+                    handleDeleteWorkspace({ stopPropagation: () => {} } as any, activeItemMenu.id)
+                  }
+                  setActiveItemMenu(null)
+                }}
+                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-rose-500/20 text-rose-400 text-left transition cursor-pointer"
+              >
+                <Trash size={15} />
+                <span>Borrar</span>
+              </button>
+            </div>
+          )}
+        </div>,
+        document.body
+      )}
     </aside>
   )
 }

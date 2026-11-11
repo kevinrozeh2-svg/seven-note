@@ -3,8 +3,7 @@
 @import "./theme/affine-theme.css";
 
 /* ==========================================================================
-   Seven Note Design System (Notion & Milanote Human-Crafted Aesthetic)
-   Specification: DESIGN.md (VoltAgent/awesome-design-md + Notion / Milanote UI)
+   Seven Note Design System (Obsidian Minimalist Stealth & Zen Aesthetic)
    ========================================================================== */
 
 @layer base {
@@ -16,34 +15,38 @@
     --app-font-serif: Lyon-Text, Georgia, YuMincho, "Yu Mincho", "Hiragino Mincho ProN", "Songti TC", serif;
     --app-font-mono: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 
-    /* Notion Warm Neutrals (Light Mode) */
+    /* Obsidian Clean Neutrals (Light Mode) */
     --app-bg-primary: #ffffff;
-    --app-bg-secondary: #fbfbfa; /* Notion iconic warm ivory paper sidebar */
-    --app-bg-tertiary: #f7f6f5;  /* Subtle inset / cards */
-    --app-bg-overlay: #ffffff;   /* Popovers and modals */
-    --app-bg-canvas: #f0f0ee;    /* Milanote authentic warm paper canvas */
+    --app-bg-secondary: #fbfbfa;
+    --app-bg-tertiary: #f4f4f5;
+    --app-bg-overlay: #ffffff;
+    --app-bg-canvas: #f0f0ee;
 
-    /* Notion Ink (Near-black for reduced eye-strain) */
-    --app-text-primary: #37352f;
-    --app-text-secondary: #787774;
-    --app-text-muted: #9b9a97;
-    --app-text-disabled: #b7b5b0;
+    --obsidian-ribbon-bg: #ececec;
+    --obsidian-sidebar-bg: #f8f8f8;
+    --obsidian-editor-bg: #ffffff;
+
+    /* Obsidian Ink */
+    --app-text-primary: #2e3338;
+    --app-text-secondary: #5c6370;
+    --app-text-muted: #828997;
+    --app-text-disabled: #abb2bf;
 
     /* Borders & Dividers */
-    --app-border: rgba(55, 53, 47, 0.09);
-    --app-border-strong: rgba(55, 53, 47, 0.16);
-    --app-divider: rgba(55, 53, 47, 0.09);
+    --app-border: rgba(0, 0, 0, 0.07);
+    --app-border-strong: rgba(0, 0, 0, 0.12);
+    --app-divider: rgba(0, 0, 0, 0.06);
 
     /* States */
-    --app-hover: rgba(55, 53, 47, 0.055);
+    --app-hover: rgba(0, 0, 0, 0.04);
     --app-hover-filled: #f1f1ef;
-    --app-active: rgba(55, 53, 47, 0.09);
+    --app-active: rgba(0, 0, 0, 0.08);
 
     /* Accents */
-    --app-accent: #2383e2; /* Notion Blue */
-    --app-accent-hover: #1c73c8;
-    --app-accent-soft: rgba(35, 131, 226, 0.12);
-    --app-brand-purple: #5645d4;
+    --app-accent: #7c3aed; /* Obsidian Purple */
+    --app-accent-hover: #6d28d9;
+    --app-accent-soft: rgba(124, 58, 237, 0.12);
+    --app-brand-purple: #7c3aed;
 
     /* Milanote Physical Shadows (No AI-glow) */
     --app-shadow-card: 0 1px 3px rgba(15, 15, 15, 0.06), 0 1px 2px rgba(15, 15, 15, 0.04);
@@ -123,38 +126,42 @@
     text-rendering: optimizeLegibility;
   }
 
-  /* Dark Theme (Warm Charcoal, Notion / Milanote dark aesthetic) */
+  /* Dark Theme (Obsidian Minimalist Stealth Palette) */
   html.dark, html[data-theme="dark"], .dark {
     color-scheme: dark;
-    --app-bg-primary: #191919;
-    --app-bg-secondary: #202020;
-    --app-bg-tertiary: #262626;
-    --app-bg-overlay: #2c2c2c;
-    --app-bg-canvas: #191919;
+    --app-bg-primary: #1e1e1e;   /* Obsidian main note editor dark background */
+    --app-bg-secondary: #181818; /* Obsidian sidebar / file explorer dark background */
+    --app-bg-tertiary: #141414;  /* Deep ribbon / secondary surface */
+    --app-bg-overlay: #252525;   /* Popovers and modals */
+    --app-bg-canvas: #161616;
 
-    --app-text-primary: #e6e6e5;
-    --app-text-secondary: #9b9b9b;
-    --app-text-muted: #666666;
-    --app-text-disabled: #525252;
+    --obsidian-ribbon-bg: #141414;
+    --obsidian-sidebar-bg: #181818;
+    --obsidian-editor-bg: #1e1e1e;
 
-    --app-border: rgba(255, 255, 255, 0.08);
-    --app-border-strong: rgba(255, 255, 255, 0.15);
-    --app-divider: rgba(255, 255, 255, 0.08);
+    --app-text-primary: #dcddde;  /* Chalk-soft white text (Obsidian standard) */
+    --app-text-secondary: #8e8e8e;
+    --app-text-muted: #6b6b6b;
+    --app-text-disabled: #4a4a4a;
 
-    --app-hover: rgba(255, 255, 255, 0.055);
-    --app-hover-filled: #2a2a2a;
-    --app-active: rgba(255, 255, 255, 0.1);
+    --app-border: rgba(255, 255, 255, 0.05); /* Ultra-fine hairline border */
+    --app-border-strong: rgba(255, 255, 255, 0.10);
+    --app-divider: rgba(255, 255, 255, 0.05);
 
-    --app-accent: #2e8eea;
-    --app-accent-hover: #489bf2;
-    --app-accent-soft: rgba(46, 142, 234, 0.18);
+    --app-hover: rgba(255, 255, 255, 0.05);
+    --app-hover-filled: #262626;
+    --app-active: rgba(255, 255, 255, 0.08);
 
-    --app-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
-    --app-shadow-card-hover: 0 4px 14px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.2);
-    --app-shadow-popover: 0 6px 24px rgba(0, 0, 0, 0.5), 0 1px 4px rgba(0, 0, 0, 0.3);
-    --app-shadow-dock: 0 8px 28px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.3);
+    --app-accent: #7c3aed;       /* Obsidian Purple */
+    --app-accent-hover: #9061f9;
+    --app-accent-soft: rgba(124, 58, 237, 0.18);
 
-    --app-canvas-dot: #2a2a2a;
+    --app-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
+    --app-shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.45);
+    --app-shadow-popover: 0 8px 24px rgba(0, 0, 0, 0.6);
+    --app-shadow-dock: 0 8px 28px rgba(0, 0, 0, 0.65);
+
+    --app-canvas-dot: #252525;
 
     /* Legacy affine bindings */
     --affine-theme-mode: dark;
@@ -706,6 +713,128 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
   -ms-overflow-style: none !important;
   scrollbar-width: none !important;
 }
+
+/* ========================================================
+   ESTILOS DE IMPRESIÓN / EXPORTACIÓN A PDF PROFESIONAL
+   ======================================================== */
+@media print {
+  /* Ocultar elementos de interfaz de usuario */
+  aside,
+  header,
+  nav,
+  .affine-toolbar-dock,
+  .react-flow__controls,
+  .react-flow__minimap,
+  .react-flow__panel,
+  [data-sonner-toaster],
+  .no-print,
+  button,
+  .custom-dropdown {
+    display: none !important;
+  }
+
+  html,
+  body {
+    overflow: visible !important;
+    background: #ffffff !important;
+    color: #111111 !important;
+    height: auto !important;
+    font-size: 12pt !important;
+  }
+
+  main {
+    overflow: visible !important;
+    height: auto !important;
+    display: block !important;
+  }
+
+  .ProseMirror {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    color: #111111 !important;
+  }
+
+  /* Evitar saltos de página huérfanos */
+  h1, h2, h3, h4, blockquote, pre {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  img, table, figure {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+}
+
+/* ==========================================================================
+   Tactile Pill UI (Modern Violet & Dark Capsule Styles)
+   ========================================================================== */
+.pill-capsule-bar {
+  background-color: rgba(28, 28, 31, 0.94);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.btn-pill-purple {
+  background-color: #7c5cfc;
+  color: #ffffff !important;
+  border-radius: 9999px;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(124, 92, 252, 0.35);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-pill-purple:hover {
+  background-color: #6c4be8;
+  box-shadow: 0 6px 20px rgba(124, 92, 252, 0.45);
+  transform: translateY(-0.5px);
+}
+
+.btn-pill-purple:active {
+  background-color: #5e3dd9;
+  transform: scale(0.96);
+}
+
+.btn-pill-dark {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #f4f4f5;
+  border-radius: 9999px;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-pill-dark:hover {
+  background-color: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+}
+
+.btn-pill-dark:active {
+  transform: scale(0.96);
+}
+
+.btn-pill-circle {
+  border-radius: 9999px;
+  background-color: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-pill-circle:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+.btn-pill-circle:active {
+  transform: scale(0.92);
+}
+
+
 
 
 

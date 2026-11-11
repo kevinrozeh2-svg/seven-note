@@ -217,3 +217,15 @@ export function copyAsPlainText(html: string) {
   navigator.clipboard.writeText(text.trim())
   toast.success('Texto plano copiado al portapapeles')
 }
+
+/**
+ * Print or Save document as clean PDF using browser print
+ */
+export function printDocument() {
+  if (typeof window !== 'undefined') {
+    toast.info('Preparando documento para imprimir / guardar como PDF...')
+    setTimeout(() => {
+      window.print()
+    }, 250)
+  }
+}

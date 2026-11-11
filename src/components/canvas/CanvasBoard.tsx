@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useRef, memo } from 'react'
+import { useCallback, useEffect, useState, useRef, memo, lazy, Suspense } from 'react'
 import {
   ReactFlow,
   Background,
@@ -70,7 +70,7 @@ import {
 } from '@blocksuite/icons/rc'
 import { db, type CanvasNodeType, type WorkspaceItem } from '../../db'
 import { syncEngine } from '../../lib/syncEngine'
-import { TemplatesModal } from '../modals/TemplatesModal'
+const TemplatesModal = lazy(() => import('../modals/TemplatesModal').then(m => ({ default: m.TemplatesModal })))
 import { type AppTemplate } from '../../lib/templates'
 import { toast } from 'sonner'
 import {
@@ -2072,7 +2072,7 @@ function CanvasBoardInner({
 
         {showMiniMap && (
           <MiniMap
-            className="!bg-[var(--app-bg-overlay)] !border-[var(--app-border)] rounded-lg shadow-[var(--app-shadow-popover)]"
+            className="hidden sm:block !bg-[var(--app-bg-overlay)] !border-[var(--app-border)] rounded-lg shadow-[var(--app-shadow-popover)]"
             nodeColor="var(--app-accent)"
             maskColor="rgba(0, 0, 0, 0.3)"
           />
@@ -2160,7 +2160,7 @@ function CanvasBoardInner({
 
         {/* Milanote Left Tool Palette (Phosphor Icons Dock) */}
         {!readOnly && (
-          <Panel position="top-left" className="ml-3 mt-3 z-30">
+          <Panel position="top-left" style={{ top: '48px' }} className="ml-3 z-30">
             <MilanoteToolbar
               onAddNode={addNewNode}
               onToggleTool={(t: string) => setActiveTool(activeTool === t ? 'select' : (t as any))}
@@ -2825,84 +2825,115 @@ function CanvasBoardInner({
         </Panel>
 
         {/* Templates Gallery Modal (AFFiNE Edgeless Templates) */}
-        <TemplatesModal
-          isOpen={isTemplatesOpen}
-          defaultCategory="Tableros Edgeless"
-          onClose={() => setTemplatesOpen(false)}
-          onSelectTemplate={(tpl) => {
-            applyTemplate(tpl)
-            setTemplatesOpen(false)
-          }}
-        />
+        {isTemplatesOpen && (
+          <Suspense fallback={null}>
+            <TemplatesModal
+              isOpen={isTemplatesOpen}
+              defaultCategory="Tableros Edgeless"
+              onClose={() => setTemplatesOpen(false)}
+              onSelectTemplate={(tpl) => {
+                applyTemplate(tpl)
+                setTemplatesOpen(false)
+              }}
+            />
+          </Suspense>
+        )}
 
-        {/* Floating Multi-Selection Alignment Toolbar */}
+        {/* Floating Multi-Selection Alignment Toolbar (Modern Violet Pill Style) */}
         {nodes.filter((n) => n.selected).length >= 2 && (
-          <Panel position="top-center" className="mt-3 z-30">
-            <div className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white/90 dark:bg-[#1a1b1e]/90 border border-black/[0.08] dark:border-white/[0.1] rounded-full shadow-2xl text-xs backdrop-blur-2xl text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 duration-100">
-              <span className="text-[11px] font-bold text-neutral-400 dark:text-neutral-500 mr-1">
-                {nodes.filter((n) => n.selected).length} seleccionados:
-              </span>
+          <Panel position="top-center" style={{ top: '48px' }} className="z-30">
+            <div className="pill-capsule-bar flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 py-1.5 text-xs text-white select-none animate-in fade-in zoom-in-95 duration-150">
+              {/* Primary Purple Pill Action */}
+              <button
+                onClick={handleAutoLayoutNodes}
+                className="btn-pill-purple px-3.5 sm:px-4 py-1.5 text-xs sm:text-[13px] flex items-center gap-1.5 cursor-pointer shadow-md"
+                title="Auto-organizar elementos seleccionados"
+              >
+                <TreeStructure size={14} weight="bold" />
+                <span>Auto-organizar</span>
+              </button>
+
+              {/* Dark Pill Badge with Count & Trash */}
+              <button
+                onClick={deleteSelectedElements}
+                className="btn-pill-dark px-2.5 sm:px-3 py-1.5 text-xs flex items-center gap-1.5 font-semibold hover:!text-rose-400 hover:!bg-rose-500/20 cursor-pointer"
+                title="Eliminar elementos seleccionados (Supr / Delete)"
+              >
+                <span>{nodes.filter((n) => n.selected).length}</span>
+                <Trash size={14} weight="bold" />
+              </button>
+
+              {/* Close / Deselect Button */}
+              <button
+                onClick={() => setNodes((nds) => nds.map((n) => ({ ...n, selected: false })))}
+                className="btn-pill-circle w-7 h-7 cursor-pointer"
+                title="Deseleccionar todos (Esc)"
+              >
+                <X size={13} weight="bold" />
+              </button>
+
+              <div className="w-[1px] h-4 bg-white/15 mx-0.5 sm:mx-1 shrink-0" />
 
               {/* Horizontal alignments */}
               <button
                 onClick={() => alignSelectedNodes('left')}
-                className="p-1.5 rounded-full hover:bg-black/[0.06] dark:hover:bg-white/[0.1] transition text-neutral-600 dark:text-neutral-300 active:scale-95 cursor-pointer"
+                className="p-1.5 rounded-full hover:bg-white/15 text-white/75 hover:text-white transition active:scale-95 cursor-pointer"
                 title="Alinear a la izquierda"
               >
-                <AlignLeft size={16} weight="duotone" />
+                <AlignLeft size={15} weight="duotone" />
               </button>
               <button
                 onClick={() => alignSelectedNodes('center')}
-                className="p-1.5 rounded-full hover:bg-black/[0.06] dark:hover:bg-white/[0.1] transition text-neutral-600 dark:text-neutral-300 active:scale-95 cursor-pointer"
+                className="p-1.5 rounded-full hover:bg-white/15 text-white/75 hover:text-white transition active:scale-95 cursor-pointer"
                 title="Centrar horizontalmente"
               >
-                <AlignCenterHorizontal size={16} weight="duotone" />
+                <AlignCenterHorizontal size={15} weight="duotone" />
               </button>
               <button
                 onClick={() => alignSelectedNodes('right')}
-                className="p-1.5 rounded-full hover:bg-black/[0.06] dark:hover:bg-white/[0.1] transition text-neutral-600 dark:text-neutral-300 active:scale-95 cursor-pointer"
+                className="p-1.5 rounded-full hover:bg-white/15 text-white/75 hover:text-white transition active:scale-95 cursor-pointer"
                 title="Alinear a la derecha"
               >
-                <AlignRight size={16} weight="duotone" />
+                <AlignRight size={15} weight="duotone" />
               </button>
               <button
                 onClick={() => alignSelectedNodes('distribute-h')}
-                className="p-1.5 rounded-full hover:bg-black/[0.06] dark:hover:bg-white/[0.1] transition text-neutral-600 dark:text-neutral-300 active:scale-95 cursor-pointer"
+                className="p-1.5 rounded-full hover:bg-white/15 text-white/75 hover:text-white transition active:scale-95 cursor-pointer"
                 title="Distribuir horizontalmente"
               >
-                <Columns size={16} weight="duotone" />
+                <Columns size={15} weight="duotone" />
               </button>
 
-              <div className="w-[1px] h-3.5 bg-black/[0.08] dark:bg-white/[0.1] mx-0.5" />
+              <div className="w-[1px] h-3.5 bg-white/15 mx-0.5 shrink-0" />
 
               {/* Vertical alignments */}
               <button
                 onClick={() => alignSelectedNodes('top')}
-                className="p-1.5 rounded-full hover:bg-black/[0.06] dark:hover:bg-white/[0.1] transition text-neutral-600 dark:text-neutral-300 active:scale-95 cursor-pointer"
+                className="p-1.5 rounded-full hover:bg-white/15 text-white/75 hover:text-white transition active:scale-95 cursor-pointer"
                 title="Alinear arriba"
               >
-                <AlignTop size={16} weight="duotone" />
+                <AlignTop size={15} weight="duotone" />
               </button>
               <button
                 onClick={() => alignSelectedNodes('middle')}
-                className="p-1.5 rounded-full hover:bg-black/[0.06] dark:hover:bg-white/[0.1] transition text-neutral-600 dark:text-neutral-300 active:scale-95 cursor-pointer"
+                className="p-1.5 rounded-full hover:bg-white/15 text-white/75 hover:text-white transition active:scale-95 cursor-pointer"
                 title="Centrar verticalmente"
               >
-                <AlignCenterVertical size={16} weight="duotone" />
+                <AlignCenterVertical size={15} weight="duotone" />
               </button>
               <button
                 onClick={() => alignSelectedNodes('bottom')}
-                className="p-1.5 rounded-full hover:bg-black/[0.06] dark:hover:bg-white/[0.1] transition text-neutral-600 dark:text-neutral-300 active:scale-95 cursor-pointer"
+                className="p-1.5 rounded-full hover:bg-white/15 text-white/75 hover:text-white transition active:scale-95 cursor-pointer"
                 title="Alinear abajo"
               >
-                <AlignBottom size={16} weight="duotone" />
+                <AlignBottom size={15} weight="duotone" />
               </button>
               <button
                 onClick={() => alignSelectedNodes('distribute-v')}
-                className="p-1.5 rounded-full hover:bg-black/[0.06] dark:hover:bg-white/[0.1] transition text-neutral-600 dark:text-neutral-300 active:scale-95 cursor-pointer"
+                className="p-1.5 rounded-full hover:bg-white/15 text-white/75 hover:text-white transition active:scale-95 cursor-pointer"
                 title="Distribuir verticalmente"
               >
-                <Rows size={16} weight="duotone" />
+                <Rows size={15} weight="duotone" />
               </button>
             </div>
           </Panel>
@@ -2910,7 +2941,7 @@ function CanvasBoardInner({
 
         {/* Floating Active Connector Tool Banner */}
         {activeTool === 'connector' && (
-          <Panel position="top-center" className="mt-3 z-30">
+          <Panel position="top-center" style={{ top: '48px' }} className="z-30">
             <div className="flex items-center gap-2.5 px-4 py-2 bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] rounded-full shadow-2xl text-xs backdrop-blur-2xl text-[var(--app-text-primary)]">
               <StraightLineIcon className="w-4 h-4 text-blue-500 animate-pulse" />
               <span className="font-semibold text-blue-600 dark:text-blue-400">
@@ -2993,7 +3024,7 @@ function CanvasBoardInner({
 
         {/* Floating Active Laser Pointer Banner */}
         {activeTool === 'laser' && (
-          <Panel position="top-center" className="mt-3 z-30">
+          <Panel position="top-center" style={{ top: '48px' }} className="z-30">
             <div className="flex items-center gap-2.5 px-4 py-2 bg-neutral-950/85 border border-rose-500/30 rounded-full shadow-2xl text-xs backdrop-blur-2xl text-rose-200 animate-in fade-in duration-100">
               <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping mr-1" />
               <span className="font-semibold text-white">Puntero Láser Activo</span>
@@ -3013,7 +3044,7 @@ function CanvasBoardInner({
 
         {/* Floating Active Drawing Tool Controls Banner */}
         {isDrawingTool && (
-          <Panel position="top-center" className="mt-3 z-30">
+          <Panel position="top-center" style={{ top: '48px' }} className="z-30">
             <div className="flex items-center gap-2.5 px-4 py-2 bg-white/90 dark:bg-[#1a1b1e]/90 border border-black/[0.08] dark:border-white/[0.1] rounded-full shadow-2xl text-xs backdrop-blur-2xl text-[var(--app-text-primary)]">
               {activeTool === 'eraser' ? (
                 <>

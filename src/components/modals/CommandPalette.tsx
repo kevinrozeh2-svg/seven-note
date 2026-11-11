@@ -57,7 +57,6 @@ export function CommandPalette({
   const toggleDarkMode = onToggleDarkMode ?? store.toggleDarkMode
   const {
     setSettingsOpen,
-    setTrashOpen,
     setShortcutsOpen,
     setImportOpen
   } = store
@@ -248,7 +247,23 @@ export function CommandPalette({
 
                   <Command.Item
                     onSelect={() => {
-                      setTrashOpen(true)
+                      onClose()
+                      window.dispatchEvent(new CustomEvent('seven-note-open-quick-capture'))
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-2xl text-left cursor-pointer transition text-xs text-[var(--app-text-primary)] data-[selected=true]:bg-black/[0.05] dark:data-[selected=true]:bg-white/[0.08] active:scale-[0.99]"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-amber-500">⚡</span>
+                      <span className="font-medium">Captura Rápida (Sticky Note)</span>
+                    </div>
+                    <span className="text-[10px] text-neutral-400 bg-black/[0.04] dark:bg-white/[0.06] px-2 py-0.5 rounded-full border border-black/[0.04] dark:border-white/[0.06]">
+                      Alt N
+                    </span>
+                  </Command.Item>
+
+                  <Command.Item
+                    onSelect={() => {
+                      window.dispatchEvent(new CustomEvent('seven-note-navigate-workspace', { detail: { viewType: 'trash', title: 'Papelera' } }))
                       onClose()
                     }}
                     className="w-full flex items-center justify-between px-3 py-2 rounded-2xl text-left cursor-pointer transition text-xs text-[var(--app-text-primary)] data-[selected=true]:bg-black/[0.05] dark:data-[selected=true]:bg-white/[0.08] active:scale-[0.99]"

@@ -1,4 +1,5 @@
 import Dexie, { type Table } from 'dexie'
+import { getSupabaseClient } from '../lib/supabase'
 
 export type ViewMode = 'doc' | 'canvas' | 'split'
 export type SyncStatus = 'synced' | 'pending' | 'failed'
@@ -381,6 +382,9 @@ export async function cleanupLegacyTemplatePresets() {
   }
 }
 
+// Key to track whether initial demo data was seeded once, preventing resurrecting deleted spaces
+const DEMO_SEEDED_KEY = 'seven_note_demo_seeded_v1'
+
 // Seed default initial data if database is empty
 let isSeeding = false
 
@@ -390,8 +394,10 @@ export async function seedInitialData() {
   try {
     await cleanupLegacyTemplatePresets()
 
+    // If already seeded previously, do not recreate deleted demo spaces
+    const alreadySeeded = typeof localStorage !== 'undefined' ? localStorage.getItem(DEMO_SEEDED_KEY) : null
     const spaceCount = await db.spaces.count()
-    if (spaceCount === 0) {
+    if (spaceCount === 0 && !alreadySeeded) {
       await db.spaces.put({
         id: DEFAULT_SPACE_ID,
         name: 'Demo Workspace',
@@ -401,6 +407,9 @@ export async function seedInitialData() {
         updatedAt: Date.now(),
         syncStatus: 'synced'
       }).catch(() => {})
+      if (typeof localStorage !== 'undefined') localStorage.setItem(DEMO_SEEDED_KEY, 'true')
+    } else if (spaceCount > 0 && typeof localStorage !== 'undefined') {
+      localStorage.setItem(DEMO_SEEDED_KEY, 'true')
     }
 
   // Ensure any existing workspaces without spaceId are attributed to DEFAULT_SPACE_ID
@@ -415,7 +424,7 @@ export async function seedInitialData() {
   }
 
   const count = await db.workspaces.count()
-  if (count > 0) return
+  if (count > 0 || alreadySeeded) return
 
   const now = Date.now()
   const rootWorkspaceId = 'welcome-workspace'
@@ -795,12 +804,41 @@ export async function updateSpace(id: string, updates: Partial<SpaceItem>): Prom
 
 export async function deleteSpace(id: string): Promise<void> {
   const pages = await db.workspaces.where('spaceId').equals(id).toArray()
-  for (const page of pages) {
-    await db.canvasNodes.where('workspaceId').equals(page.id).delete()
-    await db.canvasEdges.where('workspaceId').equals(page.id).delete()
+  const pageIds = pages.map((p) => p.id)
+
+  // 1. Si Supabase está conectado, eliminar o marcar en la nube para que no resucite
+  const supabase = getSupabaseClient()
+  if (supabase) {
+    try {
+      if (pageIds.length > 0) {
+        await Promise.allSettled([
+          supabase.from('seven_canvas_nodes').delete().in('workspace_id', pageIds),
+          supabase.from('seven_canvas_edges').delete().in('workspace_id', pageIds),
+          supabase.from('seven_workspaces').delete().in('id', pageIds),
+          // También marcamos is_deleted por si las políticas RLS previenen DELETE
+          supabase.from('seven_workspaces').update({ is_deleted: true, updated_at: Date.now() }).in('id', pageIds)
+        ])
+      }
+      await Promise.allSettled([
+        supabase.from('seven_collections').delete().eq('space_id', id),
+        supabase.from('seven_tags').delete().eq('space_id', id),
+        supabase.from('seven_spaces').delete().eq('id', id),
+        supabase.from('seven_spaces').update({ is_deleted: true, updated_at: Date.now() }).eq('id', id)
+      ])
+    } catch (err) {
+      console.warn('Error purging space from Supabase:', err)
+    }
   }
-  await db.workspaces.where('spaceId').equals(id).delete()
-  await db.spaces.delete(id)
+
+  // 2. Limpiar en local (IndexedDB)
+  for (const pageId of pageIds) {
+    await db.canvasNodes.where('workspaceId').equals(pageId).delete().catch(() => {})
+    await db.canvasEdges.where('workspaceId').equals(pageId).delete().catch(() => {})
+  }
+  await db.workspaces.where('spaceId').equals(id).delete().catch(() => {})
+  await db.collections.where('spaceId').equals(id).delete().catch(() => {})
+  await db.tags.where('spaceId').equals(id).delete().catch(() => {})
+  await db.spaces.delete(id).catch(() => {})
 }
 
 // Collections helpers

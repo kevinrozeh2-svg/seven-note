@@ -227,15 +227,31 @@ export function WorkbenchTabs({
   })
 
   return (
-    <div className="h-9 border-b border-[var(--app-border)] bg-[var(--app-bg-secondary)] px-1.5 flex items-center justify-between shrink-0 select-none z-30 relative">
+    <div className="h-9 border-b border-[var(--app-border)] bg-[var(--obsidian-sidebar-bg,#181818)] px-1.5 flex items-center justify-between shrink-0 select-none z-30 relative">
+      {/* Navigation history arrows (Obsidian style) */}
+      <div className="hidden sm:flex items-center gap-0.5 mr-1 text-[var(--app-text-muted)]">
+        <button
+          onClick={() => window.history.back()}
+          className="w-6 h-6 rounded hover:bg-[var(--app-hover)] hover:text-[var(--app-text-primary)] flex items-center justify-center transition cursor-pointer"
+          title="Atrás"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={() => window.history.forward()}
+          className="w-6 h-6 rounded hover:bg-[var(--app-hover)] hover:text-[var(--app-text-primary)] flex items-center justify-center transition cursor-pointer"
+          title="Adelante"
+        >
+          <ChevronRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
       {/* Sidebar toggle button (visible on mobile or when sidebar is collapsed) */}
-      {onToggleSidebar && (
+      {onToggleSidebar && !sidebarOpen && (
         <button
           onClick={onToggleSidebar}
-          className={`w-6 h-6 rounded-md hover:bg-[var(--app-hover)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] flex items-center justify-center shrink-0 mr-1 transition cursor-pointer ${
-            sidebarOpen ? 'md:hidden' : ''
-          }`}
-          title="Alternar barra lateral"
+          className="w-6 h-6 rounded-md hover:bg-[var(--app-hover)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] flex items-center justify-center shrink-0 mr-1 transition cursor-pointer"
+          title="Mostrar explorador de notas (Ctrl+\)"
         >
           <PanelLeft className="w-3.5 h-3.5" />
         </button>
@@ -328,18 +344,18 @@ export function WorkbenchTabs({
                 e.stopPropagation()
                 setContextMenu({ x: e.clientX, y: e.clientY, tabId: tab.id })
               }}
-              className={`group flex items-center gap-1.5 px-2 sm:px-2.5 h-7 rounded-md text-xs cursor-pointer transition select-none min-w-[75px] sm:min-w-[90px] max-w-[130px] sm:max-w-[190px] flex-1 border ${
+              className={`group flex items-center gap-1.5 px-2.5 sm:px-3 h-7 rounded-t-md text-xs cursor-pointer transition select-none min-w-[75px] sm:min-w-[90px] max-w-[140px] sm:max-w-[200px] flex-1 border-t border-x ${
                 isDragging ? 'opacity-40 scale-[0.98]' : 'opacity-100'
               } ${
                 isOver && dragPosition === 'left'
-                  ? 'border-l-2 border-l-blue-500'
+                  ? 'border-l-2 border-l-purple-500'
                   : isOver && dragPosition === 'right'
-                  ? 'border-r-2 border-r-blue-500'
+                  ? 'border-r-2 border-r-purple-500'
                   : ''
               } ${
                 isActive
-                  ? 'bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] font-medium border-[var(--app-border)] shadow-xs'
-                  : 'border-transparent text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
+                  ? 'bg-[var(--obsidian-editor-bg,#1e1e1e)] text-[var(--app-text-primary)] font-medium border-[var(--app-border)] shadow-xs relative top-[1px]'
+                  : 'border-transparent text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
               }`}
               title={meta.title}
             >

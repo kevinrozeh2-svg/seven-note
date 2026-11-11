@@ -11,6 +11,10 @@ export interface ColorSwatchItem {
   name: string
 }
 
+function getRandomHexColor() {
+  return '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0').toUpperCase()
+}
+
 export const ColorPaletteNode = memo(({ id, data, selected }: any) => {
   const [swatches, setSwatches] = useState<ColorSwatchItem[]>(() => {
     if (data.swatches && Array.isArray(data.swatches)) return data.swatches
@@ -81,7 +85,7 @@ export const ColorPaletteNode = memo(({ id, data, selected }: any) => {
   }
 
   const addSwatch = () => {
-    const randomHex = '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0').toUpperCase()
+    const randomHex = getRandomHexColor()
     const newSwatch: ColorSwatchItem = {
       id: crypto.randomUUID(),
       hex: randomHex,

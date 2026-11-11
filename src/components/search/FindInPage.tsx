@@ -31,6 +31,23 @@ export function FindInPage({ isOpen, onClose }: FindInPageProps) {
   }, [])
 
   // Highlight matches in editor
+  const scrollToMatch = useCallback((index: number) => {
+    const editorEl = document.querySelector('.ProseMirror')
+    if (!editorEl) return
+    const marks = editorEl.querySelectorAll('mark.find-highlight')
+
+    marks.forEach((m, idx) => {
+      if (idx === index) {
+        m.classList.add('bg-amber-400', 'text-black', 'font-bold')
+        m.classList.remove('bg-amber-400/40')
+        m.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      } else {
+        m.classList.remove('bg-amber-400', 'text-black', 'font-bold')
+        m.classList.add('bg-amber-400/40')
+      }
+    })
+  }, [])
+
   const performSearch = useCallback(
     (term: string) => {
       clearHighlights()
@@ -101,39 +118,22 @@ export function FindInPage({ isOpen, onClose }: FindInPageProps) {
         setCurrentMatch(0)
       }
     },
-    [clearHighlights]
+    [clearHighlights, scrollToMatch]
   )
 
-  const scrollToMatch = (index: number) => {
-    const editorEl = document.querySelector('.ProseMirror')
-    if (!editorEl) return
-    const marks = editorEl.querySelectorAll('mark.find-highlight')
-
-    marks.forEach((m, idx) => {
-      if (idx === index) {
-        m.classList.add('bg-amber-400', 'text-black', 'font-bold')
-        m.classList.remove('bg-amber-400/40')
-        m.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      } else {
-        m.classList.remove('bg-amber-400', 'text-black', 'font-bold')
-        m.classList.add('bg-amber-400/40')
-      }
-    })
-  }
-
-  const handleNext = () => {
+  const handleNext = useCallback(() => {
     if (totalMatches === 0) return
     const next = currentMatch >= totalMatches ? 1 : currentMatch + 1
     setCurrentMatch(next)
     scrollToMatch(next - 1)
-  }
+  }, [totalMatches, currentMatch, scrollToMatch])
 
-  const handlePrev = () => {
+  const handlePrev = useCallback(() => {
     if (totalMatches === 0) return
     const prev = currentMatch <= 1 ? totalMatches : currentMatch - 1
     setCurrentMatch(prev)
     scrollToMatch(prev - 1)
-  }
+  }, [totalMatches, currentMatch, scrollToMatch])
 
   useEffect(() => {
     if (isOpen) {
@@ -167,7 +167,7 @@ export function FindInPage({ isOpen, onClose }: FindInPageProps) {
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, currentMatch, totalMatches])
+  }, [isOpen, handlePrev, handleNext, onClose])
 
   if (!isOpen) return null
 

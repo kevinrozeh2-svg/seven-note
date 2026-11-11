@@ -480,6 +480,14 @@ class SyncEngine {
           }
 
           const local = await db.spaces.get(rs.id)
+          // Si en Supabase ya fue eliminado, aseguramos que en local tampoco exista
+          if (rs.is_deleted) {
+            if (local) {
+              await db.spaces.delete(rs.id).catch(() => {})
+            }
+            continue
+          }
+
           if (!local || rs.updated_at > local.updatedAt) {
             await db.spaces.put({
               id: rs.id,
@@ -488,7 +496,7 @@ class SyncEngine {
               color: rs.color,
               createdAt: rs.created_at,
               updatedAt: rs.updated_at,
-              isDeleted: rs.is_deleted,
+              isDeleted: false,
               isPrivate: Boolean(rs.is_private),
               ownerMember: rs.owner_member,
               userId: rs.user_id,
@@ -528,6 +536,16 @@ class SyncEngine {
           }
 
           const local = await db.workspaces.get(rw.id)
+          // Si en Supabase ya fue eliminado, aseguramos que en local tampoco exista
+          if (rw.is_deleted) {
+            if (local) {
+              await db.workspaces.delete(rw.id).catch(() => {})
+              await db.canvasNodes.where('workspaceId').equals(rw.id).delete().catch(() => {})
+              await db.canvasEdges.where('workspaceId').equals(rw.id).delete().catch(() => {})
+            }
+            continue
+          }
+
           if (!local || rw.updated_at > local.updatedAt) {
             const meta = rw.metadata || {}
             await db.workspaces.put({
@@ -596,6 +614,10 @@ class SyncEngine {
       } else if (remoteNodes && remoteNodes.length > 0) {
         for (const rn of remoteNodes) {
           const local = await db.canvasNodes.get(rn.id)
+          if (rn.is_deleted) {
+            if (local) await db.canvasNodes.delete(rn.id).catch(() => {})
+            continue
+          }
           if (!local || rn.updated_at > local.updatedAt) {
             await db.canvasNodes.put({
               id: rn.id,
@@ -627,6 +649,10 @@ class SyncEngine {
       } else if (remoteEdges && remoteEdges.length > 0) {
         for (const re of remoteEdges) {
           const local = await db.canvasEdges.get(re.id)
+          if (re.is_deleted) {
+            if (local) await db.canvasEdges.delete(re.id).catch(() => {})
+            continue
+          }
           if (!local || re.updated_at > local.updatedAt) {
             await db.canvasEdges.put({
               id: re.id,
@@ -661,6 +687,10 @@ class SyncEngine {
       } else if (remoteCollections && remoteCollections.length > 0) {
         for (const rc of remoteCollections) {
           const local = await db.collections.get(rc.id)
+          if (rc.is_deleted) {
+            if (local) await db.collections.delete(rc.id).catch(() => {})
+            continue
+          }
           if (!local || rc.updated_at > local.updatedAt) {
             await db.collections.put({
               id: rc.id,

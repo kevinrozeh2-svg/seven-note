@@ -40,7 +40,9 @@ import {
   Palette,
   Edit3,
   Trash2,
-  Smile
+  Smile,
+  Sparkles,
+  X
 } from 'lucide-react'
 import { CoverPickerPopover, type CoverConfig } from './CoverPickerPopover'
 import { NoteIconPickerModal, renderNoteIcon } from './NoteIconPickerModal'
@@ -1605,7 +1607,7 @@ export function DocEditor({
         </div>
       )}
 
-      {/* Floating Text Selection Bubble Toolbar (Notion Style) */}
+      {/* Floating Text Selection Bubble Toolbar (Tactile Pill Style) */}
       {floatingMenuPos && (
         <div
           style={{
@@ -1614,101 +1616,122 @@ export function DocEditor({
             top: `${typeof window !== 'undefined' && window.innerWidth < 640 ? Math.max(54, floatingMenuPos.y) : floatingMenuPos.y}px`,
             transform: 'translateX(-50%)'
           }}
-          className="z-50 flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2.5 py-1 sm:py-1.5 rounded-full bg-white/90 dark:bg-[#1a1b1e]/90 backdrop-blur-2xl border border-black/[0.08] dark:border-white/[0.1] shadow-2xl animate-in fade-in zoom-in-95 duration-100 max-w-[calc(100vw-24px)] overflow-x-auto"
+          className="z-50 flex items-center gap-1 sm:gap-1.5 px-2 py-1.5 pill-capsule-bar text-white animate-in fade-in zoom-in-95 duration-100 max-w-[calc(100vw-24px)] overflow-x-auto select-none"
         >
+          {/* Standout Purple Pill: Destacar / Highlight */}
+          <button
+            onClick={() => (editor.chain().focus() as any).toggleMark('highlight', { color: '#fef08a' }).run()}
+            className="btn-pill-purple px-3 py-1 text-xs flex items-center gap-1 cursor-pointer font-semibold shrink-0"
+            title="Destacar texto / Resaltar"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Destacar</span>
+          </button>
+
+          <div className="w-[1px] h-3.5 bg-white/15 mx-0.5 shrink-0" />
+
           {/* Jerarquía de encabezados: H1, H2, H3 */}
           <button
             onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('heading', { level: 1 }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
+            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('heading', { level: 1 }) ? 'bg-white text-neutral-900 shadow-xs font-semibold' : 'text-zinc-300 hover:text-white hover:bg-white/15'}`}
             title="Título principal H1 (Ctrl+Alt+1)"
           >
             <Heading1Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
           <button
             onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('heading', { level: 2 }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
+            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('heading', { level: 2 }) ? 'bg-white text-neutral-900 shadow-xs font-semibold' : 'text-zinc-300 hover:text-white hover:bg-white/15'}`}
             title="Subtítulo H2 (Ctrl+Alt+2)"
           >
             <Heading2Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
           <button
             onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('heading', { level: 3 }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
+            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('heading', { level: 3 }) ? 'bg-white text-neutral-900 shadow-xs font-semibold' : 'text-zinc-300 hover:text-white hover:bg-white/15'}`}
             title="Subtítulo menor H3 (Ctrl+Alt+3)"
           >
             <Heading3Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
 
-          <div className="w-[1px] h-3.5 bg-black/[0.1] dark:bg-white/[0.2] mx-0.5 shrink-0" />
+          <div className="w-[1px] h-3.5 bg-white/15 mx-0.5 shrink-0" />
 
           <button
             onClick={() => editor.chain().focus().toggleBold().run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('bold') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
+            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('bold') ? 'bg-white text-neutral-900 shadow-xs font-semibold' : 'text-zinc-300 hover:text-white hover:bg-white/15'}`}
             title="Negrita (Ctrl+B)"
           >
             <BoldIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
           <button
             onClick={() => editor.chain().focus().toggleItalic().run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('italic') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
+            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('italic') ? 'bg-white text-neutral-900 shadow-xs font-semibold' : 'text-zinc-300 hover:text-white hover:bg-white/15'}`}
             title="Cursiva (Ctrl+I)"
           >
             <ItalicIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
           <button
             onClick={() => editor.chain().focus().toggleUnderline().run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('underline') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
+            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('underline') ? 'bg-white text-neutral-900 shadow-xs font-semibold' : 'text-zinc-300 hover:text-white hover:bg-white/15'}`}
             title="Subrayado (Ctrl+U)"
           >
             <UnderLineIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
           <button
             onClick={() => editor.chain().focus().toggleCode().run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('code') ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
+            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('code') ? 'bg-white text-neutral-900 shadow-xs font-semibold' : 'text-zinc-300 hover:text-white hover:bg-white/15'}`}
             title="Código en línea (Ctrl+E)"
           >
             <CodeIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
 
-          <div className="w-[1px] h-3.5 bg-black/[0.1] dark:bg-white/[0.2] mx-0.5 shrink-0" />
+          <div className="w-[1px] h-3.5 bg-white/15 mx-0.5 shrink-0" />
 
           {/* Alineación de texto en menú flotante al seleccionar */}
           <button
             onClick={() => editor.chain().focus().setTextAlign('left').run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive({ textAlign: 'left' }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
+            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive({ textAlign: 'left' }) ? 'bg-white text-neutral-900 shadow-xs font-semibold' : 'text-zinc-300 hover:text-white hover:bg-white/15'}`}
             title="Alinear a la izquierda"
           >
             <AlignLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
           <button
             onClick={() => editor.chain().focus().setTextAlign('center').run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive({ textAlign: 'center' }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
+            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive({ textAlign: 'center' }) ? 'bg-white text-neutral-900 shadow-xs font-semibold' : 'text-zinc-300 hover:text-white hover:bg-white/15'}`}
             title="Centrar texto"
           >
             <AlignCenter className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
           <button
             onClick={() => editor.chain().focus().setTextAlign('right').run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive({ textAlign: 'right' }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
+            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive({ textAlign: 'right' }) ? 'bg-white text-neutral-900 shadow-xs font-semibold' : 'text-zinc-300 hover:text-white hover:bg-white/15'}`}
             title="Alinear a la derecha"
           >
             <AlignRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
           <button
             onClick={() => editor.chain().focus().setTextAlign('justify').run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive({ textAlign: 'justify' }) ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 shadow-xs font-semibold' : 'text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15'}`}
+            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive({ textAlign: 'justify' }) ? 'bg-white text-neutral-900 shadow-xs font-semibold' : 'text-zinc-300 hover:text-white hover:bg-white/15'}`}
             title="Justificar texto"
           >
             <AlignJustify className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
 
-          <div className="w-[1px] h-3.5 bg-black/[0.1] dark:bg-white/[0.2] mx-0.5 shrink-0" />
+          <div className="w-[1px] h-3.5 bg-white/15 mx-0.5 shrink-0" />
           <button
             onClick={() => setIsBodyEmojiPickerOpen(true)}
-            className="p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 text-neutral-600 dark:text-zinc-200 hover:text-neutral-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/15"
+            className="p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 text-zinc-300 hover:text-white hover:bg-white/15"
             title="Insertar Emoji Apple en la nota"
           >
             <AppleEmoji emoji="✨" size={14} />
+          </button>
+
+          {/* Close / Dismiss Floating Bubble */}
+          <button
+            onClick={() => setFloatingMenuPos(null)}
+            className="btn-pill-circle w-6 h-6 cursor-pointer ml-0.5 shrink-0"
+            title="Cerrar barra"
+          >
+            <X className="w-3 h-3" />
           </button>
         </div>
       )}
@@ -2231,28 +2254,28 @@ export function DocEditor({
               )}
             </div>
           ) : (
-            /* Ghost action buttons when neither cover nor icon is present */
-            <div className="flex items-center gap-2 mb-2 group">
+            /* Ghost action buttons when neither cover nor icon is present - Subtle hover only like Obsidian */
+            <div className="flex items-center gap-2 mb-2 opacity-0 hover:opacity-100 transition-opacity">
               <button
                 onClick={() => setIsIconModalOpen(true)}
-                className="flex items-center gap-1.5 text-xs text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] py-1 px-2.5 rounded-lg hover:bg-[var(--affine-hover-color)] transition font-normal cursor-pointer"
+                className="flex items-center gap-1.5 text-xs text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] py-0.5 px-2 rounded hover:bg-white/5 transition font-normal cursor-pointer"
               >
-                <Smile className="w-3.5 h-3.5 text-[var(--affine-text-secondary-color)]" />
+                <Smile className="w-3.5 h-3.5" />
                 <span>Añadir icono</span>
               </button>
               <button
                 onClick={handleAddDefaultCover}
-                className="flex items-center gap-1.5 text-xs text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] py-1 px-2.5 rounded-lg hover:bg-[var(--affine-hover-color)] transition font-normal cursor-pointer"
+                className="flex items-center gap-1.5 text-xs text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] py-0.5 px-2 rounded hover:bg-white/5 transition font-normal cursor-pointer"
               >
-                <Palette className="w-3.5 h-3.5 text-[var(--affine-text-secondary-color)]" />
+                <Palette className="w-3.5 h-3.5" />
                 <span>Añadir portada</span>
               </button>
             </div>
           )}
         </div>
 
-        {/* Big Title */}
-        <div className="mb-3">
+        {/* Big Title - Obsidian Style */}
+        <div className="mb-4">
           <textarea
             ref={titleTextareaRef}
             rows={1}
@@ -2271,16 +2294,16 @@ export function DocEditor({
               }
             }}
             readOnly={readOnly}
-            placeholder="Proyectos y subproyectos"
-            className={`w-full text-3xl sm:text-4xl font-bold tracking-tight text-[var(--affine-text-primary-color)] placeholder:text-[var(--affine-placeholder-color)] bg-transparent border-none outline-none focus:outline-none resize-none overflow-hidden leading-tight break-words whitespace-pre-wrap block ${
+            placeholder="Título de la nota..."
+            className={`w-full text-3xl sm:text-4xl font-bold tracking-tight text-[var(--app-text-primary)] placeholder:text-[var(--app-text-muted)] bg-transparent border-none outline-none focus:outline-none resize-none overflow-hidden leading-tight break-words whitespace-pre-wrap block ${
               readOnly ? 'cursor-default' : ''
             }`}
             style={{ fieldSizing: 'content' }}
           />
         </div>
 
-        {/* Privacy & Sharing Badge Button */}
-        <div className="flex items-center gap-2 flex-wrap mb-6">
+        {/* Privacy & Metadata (Discreet Obsidian status pills) */}
+        <div className="flex items-center gap-2 flex-wrap mb-6 opacity-60 hover:opacity-100 transition-opacity">
           <button
             onClick={async () => {
               const nextPrivate = !workspace.isPrivate
@@ -2296,10 +2319,10 @@ export function DocEditor({
                   : 'Nota cambiada a MODO PÚBLICO (Todo el equipo)'
               )
             }}
-            className={`flex items-center gap-1.5 text-xs py-1 px-3 rounded-full transition font-semibold cursor-pointer active:scale-95 shadow-2xs ${
+            className={`flex items-center gap-1.5 text-[11px] py-0.5 px-2 rounded font-normal transition cursor-pointer select-none ${
               workspace.isPrivate
-                ? 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 hover:bg-amber-500/25'
-                : 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-500/20 hover:bg-blue-500/20'
+                ? 'text-amber-400 bg-amber-400/10 hover:bg-amber-400/20'
+                : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5'
             }`}
             title={
               workspace.isPrivate
@@ -2308,30 +2331,27 @@ export function DocEditor({
             }
           >
             {workspace.isPrivate ? (
-              <Lock className="w-3.5 h-3.5 text-amber-500" />
+              <Lock className="w-3 h-3 text-amber-400" />
             ) : (
-              <Unlock className="w-3.5 h-3.5 text-blue-500" />
+              <Unlock className="w-3 h-3 text-[var(--app-text-muted)]" />
             )}
-            <span>{workspace.isPrivate ? 'Privada (Solo tú)' : 'Pública (Equipo)'}</span>
+            <span>{workspace.isPrivate ? 'Privada' : 'Pública'}</span>
           </button>
 
           {/* Creator attribution pill */}
           {(workspace.ownerName || workspace.createdBy) && (
-            <span className="flex items-center gap-1.5 text-[11px] py-0.5 px-2.5 rounded-full bg-black/[0.03] dark:bg-white/[0.05] border border-black/[0.05] dark:border-white/[0.08] text-neutral-500 dark:text-neutral-400 font-medium">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-              <span>
-                Creado por:{' '}
-                <strong className="text-neutral-700 dark:text-neutral-200">
-                  {workspace.ownerName || workspace.createdBy}
-                </strong>
+            <span className="flex items-center gap-1 text-[11px] text-[var(--app-text-muted)]">
+              <span>Por:</span>
+              <span className="text-[var(--app-text-secondary)] font-medium">
+                {workspace.ownerName || workspace.createdBy}
               </span>
             </span>
           )}
 
           {workspace.isPublicShared && (
-            <span className="flex items-center gap-1 text-[11px] py-0.5 px-2 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-medium">
+            <span className="flex items-center gap-1 text-[11px] text-emerald-400">
               <Globe className="w-3 h-3" />
-              <span>Enlace externo activo</span>
+              <span>Pública en la web</span>
             </span>
           )}
         </div>
