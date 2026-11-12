@@ -11,8 +11,10 @@ import Link from '@tiptap/extension-link'
 import Image from '@tiptap/extension-image'
 import TextAlign from '@tiptap/extension-text-align'
 import { processAndUploadImage } from '../../lib/imageOptimizer'
+import { DOMParser as PMDOMParser } from '@tiptap/pm/model'
 import {
   cleanPastedHtml,
+  cleanPastedText,
   isPdfHtml,
   isPdfOrStructuredText,
   isLegalContractOrPdfText,
@@ -395,6 +397,8 @@ export function DocEditor({
     }
   }
 
+  const editorRef = useRef<any>(null)
+
   const editor = useEditor({
     editable: !readOnly,
     extensions: [
@@ -449,6 +453,9 @@ export function DocEditor({
       transformPastedHTML: (html) => {
         return cleanPastedHtml(html)
       },
+      transformPastedText: (text) => {
+        return cleanPastedText(text)
+      },
       handlePaste: (view, event) => {
         const html = event.clipboardData?.getData('text/html')
         const text = event.clipboardData?.getData('text/plain')
@@ -461,7 +468,16 @@ export function DocEditor({
         if (isPdf) {
           const formatted = cleanPdfContent(html || '', text || '')
           if (formatted && formatted.trim()) {
-            editor?.commands.insertContent(formatted)
+            const targetEditor = editorRef.current || editor
+            if (targetEditor) {
+              targetEditor.commands.insertContent(formatted)
+            } else {
+              const div = document.createElement('div')
+              div.innerHTML = formatted
+              const slice = PMDOMParser.fromSchema(view.state.schema).parseSlice(div)
+              const tr = view.state.tr.replaceSelection(slice)
+              view.dispatch(tr)
+            }
             toast.success('Texto de PDF pegado conservando formato')
             return true
           }
@@ -620,6 +636,8 @@ export function DocEditor({
       }, 400)
     }
   })
+
+  editorRef.current = editor
 
   // Synchronize editor content when workspace changes
   useEffect(() => {

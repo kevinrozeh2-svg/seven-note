@@ -48,6 +48,7 @@ import {
 import {
   hasHtmlFormatting,
   cleanPastedHtml,
+  cleanPastedText,
   isPdfHtml,
   isPdfOrStructuredText,
   isLegalContractOrPdfText,
@@ -1514,8 +1515,9 @@ function CanvasBoardInner({
         })
         toast.success(isPdf ? 'Nota creada desde PDF con formato' : 'Nota creada con el formato copiado')
       } else if (text && text.trim()) {
+        const cleanedText = cleanPastedText(text)
         await addNewNode('note', {
-          content: text
+          content: cleanedText
         })
         toast.success('Nota creada desde el portapapeles')
       }

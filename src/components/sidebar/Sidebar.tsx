@@ -12,7 +12,6 @@ import {
   CalendarBlank,
   Tag,
   ArrowsClockwise,
-  SidebarSimple,
   PencilSimple,
   Check,
   Lock,
@@ -275,7 +274,7 @@ export function Sidebar({
   workspaces,
   currentWorkspaceId,
   onSelectWorkspace,
-  onToggleSidebar,
+  onToggleSidebar: _onToggleSidebar,
   onOpenSettings: _onOpenSettings,
   onOpenSearch: _onOpenSearch,
   onOpenAllDocs: _onOpenAllDocs,
@@ -2169,7 +2168,19 @@ export function Sidebar({
             type="button"
             onClick={() => {
               // Collapse all folders & sections
-              setFolderOpenMap({})
+              const closedFolders: Record<string, boolean> = {}
+              allFolders.forEach((f) => {
+                closedFolders[f] = false
+              })
+              activeWorkspaces.forEach((w) => {
+                if (w.folder && w.folder.trim()) {
+                  closedFolders[w.folder.trim()] = false
+                }
+              })
+              Object.keys(folderOpenMap).forEach((k) => {
+                closedFolders[k] = false
+              })
+              setFolderOpenMap(closedFolders)
               setPagesOpen(false)
               setPrivateNotesOpen(false)
               setFavoritesOpen(false)
@@ -2178,14 +2189,6 @@ export function Sidebar({
             title="Plegar todo"
           >
             <CaretDoubleUp size={16} weight="regular" />
-          </button>
-          <button
-            type="button"
-            onClick={onToggleSidebar}
-            className="p-1.5 rounded hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-black/[0.04] dark:hover:bg-white/[0.06] transition cursor-pointer"
-            title="Ocultar explorador (Ctrl+\)"
-          >
-            <SidebarSimple size={16} weight="regular" />
           </button>
         </div>
 

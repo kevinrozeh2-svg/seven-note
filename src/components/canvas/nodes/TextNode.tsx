@@ -15,6 +15,7 @@ import { FontPickerPopover } from './FontPickerPopover'
 import {
   hasHtmlFormatting,
   cleanPastedHtml,
+  cleanPastedText,
   sanitizeHtmlContent,
   isPdfHtml,
   isPdfOrStructuredText,
@@ -124,7 +125,8 @@ export const TextNode = memo(({ id, data, selected }: any) => {
         toast.success(isPdf ? 'Texto de PDF pegado con formato' : 'Formato de texto conservado')
       } else if (text && text.trim()) {
         e.preventDefault()
-        const updated = content && content.trim() ? `${content}\n${text}` : text
+        const cleanedText = cleanPastedText(text)
+        const updated = content && content.trim() ? `${content}\n${cleanedText}` : cleanedText
         setContent(updated)
         save({ content: updated })
       }
@@ -154,7 +156,7 @@ export const TextNode = memo(({ id, data, selected }: any) => {
     if (clean && clean.trim()) {
       document.execCommand('insertHTML', false, clean)
     } else if (text) {
-      document.execCommand('insertText', false, text)
+      document.execCommand('insertText', false, cleanPastedText(text))
     }
 
     if (contentEditableRef.current) {
