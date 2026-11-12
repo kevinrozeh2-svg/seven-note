@@ -1953,7 +1953,7 @@ export function Sidebar({
             ) : (
               /* Interleaved folders and documents */
               (childFolders.length > 0 || folderDocs.length > 0) && (
-                <div className="space-y-0.5 my-0.5">
+                <div className="space-y-0.5 my-0.5 animate-in fade-in duration-150">
                   {sortMixedItems([
                     ...childFolders.map((p) => {
                       const stats = getFolderTimestamps(p)
@@ -1999,7 +1999,7 @@ export function Sidebar({
     <aside
       style={{ width: `${sidebarWidth}px` }}
       className={`relative h-full flex flex-col bg-[var(--obsidian-sidebar-bg,#181818)] border-r border-[var(--app-border)] text-[var(--app-text-primary)] select-none shrink-0 text-xs font-sans shadow-2xl md:shadow-none max-w-[85vw] ${
-        isResizing ? '' : 'transition-[width] duration-75'
+        isResizing ? '' : 'transition-[width] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]'
       }`}
     >
       {/* 1. Workspace Bar (Minimalist Obsidian Vault style) */}

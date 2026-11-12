@@ -57,6 +57,14 @@
     /* Canvas Grid */
     --app-canvas-dot: #e2e1de;
 
+    /* Motion & Easing Tokens */
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --duration-fast: 150ms;
+    --duration-normal: 220ms;
+    --duration-slow: 300ms;
+
     /* Backwards-compatibility bridge for existing --affine tokens */
     --affine-font-family: var(--app-font-sans);
     --affine-font-code-family: var(--app-font-mono);
@@ -469,7 +477,8 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
 
 /* Notion & Milanote UI Utility Classes */
 .app-hover {
-  transition: background-color 0.12s ease, color 0.12s ease;
+  transition: background-color var(--duration-fast) var(--ease-out-quart),
+              color var(--duration-fast) var(--ease-out-quart);
 }
 .app-hover:hover {
   background-color: var(--app-hover);
@@ -511,10 +520,15 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
   color: var(--app-text-primary);
   cursor: pointer;
   user-select: none;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  transition: background-color var(--duration-fast) var(--ease-out-quart),
+              color var(--duration-fast) var(--ease-out-quart),
+              transform var(--duration-fast) var(--ease-out-expo);
 }
 .affine-sidebar-item:hover {
   background-color: var(--app-hover);
+}
+.affine-sidebar-item:active {
+  transform: scale(0.985);
 }
 .affine-sidebar-item.active {
   background-color: var(--app-hover);
@@ -536,7 +550,7 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
   color: var(--app-text-muted);
   cursor: pointer;
   user-select: none;
-  transition: color 0.12s ease;
+  transition: color var(--duration-fast) var(--ease-out-quart);
 }
 .affine-category-divider:hover {
   color: var(--app-text-primary);
@@ -562,11 +576,17 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
   font-weight: 500;
   color: var(--app-text-secondary);
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: background-color var(--duration-normal) var(--ease-out-expo),
+              color var(--duration-fast) var(--ease-out-quart),
+              box-shadow var(--duration-normal) var(--ease-out-expo),
+              transform var(--duration-fast) var(--ease-out-expo);
   user-select: none;
 }
 .affine-segmented-tab:hover {
   color: var(--app-text-primary);
+}
+.affine-segmented-tab:active {
+  transform: scale(0.97);
 }
 .affine-segmented-tab.active {
   background-color: var(--app-bg-primary);
@@ -589,7 +609,9 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
   font-size: 12.5px;
   font-weight: 500;
   cursor: pointer;
-  transition: background-color 0.12s ease, transform 0.05s ease;
+  transition: background-color var(--duration-fast) var(--ease-out-quart),
+              transform var(--duration-fast) var(--ease-out-expo),
+              box-shadow var(--duration-fast) var(--ease-out-quart);
   user-select: none;
   border: none;
   box-shadow: 0 1px 2px rgba(15, 15, 15, 0.1);
@@ -598,7 +620,7 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
   background-color: var(--app-accent-hover);
 }
 .affine-button-primary:active {
-  transform: scale(0.98);
+  transform: scale(0.97);
 }
 
 /* Notion Icon Button */
@@ -611,7 +633,9 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
   border-radius: 5px;
   color: var(--app-text-secondary);
   cursor: pointer;
-  transition: background-color 0.12s ease, color 0.12s ease;
+  transition: background-color var(--duration-fast) var(--ease-out-quart),
+              color var(--duration-fast) var(--ease-out-quart),
+              transform var(--duration-fast) var(--ease-out-expo);
 }
 .affine-icon-btn:hover {
   background-color: var(--app-hover);
@@ -619,6 +643,7 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
 }
 .affine-icon-btn:active {
   background-color: var(--app-active);
+  transform: scale(0.94);
 }
 
 /* ReactFlow Panels must always sit above full-screen canvas and drawing layers */
@@ -653,6 +678,9 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
 .react-flow__handle {
   cursor: crosshair !important;
   pointer-events: all !important;
+  transition: transform var(--duration-fast) var(--ease-out-expo),
+              opacity var(--duration-fast) var(--ease-out-quart),
+              box-shadow var(--duration-fast) var(--ease-out-quart);
 }
 
 /* Invisible hit area expansion: makes handles easily clickable and grabbable within 26px area */
@@ -675,6 +703,12 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
 }
 
 /* Selected edge appearance */
+.react-flow__edge-path {
+  transition: stroke-width var(--duration-fast) var(--ease-out-expo),
+              stroke var(--duration-fast) var(--ease-out-quart),
+              filter var(--duration-fast) var(--ease-out-quart);
+}
+
 .react-flow__edge.selected .react-flow__edge-path {
   stroke-width: 3.5 !important;
   filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.5));
@@ -785,7 +819,9 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
   border-radius: 9999px;
   font-weight: 600;
   box-shadow: 0 4px 14px rgba(124, 92, 252, 0.35);
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: background-color 180ms var(--ease-out-expo),
+              box-shadow 180ms var(--ease-out-expo),
+              transform 180ms var(--ease-out-expo);
 }
 
 .btn-pill-purple:hover {
@@ -803,7 +839,9 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
   background-color: rgba(255, 255, 255, 0.1);
   color: #f4f4f5;
   border-radius: 9999px;
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: background-color 180ms var(--ease-out-expo),
+              color 180ms var(--ease-out-expo),
+              transform 180ms var(--ease-out-expo);
 }
 
 .btn-pill-dark:hover {
@@ -822,7 +860,9 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: background-color 180ms var(--ease-out-expo),
+              color 180ms var(--ease-out-expo),
+              transform 180ms var(--ease-out-expo);
 }
 
 .btn-pill-circle:hover {
@@ -832,6 +872,136 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
 
 .btn-pill-circle:active {
   transform: scale(0.92);
+}
+
+/* ==========================================================================
+   Compositor-Accelerated Entrance, Collapse & View Transitions
+   ========================================================================== */
+@keyframes sn-enter {
+  from {
+    opacity: var(--sn-enter-opacity, 1);
+    transform: translate3d(var(--sn-enter-x, 0px), var(--sn-enter-y, 0px), 0)
+      scale3d(var(--sn-enter-scale, 1), var(--sn-enter-scale, 1), 1);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
+  }
+}
+
+@keyframes sn-modal-card-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 8px, 0) scale3d(0.97, 0.97, 1);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale3d(1, 1, 1);
+  }
+}
+
+.animate-in {
+  --sn-enter-opacity: 1;
+  --sn-enter-scale: 1;
+  --sn-enter-x: 0px;
+  --sn-enter-y: 0px;
+  animation-name: sn-enter;
+  animation-duration: var(--tw-duration, 180ms);
+  animation-timing-function: var(--ease-out-expo);
+  animation-fill-mode: both;
+}
+
+.fade-in {
+  --sn-enter-opacity: 0;
+}
+
+.zoom-in-95 {
+  --sn-enter-scale: 0.95;
+}
+
+.zoom-in-75 {
+  --sn-enter-scale: 0.85;
+}
+
+.slide-in-from-top-2 {
+  --sn-enter-y: -8px;
+}
+
+.slide-in-from-right {
+  --sn-enter-x: 16px;
+}
+
+/* Smooth modal dialog card entrance inside animated backdrops */
+.fixed.inset-0.animate-in > div:not([data-no-modal-anim]) {
+  animation: sn-modal-card-enter 220ms var(--ease-out-expo) both;
+}
+
+/* Smooth view/page crossfade (opacity-only so canvas/editor coordinates stay exact) */
+@keyframes sn-view-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.sn-view-enter {
+  animation: sn-view-fade 180ms var(--ease-out-expo) both;
+}
+
+/* Smooth collapsible grid for sidebar folders and accordions */
+.sn-collapse-grid {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 200ms var(--ease-out-expo),
+              opacity 160ms var(--ease-out-quart);
+}
+.sn-collapse-grid[data-open="true"] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.sn-collapse-inner {
+  overflow: hidden;
+  min-height: 0;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .custom-scrollbar {
+    scroll-behavior: smooth;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-in {
+    --sn-enter-scale: 1;
+    --sn-enter-x: 0px;
+    --sn-enter-y: 0px;
+    animation-duration: 100ms;
+  }
+
+  .fixed.inset-0.animate-in > div:not([data-no-modal-anim]) {
+    animation: sn-view-fade 100ms ease-out both;
+  }
+
+  .sn-view-enter {
+    animation-duration: 100ms;
+  }
+
+  .sn-collapse-grid {
+    transition-duration: 80ms;
+  }
+
+  .affine-sidebar-item:active,
+  .affine-segmented-tab:active,
+  .affine-button-primary:active,
+  .affine-icon-btn:active,
+  .btn-pill-purple:active,
+  .btn-pill-dark:active,
+  .btn-pill-circle:active {
+    transform: none;
+  }
 }
 
 

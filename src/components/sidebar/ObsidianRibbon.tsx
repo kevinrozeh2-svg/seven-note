@@ -2,7 +2,6 @@ import {
   FileText,
   MagnifyingGlass,
   Graph,
-  Kanban,
   Plus,
   Gear,
   Trash,
@@ -26,7 +25,6 @@ export interface ObsidianRibbonProps {
   onNewNote: () => void
   onOpenSearch: () => void
   onOpenKnowledgeGraph: () => void
-  onOpenCanvas: () => void
   onOpenAllDocs: () => void
   onOpenTemplates: () => void
   onOpenImport: () => void
@@ -55,7 +53,6 @@ export function ObsidianRibbon({
   onNewNote,
   onOpenSearch,
   onOpenKnowledgeGraph,
-  onOpenCanvas,
   onOpenAllDocs,
   onOpenTemplates,
   onOpenImport,
@@ -146,19 +143,6 @@ export function ObsidianRibbon({
           title="Abrir vista gráfica"
         >
           <Graph size={18} />
-        </button>
-
-        {/* Canvas / Whiteboard */}
-        <button
-          onClick={onOpenCanvas}
-          className={`w-8 h-8 rounded-md flex items-center justify-center transition cursor-pointer ${
-            activeView === 'canvas'
-              ? 'text-purple-400 bg-purple-500/15'
-              : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5'
-          }`}
-          title="Lienzo infinito / Tablero"
-        >
-          <Kanban size={18} />
         </button>
 
         {/* All Documents */}

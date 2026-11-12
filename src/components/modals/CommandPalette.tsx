@@ -90,12 +90,18 @@ export function CommandPalette({
     <>
       <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center pt-6 sm:pt-20 bg-black/40 backdrop-blur-xs p-2 sm:p-4">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.16, ease: [0.16, 1, 0.3, 1] }}
+          className="fixed inset-0 z-50 flex items-start justify-center pt-6 sm:pt-20 bg-black/40 backdrop-blur-xs p-2 sm:p-4"
+        >
           <motion.div
-            initial={{ opacity: 0, scale: 0.98, y: -8 }}
+            initial={{ opacity: 0, scale: 0.97, y: -10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.98, y: -8 }}
-            transition={{ duration: 0.12, ease: 'easeOut' }}
+            exit={{ opacity: 0, scale: 0.97, y: -6 }}
+            transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
             className="w-full max-w-xl rounded-3xl bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] shadow-2xl backdrop-blur-2xl overflow-hidden flex flex-col text-[var(--app-text-primary)] p-1.5"
           >
             <Command
@@ -352,7 +358,7 @@ export function CommandPalette({
               </div>
             </Command>
           </motion.div>
-        </div>
+        </motion.div>
       )}
     </AnimatePresence>
 

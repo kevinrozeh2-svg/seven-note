@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
+import { AnimatePresence, motion, MotionConfig } from 'motion/react'
 import {
   FileText,
   Kanban,
@@ -1249,6 +1250,7 @@ function MainApp() {
   }
 
   return (
+    <MotionConfig reducedMotion="user">
     <div className="relative flex h-dvh w-full overflow-hidden bg-[var(--obsidian-sidebar-bg,#181818)] text-[var(--app-text-primary)] font-sans select-none">
       {/* 0. Obsidian Left Ribbon (Compact 40px Tool strip) */}
       {!isPresentationMode && !focusMode && (
@@ -1258,13 +1260,6 @@ function MainApp() {
           onNewNote={handleNewTab}
           onOpenSearch={() => setIsSearchOpen(true)}
           onOpenKnowledgeGraph={() => openSpecialViewTab('knowledge-graph', 'Vista gráfica')}
-          onOpenCanvas={() => {
-            if (activeViewMode === 'canvas') {
-              setViewMode('doc')
-            } else {
-              setViewMode('canvas')
-            }
-          }}
           onOpenAllDocs={() => openSpecialViewTab('all-docs', 'Todos los documentos')}
           onOpenTemplates={() => openSpecialViewTab('templates', 'Plantillas')}
           onOpenImport={() => setIsImportOpen(true)}
@@ -1289,51 +1284,65 @@ function MainApp() {
       )}
 
       {/* 1. Left Sidebar Navigation */}
-      {sidebarOpen && !isPresentationMode && !focusMode && (
-        <>
-          {/* Mobile backdrop overlay */}
-          <div
-            className="fixed inset-y-0 left-11 right-0 bg-black/50 backdrop-blur-xs z-40 md:hidden animate-in fade-in duration-150"
-            onClick={() => setSidebarOpen(false)}
-          />
-          <div className="fixed inset-y-0 left-11 md:left-0 z-50 md:relative md:z-auto h-full max-w-[calc(100vw-44px)] md:max-w-none flex shrink-0">
-            <Sidebar
-              spaces={visibleSpaces}
-              currentSpaceId={currentSpaceId}
-              currentMember={currentMember}
-              onSelectMember={handleSelectMember}
-              authUser={authUser}
-              onOpenAuthModal={() => {
-                setAuthModalMode('login')
-                setIsAuthModalOpen(true)
-              }}
-              onOpenProfileModal={() => setIsProfileModalOpen(true)}
-              onOpenUserManagementModal={() => setIsUserManagementModalOpen(true)}
-              onSignOut={handleSignOut}
-              onSelectSpace={handleSelectSpace}
-              onOpenCreateSpace={() => setIsCreateWorkspaceOpen(true)}
-              onOpenManageSpaces={() => setIsManageSpacesOpen(true)}
-              onRenameSpace={handleRenameSpace}
-              onDeleteSpace={handleDeleteSpace}
-              workspaces={effectiveWorkspaces}
-              currentWorkspaceId={currentWorkspace?.id || ''}
-              onSelectWorkspace={selectWorkspaceWithTab}
-              onToggleSidebar={() => setSidebarOpen(false)}
-              onOpenSettings={() => setIsSettingsOpen(true)}
-              onOpenSearch={() => setIsSearchOpen(true)}
-              onOpenAllDocs={() => openSpecialViewTab('all-docs', 'Todos los documentos')}
-              onOpenTrash={() => openSpecialViewTab('trash', 'Papelera')}
-              onOpenImport={() => setIsImportOpen(true)}
-              onOpenTemplates={() => openSpecialViewTab('templates', 'Plantillas')}
-              onOpenShortcuts={() => setIsShortcutsOpen(true)}
-              onOpenKnowledgeGraph={() => openSpecialViewTab('knowledge-graph', 'Vista gráfica')}
-              syncStatus={syncStatus}
-              darkMode={darkMode}
-              onToggleDarkMode={() => setDarkMode(!darkMode)}
+      <AnimatePresence initial={false}>
+        {sidebarOpen && !isPresentationMode && !focusMode && (
+          <>
+            {/* Mobile backdrop overlay */}
+            <motion.div
+              key="sidebar-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              className="fixed inset-y-0 left-11 right-0 bg-black/50 backdrop-blur-xs z-40 md:hidden"
+              onClick={() => setSidebarOpen(false)}
             />
-          </div>
-        </>
-      )}
+            <motion.div
+              key="sidebar-panel"
+              initial={{ opacity: 0, x: -16 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -16 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              className="fixed inset-y-0 left-11 md:left-0 z-50 md:relative md:z-auto h-full max-w-[calc(100vw-44px)] md:max-w-none flex shrink-0"
+            >
+              <Sidebar
+                spaces={visibleSpaces}
+                currentSpaceId={currentSpaceId}
+                currentMember={currentMember}
+                onSelectMember={handleSelectMember}
+                authUser={authUser}
+                onOpenAuthModal={() => {
+                  setAuthModalMode('login')
+                  setIsAuthModalOpen(true)
+                }}
+                onOpenProfileModal={() => setIsProfileModalOpen(true)}
+                onOpenUserManagementModal={() => setIsUserManagementModalOpen(true)}
+                onSignOut={handleSignOut}
+                onSelectSpace={handleSelectSpace}
+                onOpenCreateSpace={() => setIsCreateWorkspaceOpen(true)}
+                onOpenManageSpaces={() => setIsManageSpacesOpen(true)}
+                onRenameSpace={handleRenameSpace}
+                onDeleteSpace={handleDeleteSpace}
+                workspaces={effectiveWorkspaces}
+                currentWorkspaceId={currentWorkspace?.id || ''}
+                onSelectWorkspace={selectWorkspaceWithTab}
+                onToggleSidebar={() => setSidebarOpen(false)}
+                onOpenSettings={() => setIsSettingsOpen(true)}
+                onOpenSearch={() => setIsSearchOpen(true)}
+                onOpenAllDocs={() => openSpecialViewTab('all-docs', 'Todos los documentos')}
+                onOpenTrash={() => openSpecialViewTab('trash', 'Papelera')}
+                onOpenImport={() => setIsImportOpen(true)}
+                onOpenTemplates={() => openSpecialViewTab('templates', 'Plantillas')}
+                onOpenShortcuts={() => setIsShortcutsOpen(true)}
+                onOpenKnowledgeGraph={() => openSpecialViewTab('knowledge-graph', 'Vista gráfica')}
+                syncStatus={syncStatus}
+                darkMode={darkMode}
+                onToggleDarkMode={() => setDarkMode(!darkMode)}
+              />
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* 2. Main Content Center Column */}
       <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-transparent">
@@ -2059,7 +2068,7 @@ function MainApp() {
               />
             ) : currentWorkspace ? (
               activeViewMode === 'doc' ? (
-                <div className="flex-1 h-full overflow-hidden">
+                <div key={`doc-${currentWorkspace.id}`} className="flex-1 h-full overflow-hidden sn-view-enter">
                   <DocEditor
                     workspace={currentWorkspace}
                     allWorkspaces={publicWorkspaces}
@@ -2072,7 +2081,7 @@ function MainApp() {
                   />
                 </div>
               ) : activeViewMode === 'canvas' ? (
-                <div className="flex-1 h-full overflow-hidden relative">
+                <div key={`canvas-${currentWorkspace.id}`} className="flex-1 h-full overflow-hidden relative sn-view-enter">
                   <CanvasBoard
                     workspaceId={currentWorkspace.id}
                     currentWorkspace={currentWorkspace}
@@ -2093,7 +2102,7 @@ function MainApp() {
                 </div>
               ) : (
                 /* Split View */
-                <div className="flex-1 flex h-full overflow-hidden">
+                <div key={`split-${currentWorkspace.id}`} className="flex-1 flex h-full overflow-hidden sn-view-enter">
                   <div className="w-1/2 h-full overflow-hidden border-r border-[#242428]">
                     <DocEditor
                       workspace={currentWorkspace}
@@ -2144,17 +2153,28 @@ function MainApp() {
       </div>
 
       {/* 3. Right Sidebar (Propiedades, Outline, Historial) */}
-      {rightSidebarOpen && !isPresentationMode && activeViewMode === 'doc' && (
-        <RightSidebar
-          workspace={currentWorkspace}
-          isOpen={rightSidebarOpen}
-          onClose={() => setRightSidebarOpen(false)}
-          activeTab={rightSidebarTab}
-          onTabChange={(tab) => setRightSidebarTab(tab)}
-          onScrollToHeading={handleScrollToHeading}
-          readOnly={isCurrentWorkspaceReadOnly}
-        />
-      )}
+      <AnimatePresence initial={false}>
+        {rightSidebarOpen && !isPresentationMode && activeViewMode === 'doc' && (
+          <motion.div
+            key="right-sidebar"
+            initial={{ opacity: 0, x: 16 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 16 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+            className="h-full flex shrink-0"
+          >
+            <RightSidebar
+              workspace={currentWorkspace}
+              isOpen={rightSidebarOpen}
+              onClose={() => setRightSidebarOpen(false)}
+              activeTab={rightSidebarTab}
+              onTabChange={(tab) => setRightSidebarTab(tab)}
+              onScrollToHeading={handleScrollToHeading}
+              readOnly={isCurrentWorkspaceReadOnly}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* 4. Global Modals */}
       <CommandPalette
@@ -2302,6 +2322,7 @@ function MainApp() {
       {/* 6. Pro Sonner Notification Toaster */}
       <Toaster richColors position="bottom-right" closeButton theme={darkMode ? 'dark' : 'light'} />
     </div>
+    </MotionConfig>
   )
 }
 
