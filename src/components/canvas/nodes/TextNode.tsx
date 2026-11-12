@@ -386,7 +386,7 @@ export const TextNode = memo(({ id, data, selected }: any) => {
         />
       ) : (
         <div
-          onDoubleClick={() => setIsEditing(true)}
+          onDoubleClick={() => !data?.readOnly && setIsEditing(true)}
           className={`nodrag cursor-text select-text leading-relaxed ${textColorClass} ${fontSizeClass} text-${align} [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through [&_del]:line-through [&_a]:text-sky-500 [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5`}
           style={{ fontFamily }}
         >

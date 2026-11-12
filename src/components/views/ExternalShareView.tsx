@@ -152,27 +152,11 @@ export const ExternalShareView: React.FC<ExternalShareViewProps> = ({ workspaceI
     loadSharedNote()
   }, [workspaceId, token])
 
-  const isReadOnly = workspace?.sharePermission !== 'edit'
-
   const handleCopyLink = () => {
     navigator.clipboard.writeText(window.location.href)
     setCopiedLink(true)
     toast.success('Enlace copiado')
     setTimeout(() => setCopiedLink(false), 2000)
-  }
-
-  const handleTitleChange = async (newTitle: string) => {
-    if (!workspace || isReadOnly) return
-    setWorkspace({ ...workspace, title: newTitle })
-    await db.workspaces.update(workspace.id, {
-      title: newTitle,
-      updatedAt: Date.now(),
-      syncStatus: 'pending'
-    })
-    const supabase = getSupabaseClient()
-    if (supabase) {
-      await supabase.from('seven_workspaces').update({ title: newTitle, updated_at: Date.now() }).eq('id', workspace.id)
-    }
   }
 
   if (loading) {
@@ -223,12 +207,8 @@ export const ExternalShareView: React.FC<ExternalShareViewProps> = ({ workspaceI
             <span>Compartido por {authorName}</span>
           </div>
 
-          <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
-            isReadOnly
-              ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700'
-              : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-          }`}>
-            {isReadOnly ? 'Solo lectura' : 'Edición permitida'}
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700">
+            Solo lectura
           </span>
         </div>
 
@@ -275,15 +255,14 @@ export const ExternalShareView: React.FC<ExternalShareViewProps> = ({ workspaceI
             <DocEditor
               workspace={workspace}
               allWorkspaces={[workspace]}
-              onTitleChange={isReadOnly ? undefined : handleTitleChange}
-              readOnly={isReadOnly}
+              readOnly={true}
             />
           ) : (
             <CanvasBoard
               workspaceId={workspace.id}
               currentWorkspace={workspace}
               darkMode={false}
-              readOnly={isReadOnly}
+              readOnly={true}
             />
           )}
         </Suspense>

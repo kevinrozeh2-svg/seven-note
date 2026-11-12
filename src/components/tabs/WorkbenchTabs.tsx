@@ -16,7 +16,8 @@ import {
   RotateCcw,
   ArrowRight,
   X,
-  PanelLeft
+  PanelLeft,
+  Network
 } from 'lucide-react'
 import { type WorkspaceItem } from '../../db'
 import { AppleEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
@@ -151,7 +152,7 @@ export function WorkbenchTabs({
     if (tab.viewType === 'all-docs') {
       return { title: 'Todos los documentos', icon: '📑', viewMode: 'doc' }
     } else if (tab.viewType === 'knowledge-graph') {
-      return { title: 'Grafo de Conocimiento', icon: '🌐', viewMode: 'doc' }
+      return { title: 'Vista gráfica', icon: '', viewMode: 'doc' }
     } else if (tab.viewType === 'trash') {
       return { title: 'Papelera', icon: '🗑️', viewMode: 'doc' }
     } else if (tab.viewType === 'templates') {
@@ -308,7 +309,9 @@ export function WorkbenchTabs({
                 }`}
                 title={`${meta.title} (Pestaña fijada)`}
               >
-                {meta.icon ? (
+                {tab.viewType === 'knowledge-graph' ? (
+                  <Network className="w-3.5 h-3.5 text-neutral-300" />
+                ) : meta.icon ? (
                   <span className="text-sm shrink-0 flex items-center justify-center">
                     <AppleEmoji emoji={meta.icon} size={15} />
                   </span>
@@ -361,7 +364,9 @@ export function WorkbenchTabs({
             >
               {/* Tab Icon */}
               <span className="shrink-0 text-xs flex items-center justify-center">
-                {meta.icon ? (
+                {tab.viewType === 'knowledge-graph' ? (
+                  <Network className="w-3.5 h-3.5 text-neutral-400 group-hover:text-neutral-200" />
+                ) : meta.icon ? (
                   <AppleEmoji emoji={meta.icon} size={14} className="shrink-0" />
                 ) : meta.viewMode === 'canvas' ? (
                   <EdgelessIcon className="w-3.5 h-3.5 text-[var(--app-text-secondary)]" />

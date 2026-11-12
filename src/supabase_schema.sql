@@ -104,7 +104,7 @@ begin
     coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
     case
       when is_first_user then 'admin'
-      when lower(new.email) in ('kevin.rozeh@gmail.com', 'kevin.rozeh2@gmail.com', 'badmaik60@gmail.com', 'marcos@sevennote.local') then 'admin'
+      when lower(new.email) in ('kevin.rozeh@gmail.com', 'kevin.rozeh2@gmail.com', 'badmaik60@gmail.com', 'marcos@sevennote.local', 'marcos.sevennote@gmail.com') then 'admin'
       when invited_role is not null then invited_role
       else 'member'
     end,
@@ -116,7 +116,7 @@ begin
   on conflict (id) do update set
     email = excluded.email,
     role = case
-      when lower(excluded.email) in ('kevin.rozeh@gmail.com', 'kevin.rozeh2@gmail.com', 'badmaik60@gmail.com', 'marcos@sevennote.local') then 'admin'
+      when lower(excluded.email) in ('kevin.rozeh@gmail.com', 'kevin.rozeh2@gmail.com', 'badmaik60@gmail.com', 'marcos@sevennote.local', 'marcos.sevennote@gmail.com') then 'admin'
       else user_profiles.role
     end,
     full_name = case when user_profiles.full_name = '' then excluded.full_name else user_profiles.full_name end,
@@ -150,19 +150,33 @@ select
 from auth.users
 on conflict (id) do nothing;
 
--- Asegurar rol 'admin' en perfiles existentes para los correos autorizados (Kevin, Maikol, etc.)
+-- Asegurar rol 'admin' en perfiles existentes para los correos autorizados (Kevin, Maikol, Marcos)
 update public.user_profiles
 set role = 'admin'
-where lower(email) in ('kevin.rozeh@gmail.com', 'kevin.rozeh2@gmail.com', 'badmaik60@gmail.com', 'marcos@sevennote.local');
+where lower(email) in (
+  'kevin.rozeh@gmail.com',
+  'kevin.rozeh2@gmail.com',
+  'badmaik60@gmail.com',
+  'marcos@sevennote.local',
+  'marcos.sevennote@gmail.com'
+);
 
--- Pre-autorizar como Administradores en la lista blanca de invitaciones
+-- Pre-autorizar como Administradores y Trabajadores en la lista blanca de invitaciones
 insert into public.team_invitations (email, role)
 values
   ('kevin.rozeh@gmail.com', 'admin'),
   ('kevin.rozeh2@gmail.com', 'admin'),
   ('badmaik60@gmail.com', 'admin'),
-  ('marcos@sevennote.local', 'admin')
-on conflict (email) do update set role = 'admin';
+  ('marcos@sevennote.local', 'admin'),
+  ('marcos.sevennote@gmail.com', 'admin'),
+  -- Capa 2: Trabajadores
+  ('melgilez@gmail.com', 'member')
+on conflict (email) do update set role = excluded.role;
+
+-- Si ya existe un perfil registrado para la trabajadora, asegurar su rol de 'member' (Capa 2)
+update public.user_profiles
+set role = 'member'
+where lower(email) = 'melgilez@gmail.com' and role != 'admin';
 
 -- ========================================================
 -- 6. TABLAS DE SEVEN NOTE (Espacios, Documentos, Canvas, etc.)
@@ -366,6 +380,8 @@ create policy "Admin gestion invitaciones" on public.team_invitations
   with check (public.is_admin(auth.uid()));
 
 -- C) ESPACIOS DE TRABAJO (SEVEN_SPACES)
+-- Capa 1 (Admins) y Capa 2 (Trabajadores): Acceso a todos los espacios de trabajo del equipo.
+-- Cosas privadas: SOLO visibles y editables por su respectivo creador.
 drop policy if exists "Acceso total a seven_spaces" on public.seven_spaces;
 drop policy if exists "Lectura de seven_spaces" on public.seven_spaces;
 create policy "Lectura de seven_spaces" on public.seven_spaces
@@ -381,7 +397,10 @@ create policy "Lectura de seven_spaces" on public.seven_spaces
 drop policy if exists "Modificacion de seven_spaces" on public.seven_spaces;
 create policy "Modificacion de seven_spaces" on public.seven_spaces
   for insert to authenticated
-  with check (public.is_user_active(auth.uid()) and public.get_my_role() != 'viewer');
+  with check (
+    public.is_user_active(auth.uid())
+    and public.get_my_role() != 'viewer'
+  );
 
 drop policy if exists "Actualizacion de seven_spaces" on public.seven_spaces;
 create policy "Actualizacion de seven_spaces" on public.seven_spaces
@@ -390,16 +409,18 @@ create policy "Actualizacion de seven_spaces" on public.seven_spaces
     public.is_user_active(auth.uid())
     and public.get_my_role() != 'viewer'
     and (
-      is_private = false
-      or user_id = auth.uid()
+      -- Capa 1: Admin puede actualizar espacios públicos o propios
+      (public.is_admin(auth.uid()) and (is_private = false or user_id = auth.uid()))
+      -- Capa 2: Trabajador SOLO puede actualizar los espacios que él mismo creó
+      or (user_id = auth.uid())
     )
   )
   with check (
     public.is_user_active(auth.uid())
     and public.get_my_role() != 'viewer'
     and (
-      is_private = false
-      or user_id = auth.uid()
+      (public.is_admin(auth.uid()) and (is_private = false or user_id = auth.uid()))
+      or (user_id = auth.uid())
     )
   );
 
@@ -409,18 +430,26 @@ create policy "Eliminacion de seven_spaces" on public.seven_spaces
   using (
     public.is_user_active(auth.uid())
     and (
-      user_id = auth.uid()
-      or (is_private = false and public.is_admin(auth.uid()))
+      -- Capa 1: Admin puede eliminar espacios públicos o propios
+      (public.is_admin(auth.uid()) and (is_private = false or user_id = auth.uid()))
+      -- Capa 2: Trabajador SOLO puede eliminar los espacios que él mismo creó
+      or (user_id = auth.uid())
     )
   );
 
 -- D) DOCUMENTOS Y PÁGINAS (SEVEN_WORKSPACES)
--- Modo Privado Estricto: ni los administradores pueden ver notas privadas de otros usuarios, y viceversa.
+-- SISTEMA DE 3 CAPAS:
+-- 1. Capa 1 (Admins: Kevin, Maikol, Marcos): Administran todo lo público, editan todo lo público. Contenido privado de cada cual está protegido.
+-- 2. Capa 2 (Trabajadores): Acceso a leer todas las notas y tableros. SOLO pueden editar lo que ellos mismos creen. Sus cosas privadas no las ve nadie más.
+-- 3. Capa 3 (Usuarios externos): Solo acceden vía enlace compartido. Sin inicio de sesión. Estrictamente SOLO LECTURA.
+
 drop policy if exists "Lectura de workspaces" on public.seven_workspaces;
 drop policy if exists "Acceso total a seven_workspaces" on public.seven_workspaces;
 create policy "Lectura de workspaces" on public.seven_workspaces
   for select using (
+    -- Capa 3: Visitante externo mediante enlace compartido activo
     is_public_shared = true
+    -- Capa 1 y Capa 2: Usuarios autenticados del equipo
     or (
       auth.role() = 'authenticated'
       and public.is_user_active(auth.uid())
@@ -441,28 +470,21 @@ create policy "Modificacion de workspaces" on public.seven_workspaces
 
 drop policy if exists "Actualizacion de workspaces" on public.seven_workspaces;
 create policy "Actualizacion de workspaces" on public.seven_workspaces
-  for update using (
-    (is_public_shared = true and share_permission = 'edit')
-    or (
-      auth.role() = 'authenticated'
-      and public.is_user_active(auth.uid())
-      and public.get_my_role() != 'viewer'
-      and (
-        is_private = false
-        or user_id = auth.uid()
-      )
+  for update to authenticated
+  using (
+    public.is_user_active(auth.uid())
+    and (
+      -- Capa 1: Administradores pueden editar todo el contenido compartido del equipo y sus notas privadas propias
+      (public.is_admin(auth.uid()) and (is_private = false or user_id = auth.uid()))
+      -- Capa 2: Trabajadores SOLO pueden editar las notas que ellos mismos crearon
+      or (user_id = auth.uid())
     )
   )
   with check (
-    (is_public_shared = true and share_permission = 'edit')
-    or (
-      auth.role() = 'authenticated'
-      and public.is_user_active(auth.uid())
-      and public.get_my_role() != 'viewer'
-      and (
-        is_private = false
-        or user_id = auth.uid()
-      )
+    public.is_user_active(auth.uid())
+    and (
+      (public.is_admin(auth.uid()) and (is_private = false or user_id = auth.uid()))
+      or (user_id = auth.uid())
     )
   );
 
@@ -472,15 +494,24 @@ create policy "Eliminacion de workspaces" on public.seven_workspaces
   using (
     public.is_user_active(auth.uid())
     and (
-      user_id = auth.uid()
-      or (is_private = false and public.is_admin(auth.uid()))
+      -- Capa 1: Administradores pueden eliminar notas compartidas del equipo o propias
+      (public.is_admin(auth.uid()) and (is_private = false or user_id = auth.uid()))
+      -- Capa 2: Trabajadores SOLO pueden eliminar las notas que ellos mismos crearon
+      or (user_id = auth.uid())
     )
   );
 
--- E) CANVAS NODES & EDGES (Protegidos estrictamente por el Workspace padre)
+-- E) CANVAS NODES & EDGES (Tarjetas y conexiones del lienzo)
+-- Siguen estrictamente las reglas de la nota/workspace padre:
+-- - Capa 3: Lectura pública si la nota está compartida. Edición prohibida.
+-- - Capa 1: Admins pueden editar nodos/edges si el tablero es público o propio.
+-- - Capa 2: Trabajadores SOLO pueden editar nodos/edges si ellos son los creadores del tablero.
+
 drop policy if exists "Acceso total a seven_canvas_nodes" on public.seven_canvas_nodes;
-create policy "Acceso seguro a seven_canvas_nodes" on public.seven_canvas_nodes
-  for all using (
+drop policy if exists "Acceso seguro a seven_canvas_nodes" on public.seven_canvas_nodes;
+drop policy if exists "Lectura de seven_canvas_nodes" on public.seven_canvas_nodes;
+create policy "Lectura de seven_canvas_nodes" on public.seven_canvas_nodes
+  for select using (
     exists (
       select 1 from public.seven_workspaces w
       where w.id = seven_canvas_nodes.workspace_id
@@ -493,26 +524,69 @@ create policy "Acceso seguro a seven_canvas_nodes" on public.seven_canvas_nodes
         )
       )
     )
-  )
+  );
+
+drop policy if exists "Modificacion de seven_canvas_nodes" on public.seven_canvas_nodes;
+create policy "Modificacion de seven_canvas_nodes" on public.seven_canvas_nodes
+  for insert to authenticated
   with check (
-    exists (
+    public.is_user_active(auth.uid())
+    and exists (
       select 1 from public.seven_workspaces w
       where w.id = seven_canvas_nodes.workspace_id
       and (
-        (w.is_public_shared = true and w.share_permission = 'edit')
-        or (
-          auth.role() = 'authenticated'
-          and public.is_user_active(auth.uid())
-          and public.get_my_role() != 'viewer'
-          and (w.is_private = false or w.user_id = auth.uid())
-        )
+        (public.is_admin(auth.uid()) and (w.is_private = false or w.user_id = auth.uid()))
+        or (w.user_id = auth.uid())
+      )
+    )
+  );
+
+drop policy if exists "Actualizacion de seven_canvas_nodes" on public.seven_canvas_nodes;
+create policy "Actualizacion de seven_canvas_nodes" on public.seven_canvas_nodes
+  for update to authenticated
+  using (
+    public.is_user_active(auth.uid())
+    and exists (
+      select 1 from public.seven_workspaces w
+      where w.id = seven_canvas_nodes.workspace_id
+      and (
+        (public.is_admin(auth.uid()) and (w.is_private = false or w.user_id = auth.uid()))
+        or (w.user_id = auth.uid())
+      )
+    )
+  )
+  with check (
+    public.is_user_active(auth.uid())
+    and exists (
+      select 1 from public.seven_workspaces w
+      where w.id = seven_canvas_nodes.workspace_id
+      and (
+        (public.is_admin(auth.uid()) and (w.is_private = false or w.user_id = auth.uid()))
+        or (w.user_id = auth.uid())
+      )
+    )
+  );
+
+drop policy if exists "Eliminacion de seven_canvas_nodes" on public.seven_canvas_nodes;
+create policy "Eliminacion de seven_canvas_nodes" on public.seven_canvas_nodes
+  for delete to authenticated
+  using (
+    public.is_user_active(auth.uid())
+    and exists (
+      select 1 from public.seven_workspaces w
+      where w.id = seven_canvas_nodes.workspace_id
+      and (
+        (public.is_admin(auth.uid()) and (w.is_private = false or w.user_id = auth.uid()))
+        or (w.user_id = auth.uid())
       )
     )
   );
 
 drop policy if exists "Acceso total a seven_canvas_edges" on public.seven_canvas_edges;
-create policy "Acceso seguro a seven_canvas_edges" on public.seven_canvas_edges
-  for all using (
+drop policy if exists "Acceso seguro a seven_canvas_edges" on public.seven_canvas_edges;
+drop policy if exists "Lectura de seven_canvas_edges" on public.seven_canvas_edges;
+create policy "Lectura de seven_canvas_edges" on public.seven_canvas_edges
+  for select using (
     exists (
       select 1 from public.seven_workspaces w
       where w.id = seven_canvas_edges.workspace_id
@@ -525,19 +599,60 @@ create policy "Acceso seguro a seven_canvas_edges" on public.seven_canvas_edges
         )
       )
     )
-  )
+  );
+
+drop policy if exists "Modificacion de seven_canvas_edges" on public.seven_canvas_edges;
+create policy "Modificacion de seven_canvas_edges" on public.seven_canvas_edges
+  for insert to authenticated
   with check (
-    exists (
+    public.is_user_active(auth.uid())
+    and exists (
       select 1 from public.seven_workspaces w
       where w.id = seven_canvas_edges.workspace_id
       and (
-        (w.is_public_shared = true and w.share_permission = 'edit')
-        or (
-          auth.role() = 'authenticated'
-          and public.is_user_active(auth.uid())
-          and public.get_my_role() != 'viewer'
-          and (w.is_private = false or w.user_id = auth.uid())
-        )
+        (public.is_admin(auth.uid()) and (w.is_private = false or w.user_id = auth.uid()))
+        or (w.user_id = auth.uid())
+      )
+    )
+  );
+
+drop policy if exists "Actualizacion de seven_canvas_edges" on public.seven_canvas_edges;
+create policy "Actualizacion de seven_canvas_edges" on public.seven_canvas_edges
+  for update to authenticated
+  using (
+    public.is_user_active(auth.uid())
+    and exists (
+      select 1 from public.seven_workspaces w
+      where w.id = seven_canvas_edges.workspace_id
+      and (
+        (public.is_admin(auth.uid()) and (w.is_private = false or w.user_id = auth.uid()))
+        or (w.user_id = auth.uid())
+      )
+    )
+  )
+  with check (
+    public.is_user_active(auth.uid())
+    and exists (
+      select 1 from public.seven_workspaces w
+      where w.id = seven_canvas_edges.workspace_id
+      and (
+        (public.is_admin(auth.uid()) and (w.is_private = false or w.user_id = auth.uid()))
+        or (w.user_id = auth.uid())
+      )
+    )
+  );
+
+drop policy if exists "Eliminacion de seven_canvas_edges" on public.seven_canvas_edges;
+create policy "Eliminacion de seven_canvas_edges" on public.seven_canvas_edges
+  for delete to authenticated
+  using (
+    public.is_user_active(auth.uid())
+    and exists (
+      select 1 from public.seven_workspaces w
+      where w.id = seven_canvas_edges.workspace_id
+      and (
+        (public.is_admin(auth.uid()) and (w.is_private = false or w.user_id = auth.uid()))
+        or (w.user_id = auth.uid())
       )
     )
   );

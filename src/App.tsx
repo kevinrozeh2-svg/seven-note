@@ -48,7 +48,18 @@ import { FindInPage } from './components/search/FindInPage'
 import { WorkbenchTabs, type WorkbenchTab } from './components/tabs/WorkbenchTabs'
 const ExternalShareView = lazy(() => import('./components/views/ExternalShareView').then(m => ({ default: m.ExternalShareView })))
 import { type AppTemplate } from './lib/templates'
-import { getCurrentMember, setCurrentMember, subscribeToMemberChanges, mapSupabaseUserToMember, type TeamMember, isWorkspaceVisible, isSpaceVisible } from './lib/teamAuth'
+import {
+  getCurrentMember,
+  setCurrentMember,
+  subscribeToMemberChanges,
+  mapSupabaseUserToMember,
+  type TeamMember,
+  isWorkspaceVisible,
+  isSpaceVisible,
+  canUserEditWorkspace,
+  canUserDeleteWorkspace,
+  canUserTogglePrivacy
+} from './lib/teamAuth'
 import { getAuthUser, onAuthChange, signOutUser, fetchUserProfile } from './lib/supabase'
 import {
   exportDocumentAsMarkdown,
@@ -595,6 +606,10 @@ function MainApp() {
   const [boardTitleInput, setBoardTitleInput] = useState('')
 
   const startEditingBoardTitle = () => {
+    if (isCurrentWorkspaceReadOnly) {
+      toast.info('Solo el autor o un administrador pueden renombrar este tablero.')
+      return
+    }
     setBoardTitleInput(currentWorkspace?.title === 'Untitled' ? '' : (currentWorkspace?.title || ''))
     setIsEditingBoardTitle(true)
   }
@@ -845,6 +860,22 @@ function MainApp() {
     return Array.from(map.values())
   }, [spaces, workspaces, activeWorkspaces])
 
+  // ========================================================
+  // SISTEMA DE 3 CAPAS - PERMISOS DINÁMICOS
+  // - Capa 1 (Admins: Kevin, Maikol, Marcos): Control total de notas y tableros compartidos.
+  // - Capa 2 (Trabajadores): Lectura de todo el equipo. SOLO pueden editar lo propio.
+  // - Capa 3 (Externos): Solo lectura absoluta de la nota compartida.
+  // ========================================================
+  const isCurrentWorkspaceReadOnly = useMemo(() => {
+    if (!currentWorkspace) return false
+    return !canUserEditWorkspace(currentWorkspace, currentMember, authUser?.id)
+  }, [currentWorkspace, currentMember, authUser?.id])
+
+  const canEditCurrentPrivacy = useMemo(() => {
+    if (!currentWorkspace) return false
+    return canUserTogglePrivacy(currentWorkspace, currentMember, authUser?.id)
+  }, [currentWorkspace, currentMember, authUser?.id])
+
   // Space switcher actions
   const handleSelectSpace = async (spaceId: string) => {
     setCurrentSpaceId(spaceId)
@@ -952,7 +983,7 @@ function MainApp() {
 
   // Update title
   const handleTitleChange = async (newTitle: string) => {
-    if (!currentWorkspace) return
+    if (!currentWorkspace || isCurrentWorkspaceReadOnly) return
     try {
       await db.workspaces.update(currentWorkspace.id, {
         title: newTitle,
@@ -996,6 +1027,10 @@ function MainApp() {
   // Toggle privacy (pública para el equipo vs privada solo para el autor)
   const handleTogglePrivacy = async () => {
     if (!currentWorkspace) return
+    if (!canEditCurrentPrivacy) {
+      toast.error('Solo el creador original o un administrador pueden modificar la privacidad.')
+      return
+    }
     const nextPrivate = !currentWorkspace.isPrivate
     try {
       await db.workspaces.update(currentWorkspace.id, {
@@ -1015,6 +1050,10 @@ function MainApp() {
   // Apply template (Supports both Edgeless Canvas and Document templates)
   const handleApplyTemplate = async (template: AppTemplate) => {
     if (!currentWorkspace) return
+    if (isCurrentWorkspaceReadOnly) {
+      toast.error('Esta nota pertenece a otro miembro del equipo y está en modo solo lectura.')
+      return
+    }
     const now = Date.now()
 
     if (template.type === 'canvas' && template.nodes) {
@@ -1168,7 +1207,7 @@ function MainApp() {
           onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
           onNewNote={handleNewTab}
           onOpenSearch={() => setIsSearchOpen(true)}
-          onOpenKnowledgeGraph={() => openSpecialViewTab('knowledge-graph', 'Grafo de Conocimiento')}
+          onOpenKnowledgeGraph={() => openSpecialViewTab('knowledge-graph', 'Vista gráfica')}
           onOpenCanvas={() => {
             if (activeViewMode === 'canvas') {
               setViewMode('doc')
@@ -1236,7 +1275,7 @@ function MainApp() {
               onOpenImport={() => setIsImportOpen(true)}
               onOpenTemplates={() => openSpecialViewTab('templates', 'Plantillas')}
               onOpenShortcuts={() => setIsShortcutsOpen(true)}
-              onOpenKnowledgeGraph={() => openSpecialViewTab('knowledge-graph', 'Grafo de Conocimiento')}
+              onOpenKnowledgeGraph={() => openSpecialViewTab('knowledge-graph', 'Vista gráfica')}
               syncStatus={syncStatus}
               darkMode={darkMode}
               onToggleDarkMode={() => setDarkMode(!darkMode)}
@@ -1323,16 +1362,32 @@ function MainApp() {
                 )}
               </button>
 
+              {/* Read Only Indicator for Layer 2 & Layer 3 */}
+              {isCurrentWorkspaceReadOnly && (
+                <div
+                  className="h-6 px-2 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-500 flex items-center gap-1 text-[11px] font-medium select-none"
+                  title={`Solo lectura: Creado por ${currentWorkspace?.ownerName || currentWorkspace?.createdBy || 'otro miembro'}`}
+                >
+                  <LockKey size={12} weight="fill" />
+                  <span className="hidden sm:inline">Solo lectura</span>
+                </div>
+              )}
+
               {/* Privacy Selector Button (Pública / Privada) */}
               <button
                 onClick={handleTogglePrivacy}
-                className={`h-6 px-2 rounded flex items-center gap-1 text-[11px] font-normal transition cursor-pointer select-none ${
+                disabled={!canEditCurrentPrivacy}
+                className={`h-6 px-2 rounded flex items-center gap-1 text-[11px] font-normal transition select-none ${
+                  !canEditCurrentPrivacy ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
+                } ${
                   currentWorkspace?.isPrivate
                     ? 'text-amber-400 hover:bg-amber-400/10'
                     : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5'
                 }`}
                 title={
-                  currentWorkspace?.isPrivate
+                  !canEditCurrentPrivacy
+                    ? `Privacidad gestionada por el autor original (${currentWorkspace?.ownerName || currentWorkspace?.createdBy || 'propietario'})`
+                    : currentWorkspace?.isPrivate
                     ? 'Nota privada (solo tú). Clic para cambiar a pública para el equipo'
                     : 'Nota pública (visible para todo el equipo). Clic para hacerla privada'
                 }
@@ -1528,7 +1583,7 @@ function MainApp() {
 
                     <button
                       onClick={() => {
-                        openSpecialViewTab('knowledge-graph', 'Grafo de Conocimiento')
+                        openSpecialViewTab('knowledge-graph', 'Vista gráfica')
                         setActiveDropdown(null)
                       }}
                       className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center justify-between text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
@@ -1885,7 +1940,13 @@ function MainApp() {
                 }}
                 onDeleteWorkspace={async (e, id) => {
                   e.stopPropagation()
-                  await db.workspaces.update(id, { isDeleted: true })
+                  const target = workspaces.find((w) => w.id === id)
+                  if (!canUserDeleteWorkspace(target, currentMember, authUser?.id)) {
+                    toast.error('Solo el autor o un administrador pueden eliminar esta nota.')
+                    return
+                  }
+                  await db.workspaces.update(id, { isDeleted: true, updatedAt: Date.now(), syncStatus: 'pending' })
+                  syncEngine.scheduleSync(500)
                 }}
               />
             ) : activeTab?.viewType === 'knowledge-graph' ? (
@@ -1893,6 +1954,46 @@ function MainApp() {
                 workspaces={currentSpaceWorkspaces}
                 currentWorkspaceId={currentWorkspace?.id}
                 onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
+                onCreateWorkspace={async (title) => {
+                  const newId = crypto.randomUUID()
+                  const now = Date.now()
+                  const newWs: WorkspaceItem = {
+                    id: newId,
+                    parentId: null,
+                    spaceId: currentSpaceId,
+                    title: title || 'Sin título',
+                    icon: '',
+                    color: '#1e96eb',
+                    viewMode: 'doc',
+                    docContent: '<p></p>',
+                    createdAt: now,
+                    updatedAt: now,
+                    isFavorite: false,
+                    isDeleted: false,
+                    syncStatus: 'pending',
+                    ownerMember: currentMember.id,
+                    ownerName: currentMember.name,
+                    createdBy: currentMember.name,
+                    userId: authUser?.id || undefined,
+                    viewedBy: [currentMember.id, currentMember.fullName || currentMember.name, currentMember.email, authUser?.id].filter(Boolean) as string[],
+                    isNewItem: true
+                  }
+                  await db.workspaces.add(newWs)
+                  setOptimisticWorkspace(newWs)
+                  selectWorkspaceWithTab(newId)
+                }}
+                onBack={() => {
+                  const currentIndex = tabs.findIndex((t) => t.id === activeTabId)
+                  if (currentIndex > 0) {
+                    setActiveTabId(tabs[currentIndex - 1].id)
+                  }
+                }}
+                onForward={() => {
+                  const currentIndex = tabs.findIndex((t) => t.id === activeTabId)
+                  if (currentIndex >= 0 && currentIndex < tabs.length - 1) {
+                    setActiveTabId(tabs[currentIndex + 1].id)
+                  }
+                }}
               />
             ) : activeTab?.viewType === 'trash' ? (
               <TrashPage
@@ -1913,9 +2014,10 @@ function MainApp() {
                     allWorkspaces={publicWorkspaces}
                     spaces={spaces}
                     onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
-                    onTitleChange={handleTitleChange}
+                    onTitleChange={isCurrentWorkspaceReadOnly ? undefined : handleTitleChange}
                     onToggleViewMode={() => setViewMode('canvas')}
                     onOpenTemplatesModal={() => setIsTemplatesOpen(true)}
+                    readOnly={isCurrentWorkspaceReadOnly}
                   />
                 </div>
               ) : activeViewMode === 'canvas' ? (
@@ -1926,6 +2028,7 @@ function MainApp() {
                     onSwitchToDoc={handleSwitchToDoc}
                     darkMode={darkMode}
                     hideChrome={focusMode}
+                    readOnly={isCurrentWorkspaceReadOnly}
                   />
                   {focusMode && (
                     <button
@@ -1946,9 +2049,10 @@ function MainApp() {
                       allWorkspaces={publicWorkspaces}
                       spaces={spaces}
                       onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
-                      onTitleChange={handleTitleChange}
+                      onTitleChange={isCurrentWorkspaceReadOnly ? undefined : handleTitleChange}
                       onToggleViewMode={() => setViewMode('canvas')}
                       onOpenTemplatesModal={() => setIsTemplatesOpen(true)}
+                      readOnly={isCurrentWorkspaceReadOnly}
                     />
                   </div>
                   <div className="w-1/2 h-full overflow-hidden">
@@ -1957,6 +2061,7 @@ function MainApp() {
                       currentWorkspace={currentWorkspace}
                       onSwitchToDoc={handleSwitchToDoc}
                       darkMode={darkMode}
+                      readOnly={isCurrentWorkspaceReadOnly}
                     />
                   </div>
                 </div>
@@ -1996,6 +2101,7 @@ function MainApp() {
           activeTab={rightSidebarTab}
           onTabChange={(tab) => setRightSidebarTab(tab)}
           onScrollToHeading={handleScrollToHeading}
+          readOnly={isCurrentWorkspaceReadOnly}
         />
       )}
 

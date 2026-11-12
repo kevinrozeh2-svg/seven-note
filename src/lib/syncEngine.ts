@@ -8,7 +8,7 @@ import {
   type TagItem
 } from '../db'
 import { getSupabaseClient, getStoredSupabaseConfig, getAuthUser } from './supabase'
-import { getCurrentMember, TEAM_MEMBERS } from './teamAuth'
+import { getCurrentMember, TEAM_MEMBERS, isUserAdmin, isWorkspaceOwner } from './teamAuth'
 
 export type NetworkStatus = 'online' | 'offline'
 export type SyncEngineState = 'idle' | 'syncing' | 'synced' | 'error' | 'offline' | 'unconfigured'
@@ -257,8 +257,15 @@ class SyncEngine {
         // 2. PUSH: WORKSPACES (PAGES / DOCS)
         // ==========================================
         const pendingWorkspaces = await db.workspaces.where('syncStatus').equals('pending').toArray()
-        if (pendingWorkspaces.length > 0) {
-          const payload = pendingWorkspaces.map((w: WorkspaceItem) => ({
+        // Capa 2: Si el usuario es un trabajador, solo sube cambios de lo que él mismo creó
+        const isUserAdminCurrent = isUserAdmin(currentMember)
+        const allowedPending = pendingWorkspaces.filter((w) => {
+          if (isUserAdminCurrent) return true
+          return isWorkspaceOwner(w, currentMember, authUserId)
+        })
+
+        if (allowedPending.length > 0) {
+          const payload = allowedPending.map((w: WorkspaceItem) => ({
             id: w.id,
             parent_id: w.parentId,
             space_id: w.spaceId || 'default-workspace',
@@ -277,7 +284,7 @@ class SyncEngine {
             is_public_shared: Boolean(w.isPublicShared),
             share_token: w.shareToken || null,
             share_permission: w.sharePermission || 'view',
-            user_id: authUserId,
+            user_id: w.userId || authUserId,
             metadata: {
               tags: w.tags || [],
               documentMode: w.documentMode,
@@ -313,7 +320,7 @@ class SyncEngine {
           const { error: wsError } = await supabase.from('seven_workspaces').upsert(payload, { onConflict: 'id' })
           if (!wsError) {
             await db.workspaces.bulkUpdate(
-              pendingWorkspaces.map((w) => ({ key: w.id, changes: { syncStatus: 'synced' as const } }))
+              allowedPending.map((w) => ({ key: w.id, changes: { syncStatus: 'synced' as const } }))
             )
           } else {
             console.warn('Warning syncing workspaces:', wsError.message)

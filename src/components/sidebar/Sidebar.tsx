@@ -55,7 +55,15 @@ import {
   setFolderColor,
   useFolderColors
 } from '../ui/PastelIcons'
-import { getCurrentMember, type TeamMember, isWorkspaceVisible, isSpaceVisible } from '../../lib/teamAuth'
+import {
+  getCurrentMember,
+  type TeamMember,
+  isWorkspaceVisible,
+  isSpaceVisible,
+  canUserEditWorkspace,
+  canUserDeleteWorkspace,
+  canUserTogglePrivacy
+} from '../../lib/teamAuth'
 import { toast } from 'sonner'
 
 export interface SidebarProps {
@@ -557,6 +565,10 @@ export function Sidebar({
   // Toggle private vs team
   const handleTogglePrivateWorkspace = async (e: React.MouseEvent, ws: WorkspaceItem) => {
     e.stopPropagation()
+    if (!canUserTogglePrivacy(ws, activeMember, authUser?.id)) {
+      toast.error('Solo el creador original o un administrador pueden modificar la privacidad.')
+      return
+    }
     const nextPrivate = !ws.isPrivate
     try {
       await db.workspaces.update(ws.id, {
@@ -586,6 +598,10 @@ export function Sidebar({
       createdAt: now,
       updatedAt: now,
       syncStatus: 'pending',
+      ownerMember: activeMember.id,
+      ownerName: activeMember.name,
+      createdBy: activeMember.name,
+      userId: authUser?.id || undefined,
       isNewItem: true
     }
     await db.workspaces.add(dupWs)
@@ -596,6 +612,11 @@ export function Sidebar({
   // Move to trash
   const handleDeleteWorkspace = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
+    const targetWs = workspaces.find((w) => w.id === id)
+    if (!canUserDeleteWorkspace(targetWs, activeMember, authUser?.id)) {
+      toast.error('Solo el autor o un administrador pueden eliminar esta nota.')
+      return
+    }
     if (!confirm('¿Mover esta página a la papelera?')) return
     try {
       await db.workspaces.update(id, {
@@ -2884,69 +2905,93 @@ export function Sidebar({
                 <span>Marcar favorito</span>
               </button>
 
-              <button
-                onClick={() => {
-                  const doc = workspaces.find((w) => w.id === activeItemMenu.id)
-                  if (doc) {
-                    handleTogglePrivateWorkspace({ stopPropagation: () => {} } as any, doc)
-                  }
-                  setActiveItemMenu(null)
-                }}
-                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-white/10 text-left transition cursor-pointer"
-              >
-                <Lock size={15} />
-                <span>{activeItemMenu.isPrivate ? 'Hacer pública (Equipo)' : 'Hacer privada (Solo tú)'}</span>
-              </button>
+              {(() => {
+                const targetDoc = workspaces.find((w) => w.id === activeItemMenu.id)
+                const canEditDoc = canUserEditWorkspace(targetDoc, activeMember, authUser?.id)
+                const canDeleteDoc = canUserDeleteWorkspace(targetDoc, activeMember, authUser?.id)
+                const canTogglePriv = canUserTogglePrivacy(targetDoc, activeMember, authUser?.id)
 
-              <button
-                onClick={() => {
-                  if (activeItemMenu.id) {
-                    setEmojiPickerTarget({ id: activeItemMenu.id, type: 'doc' })
-                  }
-                  setActiveItemMenu(null)
-                }}
-                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-white/10 text-left transition cursor-pointer"
-              >
-                <Tag size={15} />
-                <span>Cambiar icono...</span>
-              </button>
+                return (
+                  <>
+                    {!canEditDoc && (
+                      <div className="px-3 py-1.5 mb-1 rounded-lg bg-amber-400/10 border border-amber-400/20 text-amber-400 text-[11px] font-medium select-none">
+                        Solo lectura ({targetDoc?.ownerName || 'otro autor'})
+                      </div>
+                    )}
 
-              <div className="h-px bg-white/[0.06] my-1" />
+                    {canTogglePriv && (
+                      <button
+                        onClick={() => {
+                          if (targetDoc) {
+                            handleTogglePrivateWorkspace({ stopPropagation: () => {} } as any, targetDoc)
+                          }
+                          setActiveItemMenu(null)
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-white/10 text-left transition cursor-pointer"
+                      >
+                        <Lock size={15} />
+                        <span>{activeItemMenu.isPrivate ? 'Hacer pública (Equipo)' : 'Hacer privada (Solo tú)'}</span>
+                      </button>
+                    )}
 
-              <button
-                onClick={() => {
-                  if (activeItemMenu.id) {
-                    const currentTitle = activeItemMenu.name || 'Untitled'
-                    const newTitle = prompt('Renombrar nota:', currentTitle)
-                    if (newTitle && newTitle.trim()) {
-                      db.workspaces.update(activeItemMenu.id, {
-                        title: newTitle.trim(),
-                        updatedAt: Date.now(),
-                        syncStatus: 'pending'
-                      })
-                      syncEngine.scheduleSync(500)
-                    }
-                  }
-                  setActiveItemMenu(null)
-                }}
-                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-white/10 text-left transition cursor-pointer"
-              >
-                <PencilSimple size={15} />
-                <span>Renombrar</span>
-              </button>
+                    {canEditDoc && (
+                      <button
+                        onClick={() => {
+                          if (activeItemMenu.id) {
+                            setEmojiPickerTarget({ id: activeItemMenu.id, type: 'doc' })
+                          }
+                          setActiveItemMenu(null)
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-white/10 text-left transition cursor-pointer"
+                      >
+                        <Tag size={15} />
+                        <span>Cambiar icono...</span>
+                      </button>
+                    )}
 
-              <button
-                onClick={() => {
-                  if (activeItemMenu.id) {
-                    handleDeleteWorkspace({ stopPropagation: () => {} } as any, activeItemMenu.id)
-                  }
-                  setActiveItemMenu(null)
-                }}
-                className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-rose-500/20 text-rose-400 text-left transition cursor-pointer"
-              >
-                <Trash size={15} />
-                <span>Borrar</span>
-              </button>
+                    {canEditDoc && <div className="h-px bg-white/[0.06] my-1" />}
+
+                    {canEditDoc && (
+                      <button
+                        onClick={() => {
+                          if (activeItemMenu.id) {
+                            const currentTitle = activeItemMenu.name || 'Untitled'
+                            const newTitle = prompt('Renombrar nota:', currentTitle)
+                            if (newTitle && newTitle.trim()) {
+                              db.workspaces.update(activeItemMenu.id, {
+                                title: newTitle.trim(),
+                                updatedAt: Date.now(),
+                                syncStatus: 'pending'
+                              })
+                              syncEngine.scheduleSync(500)
+                            }
+                          }
+                          setActiveItemMenu(null)
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-white/10 text-left transition cursor-pointer"
+                      >
+                        <PencilSimple size={15} />
+                        <span>Renombrar</span>
+                      </button>
+                    )}
+
+                    {canDeleteDoc && (
+                      <button
+                        onClick={() => {
+                          if (activeItemMenu.id) {
+                            handleDeleteWorkspace({ stopPropagation: () => {} } as any, activeItemMenu.id)
+                          }
+                          setActiveItemMenu(null)
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-1.5 rounded-lg hover:bg-rose-500/20 text-rose-400 text-left transition cursor-pointer"
+                      >
+                        <Trash size={15} />
+                        <span>Borrar</span>
+                      </button>
+                    )}
+                  </>
+                )
+              })()}
             </div>
           )}
         </div>,

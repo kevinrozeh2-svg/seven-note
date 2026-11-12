@@ -426,7 +426,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
           />
         ) : (
           <div
-            onDoubleClick={() => setIsEditingTitle(true)}
+            onDoubleClick={() => !data?.readOnly && setIsEditingTitle(true)}
             className="font-serif font-bold text-base text-center text-white cursor-text select-text w-full"
           >
             {renderWithAppleEmoji(title || content || 'Texto del banner...')}
@@ -532,7 +532,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
               />
             ) : (
               <span
-                onDoubleClick={() => setIsEditingTitle(true)}
+                onDoubleClick={() => !data?.readOnly && setIsEditingTitle(true)}
                 className="font-sans font-semibold text-[11px] text-zinc-700 dark:text-zinc-300 cursor-text select-text truncate max-w-[190px]"
               >
                 {renderWithAppleEmoji(title || 'Categoría / Título...')}
@@ -562,7 +562,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
             />
           ) : (
             <div
-              onDoubleClick={() => setIsEditingContent(true)}
+              onDoubleClick={() => !data?.readOnly && setIsEditingContent(true)}
               className="nodrag cursor-text select-text leading-relaxed text-[13px] italic text-zinc-800 dark:text-zinc-200 min-h-[36px] [&_a]:text-blue-500 [&_a]:underline"
             >
               {content ? (
@@ -605,7 +605,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
             />
           ) : (
             <div
-              onDoubleClick={() => setIsEditingContent(true)}
+              onDoubleClick={() => !data?.readOnly && setIsEditingContent(true)}
               className={`nodrag cursor-text select-text leading-relaxed text-[14px] font-normal ${
                 isDarkFill ? 'text-zinc-100' : 'text-zinc-800 dark:text-zinc-200'
               } min-h-[36px] [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through [&_del]:line-through [&_a]:text-blue-500 [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:border-l-2 [&_blockquote]:pl-2 [&_blockquote]:italic [&_code]:bg-black/10 dark:[&_code]:bg-white/10 [&_code]:px-1 [&_code]:rounded`}

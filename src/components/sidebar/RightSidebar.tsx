@@ -27,6 +27,7 @@ interface RightSidebarProps {
   activeTab: 'properties' | 'outline' | 'history'
   onTabChange: (tab: 'properties' | 'outline' | 'history') => void
   onScrollToHeading?: (headingText: string) => void
+  readOnly?: boolean
 }
 
 export function RightSidebar({
@@ -35,7 +36,8 @@ export function RightSidebar({
   onClose,
   activeTab,
   onTabChange,
-  onScrollToHeading
+  onScrollToHeading,
+  readOnly = false
 }: RightSidebarProps) {
   const [propertiesExpanded, setPropertiesExpanded] = useState(true)
   const [addPropertiesExpanded, setAddPropertiesExpanded] = useState(true)
@@ -75,6 +77,7 @@ export function RightSidebar({
 
   // Update property visibility in database
   const handleSetVisibility = async (propId: string, visibility: PropertyVisibility) => {
+    if (readOnly) return
     const updatedMap = {
       ...visibilityMap,
       [propId]: visibility
@@ -90,6 +93,7 @@ export function RightSidebar({
 
   // Remove a property from active list
   const handleRemoveProperty = async (propId: string) => {
+    if (readOnly) return
     const newActive = activePropIds.filter((id) => id !== propId)
     const customProps = (workspace.customProperties || []).filter((cp) => cp.id !== propId)
 
@@ -105,6 +109,7 @@ export function RightSidebar({
 
   // Add a property to active list
   const handleAddProperty = async (propToAdd: typeof ADDABLE_PROPERTIES[0]) => {
+    if (readOnly) return
     if (propToAdd.isCustom) {
       // Create new custom property
       const customId = `custom_${Date.now()}`
@@ -522,50 +527,52 @@ export function RightSidebar({
           </div>
 
           {/* Section: Agregar más propiedades */}
-          <div className="px-3 pt-3">
-            <button
-              onClick={() => setAddPropertiesExpanded(!addPropertiesExpanded)}
-              className="w-full flex items-center justify-between py-2 text-[var(--affine-text-primary-color)] font-medium text-xs hover:text-[#1e96eb] transition"
-            >
-              <div className="flex items-center gap-1.5">
-                <span>Agregar más propiedades</span>
-                {addPropertiesExpanded ? <ToggleDownIcon className="w-3.5 h-3.5" /> : <ToggleRightIcon className="w-3.5 h-3.5" />}
-              </div>
-            </button>
+          {!readOnly && (
+            <div className="px-3 pt-3">
+              <button
+                onClick={() => setAddPropertiesExpanded(!addPropertiesExpanded)}
+                className="w-full flex items-center justify-between py-2 text-[var(--affine-text-primary-color)] font-medium text-xs hover:text-[#1e96eb] transition"
+              >
+                <div className="flex items-center gap-1.5">
+                  <span>Agregar más propiedades</span>
+                  {addPropertiesExpanded ? <ToggleDownIcon className="w-3.5 h-3.5" /> : <ToggleRightIcon className="w-3.5 h-3.5" />}
+                </div>
+              </button>
 
-            {addPropertiesExpanded && (
-              <div className="space-y-0.5 mt-1">
-                {ADDABLE_PROPERTIES.map((item) => {
-                  const Icon = item.icon
-                  const isAdded = !item.isCustom && activePropIds.includes(item.id)
+              {addPropertiesExpanded && (
+                <div className="space-y-0.5 mt-1">
+                  {ADDABLE_PROPERTIES.map((item) => {
+                    const Icon = item.icon
+                    const isAdded = !item.isCustom && activePropIds.includes(item.id)
 
-                  return (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-[var(--affine-hover-color)] transition group text-xs"
-                    >
-                      <div className="flex items-center gap-2 text-[var(--affine-text-secondary-color)] group-hover:text-[var(--affine-text-primary-color)] min-w-0">
-                        <Icon size={14} className="shrink-0" />
-                        <span className="truncate">{item.name}</span>
+                    return (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-[var(--affine-hover-color)] transition group text-xs"
+                      >
+                        <div className="flex items-center gap-2 text-[var(--affine-text-secondary-color)] group-hover:text-[var(--affine-text-primary-color)] min-w-0">
+                          <Icon size={14} className="shrink-0" />
+                          <span className="truncate">{item.name}</span>
+                        </div>
+
+                        {isAdded ? (
+                          <span className="text-[11px] text-[var(--affine-text-secondary-color)] font-normal">Added</span>
+                        ) : (
+                          <button
+                            onClick={() => handleAddProperty(item)}
+                            className="p-1 rounded text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] hover:bg-[var(--affine-hover-color)] transition"
+                            title={`Agregar ${item.name}`}
+                          >
+                            <PlusIcon className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
-
-                      {isAdded ? (
-                        <span className="text-[11px] text-[var(--affine-text-secondary-color)] font-normal">Added</span>
-                      ) : (
-                        <button
-                          onClick={() => handleAddProperty(item)}
-                          className="p-1 rounded text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] hover:bg-[var(--affine-hover-color)] transition"
-                          title={`Agregar ${item.name}`}
-                        >
-                          <PlusIcon className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { ChevronDown, Shield, LogOut, Key, User, Users } from 'lucide-react'
 import { type TeamMember, isUserAdmin } from '../../lib/teamAuth'
 
@@ -23,10 +24,11 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
   onOpenProfileModal,
   onOpenUserManagementModal,
   onSignOut,
-  variant = 'circular',
-  popoverDirection = 'up'
+  variant = 'circular'
 }) => {
   const [isOpen, setIsOpen] = useState(false)
+  const [popoverPos, setPopoverPos] = useState<{ bottom: number; left: number } | null>(null)
+  const buttonRef = React.useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     if (!isOpen) return
@@ -37,9 +39,37 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isOpen])
 
+  const handleToggle = () => {
+    if (!isOpen && buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect()
+      setPopoverPos({
+        bottom: window.innerHeight - rect.bottom,
+        left: rect.right + 10
+      })
+    }
+    setIsOpen(!isOpen)
+  }
+
   const displayName = currentMember.fullName || authUser?.user_metadata?.full_name || currentMember.name
   const displayEmail = currentMember.email || authUser?.email
   const isAdmin = isUserAdmin(currentMember)
+
+  const [imgError, setImgError] = useState(false)
+
+  // Reset img error if user changes
+  useEffect(() => {
+    setImgError(false)
+  }, [displayEmail, currentMember.avatarUrl])
+
+  const effectiveAvatar = !imgError ? (
+    currentMember.avatarUrl ||
+    authUser?.user_metadata?.avatar_url ||
+    authUser?.user_metadata?.picture ||
+    authUser?.user_metadata?.avatar ||
+    (authUser?.identities && authUser.identities[0]?.identity_data?.avatar_url) ||
+    (authUser?.identities && authUser.identities[0]?.identity_data?.picture) ||
+    (displayEmail ? `https://unavatar.io/${encodeURIComponent(displayEmail)}?fallback=false` : undefined)
+  ) : undefined
 
   const roleLabel =
     currentMember.role === 'admin'
@@ -52,16 +82,18 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
     <div className="relative">
       {variant === 'circular' ? (
         <button
+          ref={buttonRef}
           type="button"
-          onClick={() => setIsOpen(!isOpen)}
-          className="relative w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-xs hover:scale-105 active:scale-95 transition-all cursor-pointer ring-1 ring-black/10 dark:ring-white/15"
+          onClick={handleToggle}
+          className="relative w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-xs hover:scale-105 active:scale-95 transition-all cursor-pointer ring-1 ring-black/10 dark:ring-white/15 overflow-hidden"
           style={{ backgroundColor: currentMember.color || '#2563eb' }}
           title={`Mi Cuenta: ${displayName} (${roleLabel})`}
         >
-          {currentMember.avatarUrl ? (
+          {effectiveAvatar ? (
             <img
-              src={currentMember.avatarUrl}
+              src={effectiveAvatar}
               alt={displayName}
+              onError={() => setImgError(true)}
               className="w-full h-full rounded-full object-cover"
             />
           ) : (
@@ -76,17 +108,27 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
         </button>
       ) : (
         <button
+          ref={buttonRef}
           type="button"
-          onClick={() => setIsOpen(!isOpen)}
+          onClick={handleToggle}
           className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl hover:bg-black/[0.04] dark:hover:bg-white/[0.06] border border-black/[0.04] dark:border-white/[0.06] transition text-left group cursor-pointer"
           title="Opciones de cuenta y usuario"
         >
           <div className="flex items-center gap-2 min-w-0">
             <div
-              className="w-6 h-6 rounded-lg flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-2xs transition-transform group-hover:scale-105"
+              className="w-6 h-6 rounded-lg flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-2xs transition-transform group-hover:scale-105 overflow-hidden"
               style={{ backgroundColor: currentMember.color || '#2563eb' }}
             >
-              {displayName.charAt(0).toUpperCase()}
+              {effectiveAvatar ? (
+                <img
+                  src={effectiveAvatar}
+                  alt={displayName}
+                  onError={() => setImgError(true)}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                displayName.charAt(0).toUpperCase()
+              )}
             </div>
             <div className="min-w-0 flex-1 leading-tight">
               <div className="flex items-center gap-1.5">
@@ -111,18 +153,25 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
         </button>
       )}
 
-      {isOpen && (
+      {isOpen && typeof document !== 'undefined' && createPortal(
         <>
           <div
-            className="fixed inset-0 z-40"
+            className="fixed inset-0 z-[99990]"
             onClick={() => setIsOpen(false)}
           />
           <div
-            className={`absolute z-50 bg-white dark:bg-[#1e1f23] border border-black/[0.08] dark:border-white/[0.1] rounded-2xl shadow-2xl p-2.5 animate-in fade-in zoom-in-95 duration-100 flex flex-col gap-1.5 sm:gap-2 font-sans text-xs max-h-[min(380px,70vh)] overflow-y-auto custom-scrollbar ${
-              popoverDirection === 'up'
-                ? 'bottom-full mb-2 right-0 w-64'
-                : 'left-0 right-0 top-12 w-full min-w-[200px] sm:min-w-[220px]'
-            }`}
+            className="fixed z-[99999] bg-white dark:bg-[#1e1f23] border border-black/[0.08] dark:border-white/[0.1] rounded-2xl shadow-2xl p-2.5 animate-in fade-in zoom-in-95 duration-100 flex flex-col gap-1.5 sm:gap-2 font-sans text-xs max-h-[min(420px,80vh)] overflow-y-auto custom-scrollbar w-64"
+            style={
+              variant === 'circular'
+                ? {
+                    bottom: popoverPos ? `${popoverPos.bottom}px` : '16px',
+                    left: popoverPos ? `${popoverPos.left}px` : '52px'
+                  }
+                : {
+                    bottom: popoverPos ? `${popoverPos.bottom}px` : '16px',
+                    left: popoverPos ? `${popoverPos.left}px` : '260px'
+                  }
+            }
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between px-1">
@@ -141,10 +190,19 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
             {/* Tarjeta de la cuenta conectada */}
             <div className="p-2 sm:p-2.5 rounded-lg sm:rounded-xl bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.04] dark:border-white/[0.06] flex items-center gap-2 sm:gap-2.5">
               <div
-                className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center text-white font-bold text-xs sm:text-sm shrink-0 shadow-2xs"
+                className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center text-white font-bold text-xs sm:text-sm shrink-0 shadow-2xs overflow-hidden"
                 style={{ backgroundColor: currentMember.color || '#2563eb' }}
               >
-                {displayName.charAt(0).toUpperCase()}
+                {effectiveAvatar ? (
+                  <img
+                    src={effectiveAvatar}
+                    alt={displayName}
+                    onError={() => setImgError(true)}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  displayName.charAt(0).toUpperCase()
+                )}
               </div>
               <div className="min-w-0 flex-1 leading-tight">
                 <div className="font-semibold text-neutral-900 dark:text-neutral-100 text-xs truncate">
@@ -219,7 +277,8 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
               🔒 Privacidad activa: Tus notas privadas solo son visibles para ti.
             </div>
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   )

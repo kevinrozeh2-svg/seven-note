@@ -216,6 +216,19 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
 
         {/* Tab Content */}
         <div className="p-3.5 sm:p-6 overflow-y-auto flex-1 custom-scrollbar space-y-4 text-xs">
+          {/* Architecture 3 Layers Info Banner */}
+          <div className="p-3 rounded-2xl bg-blue-500/[0.06] border border-blue-500/15 text-neutral-600 dark:text-neutral-300 space-y-1.5 text-[11px] leading-relaxed">
+            <div className="font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1.5 text-xs">
+              <Shield className="w-3.5 h-3.5" />
+              <span>Sistema de Permisos de 3 Capas</span>
+            </div>
+            <ul className="space-y-1 text-[11px] list-disc list-inside text-neutral-600 dark:text-neutral-400">
+              <li><strong className="text-neutral-800 dark:text-neutral-200">Capa 1 (Admins - Kevin, Maikol, Marcos):</strong> Control total del equipo, editan y gestionan todo el contenido compartido. Privacidad personal preservada (nadie ve notas privadas ajenas).</li>
+              <li><strong className="text-neutral-800 dark:text-neutral-200">Capa 2 (Trabajadores):</strong> Acceso a todos los espacios de trabajo. Leen todas las notas y tableros. <em>Solo pueden editar lo que ellos mismos creen</em>. Sus cosas privadas no las puede ver nadie más.</li>
+              <li><strong className="text-neutral-800 dark:text-neutral-200">Capa 3 (Enlaces Externos):</strong> Invitados web sin registro ni inicio de sesión con lectura exclusiva de la nota compartida.</li>
+            </ul>
+          </div>
+
           {/* TAB 1: MEMBERS */}
           {activeTab === 'members' && (
             <div className="space-y-3.5">
@@ -299,9 +312,9 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                             onChange={(e) => handleRoleChange(p.id, e.target.value as UserRole, p.status)}
                             className="text-xs px-2.5 py-1.5 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-[#1a1b1e] outline-none cursor-pointer disabled:opacity-60 flex-1 sm:flex-none"
                           >
-                            <option value="admin">Administrador</option>
-                            <option value="member">Miembro (Editor)</option>
-                            <option value="viewer">Lector (Solo Ver)</option>
+                            <option value="admin">Administrador (Capa 1)</option>
+                            <option value="member">Trabajador (Capa 2)</option>
+                            <option value="viewer">Lector (Solo ver)</option>
                           </select>
 
                           {!isSelf && (
@@ -356,9 +369,9 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                     onChange={(e) => setInviteRole(e.target.value as UserRole)}
                     className="text-xs px-3 py-2 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-[#1a1b1e] outline-none cursor-pointer"
                   >
-                    <option value="member">Miembro</option>
-                    <option value="admin">Administrador</option>
-                    <option value="viewer">Lector</option>
+                    <option value="member">Trabajador (Capa 2)</option>
+                    <option value="admin">Administrador (Capa 1)</option>
+                    <option value="viewer">Lector (Solo ver)</option>
                   </select>
 
                   <button

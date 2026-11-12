@@ -143,7 +143,7 @@ export function ObsidianRibbon({
               ? 'text-purple-400 bg-purple-500/15'
               : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5'
           }`}
-          title="Grafo de Conocimiento"
+          title="Abrir vista gráfica"
         >
           <Graph size={18} />
         </button>

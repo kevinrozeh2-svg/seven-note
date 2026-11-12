@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useRef, memo, lazy, Suspense } from 'react'
+import { useCallback, useEffect, useState, useRef, memo, lazy, Suspense, useMemo } from 'react'
 import {
   ReactFlow,
   Background,
@@ -43,7 +43,8 @@ import {
   Trash,
   CaretRight,
   X,
-  Kanban
+  Kanban,
+  LockKey
 } from '@phosphor-icons/react'
 import {
   hasHtmlFormatting,
@@ -2012,6 +2013,21 @@ function CanvasBoardInner({
     return () => window.removeEventListener('seven-note-toggle-unsorted', handleToggle)
   }, [])
 
+  // Cuando está en modo solo lectura, inyectamos data.readOnly en todos los nodos
+  const effectiveNodes = useMemo(() => {
+    if (!readOnly) return nodes
+    return nodes.map((n) => ({
+      ...n,
+      draggable: false,
+      connectable: false,
+      selectable: true,
+      data: {
+        ...n.data,
+        readOnly: true
+      }
+    }))
+  }, [nodes, readOnly])
+
   return (
     <div
       className={`relative w-full h-full bg-[var(--app-bg-canvas)] overflow-hidden select-none ${hideChrome ? 'canvas-hide-chrome' : ''}`}
@@ -2020,7 +2036,7 @@ function CanvasBoardInner({
     >
       <ReactFlow
         colorMode={darkMode ? 'dark' : 'light'}
-        nodes={nodes}
+        nodes={effectiveNodes}
         edges={edges}
         onNodesChange={readOnly ? undefined : onNodesChange}
         onEdgesChange={readOnly ? undefined : onEdgesChange}
@@ -2436,7 +2452,15 @@ function CanvasBoardInner({
         />
 
         {/* Bottom Center Floating Edgeless Tool Dock (Milanote Physical Palette) */}
-        <Panel position="bottom-center" className="mb-2 sm:mb-4 z-20 max-w-[calc(100vw-24px)] md:-translate-x-14 2xl:translate-x-0">
+        {readOnly ? (
+          <Panel position="bottom-center" className="mb-2 sm:mb-4 z-20 select-none">
+            <div className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-neutral-900/90 dark:bg-[#1a1b1e]/90 border border-black/[0.08] dark:border-white/[0.1] shadow-2xl text-xs text-white backdrop-blur-2xl">
+              <LockKey size={14} weight="fill" className="text-amber-400" />
+              <span>Tablero en solo lectura • Creado por {currentWorkspace?.ownerName || 'otro usuario'}</span>
+            </div>
+          </Panel>
+        ) : (
+          <Panel position="bottom-center" className="mb-2 sm:mb-4 z-20 max-w-[calc(100vw-24px)] md:-translate-x-14 2xl:translate-x-0">
           <div className="flex items-center px-2.5 py-1 rounded-full bg-white/85 dark:bg-[#1a1b1e]/85 border border-black/[0.08] dark:border-white/[0.1] shadow-2xl shadow-black/10 dark:shadow-black/40 text-[var(--app-text-primary)] h-12 sm:h-14 backdrop-blur-2xl select-none">
             {/* Quick Tools (Left Section: 32px buttons) */}
             <div className="flex items-center gap-0.5 pr-1">
@@ -2825,6 +2849,7 @@ function CanvasBoardInner({
             </div>
           </div>
         </Panel>
+        )}
 
         {/* Templates Gallery Modal (AFFiNE Edgeless Templates) */}
         {isTemplatesOpen && (

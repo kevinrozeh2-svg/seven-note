@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Trash2, RotateCcw, FileText, Layout } from 'lucide-react'
 import { db, type WorkspaceItem } from '../../db'
 import { syncEngine } from '../../lib/syncEngine'
@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { AppleEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
 import { deleteImageFromStorage, extractStorageUrlsFromHtml } from '../../lib/imageOptimizer'
 import { getSupabaseClient } from '../../lib/supabase'
-import { getCurrentMember, isWorkspaceVisible } from '../../lib/teamAuth'
+import { getCurrentMember, isWorkspaceVisible, canUserDeleteWorkspace, isUserAdmin } from '../../lib/teamAuth'
 
 interface TrashPageProps {
   onSelectWorkspace: (id: string) => void
@@ -39,6 +39,12 @@ export const TrashPage: React.FC<TrashPageProps> = () => {
   }, [])
 
   const handleRestore = async (id: string) => {
+    const member = getCurrentMember()
+    const targetWs = deletedWorkspaces.find((w) => w.id === id)
+    if (!canUserDeleteWorkspace(targetWs, member)) {
+      toast.error('Solo el creador o un administrador pueden restaurar esta nota.')
+      return
+    }
     try {
       await db.workspaces.update(id, {
         isDeleted: false,
@@ -54,6 +60,12 @@ export const TrashPage: React.FC<TrashPageProps> = () => {
   }
 
   const handlePermanentDelete = async (id: string) => {
+    const member = getCurrentMember()
+    const targetWs = deletedWorkspaces.find((w) => w.id === id)
+    if (!canUserDeleteWorkspace(targetWs, member)) {
+      toast.error('Solo el creador o un administrador pueden eliminar definitivamente esta nota.')
+      return
+    }
     if (!confirm('¿Eliminar permanentemente este documento? No se podrá recuperar.')) return
     try {
       // 1. Limpiar imágenes asociadas en Supabase Storage para liberar espacio
@@ -93,6 +105,11 @@ export const TrashPage: React.FC<TrashPageProps> = () => {
   }
 
   const handleEmptyTrash = async () => {
+    const member = getCurrentMember()
+    if (!isUserAdmin(member)) {
+      toast.error('Solo los administradores pueden vaciar la papelera de reciclaje completa.')
+      return
+    }
     if (!confirm('¿Vaciar toda la papelera permanentemente? Se liberará el espacio de fotos en Supabase.')) return
     try {
       const supabase = getSupabaseClient()

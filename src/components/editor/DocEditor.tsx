@@ -2321,9 +2321,17 @@ export function DocEditor({
         </div>
 
         {/* Privacy & Metadata (Discreet Obsidian status pills) */}
-        <div className="flex items-center gap-2 flex-wrap mb-6 opacity-60 hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-2 flex-wrap mb-6 opacity-75 hover:opacity-100 transition-opacity">
+          {readOnly && (
+            <span className="flex items-center gap-1 text-[11px] py-0.5 px-2 rounded-full font-medium text-amber-500 bg-amber-500/10 border border-amber-500/20 select-none">
+              <Lock className="w-3 h-3 text-amber-500" />
+              <span>Solo lectura</span>
+            </span>
+          )}
+
           <button
             onClick={async () => {
+              if (readOnly) return
               const nextPrivate = !workspace.isPrivate
               await db.workspaces.update(workspace.id, {
                 isPrivate: nextPrivate,
@@ -2337,13 +2345,18 @@ export function DocEditor({
                   : 'Nota cambiada a MODO PÚBLICO (Todo el equipo)'
               )
             }}
-            className={`flex items-center gap-1.5 text-[11px] py-0.5 px-2 rounded font-normal transition cursor-pointer select-none ${
+            disabled={readOnly}
+            className={`flex items-center gap-1.5 text-[11px] py-0.5 px-2 rounded font-normal transition select-none ${
+              readOnly ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+            } ${
               workspace.isPrivate
                 ? 'text-amber-400 bg-amber-400/10 hover:bg-amber-400/20'
                 : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5'
             }`}
             title={
-              workspace.isPrivate
+              readOnly
+                ? `Privacidad gestionada por el autor original (${workspace.ownerName || 'propietario'})`
+                : workspace.isPrivate
                 ? 'Nota privada (solo tú). Clic para hacerla pública para el equipo'
                 : 'Nota pública para el equipo. Clic para hacerla privada'
             }

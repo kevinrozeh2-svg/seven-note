@@ -1,5 +1,6 @@
 export type UserRole = 'admin' | 'member' | 'viewer'
 export type UserStatus = 'active' | 'suspended' | 'pending'
+export type UserTier = 'admin' | 'worker' | 'guest'
 
 export interface UserProfile {
   id: string
@@ -20,14 +21,36 @@ export interface TeamMember extends UserProfile {
 }
 
 /**
- * Lista de correos autorizados con rol de Administrador.
- * Todos los usuarios con estos correos (como Maikol y Kevin) tienen permisos totales de Administrador.
+ * CAPA 1: ADMINISTRADORES
+ * Correos de administradores con acceso y gestión total del sistema:
+ * - Kevin (kevin.rozeh@gmail.com, kevin.rozeh2@gmail.com)
+ * - Maikol (badmaik60@gmail.com)
+ * - Marcos (marcos@sevennote.local / marcos.sevennote@gmail.com)
+ * 
+ * NOTA DE PRIVACIDAD: Los administradores pueden gestionar y editar todas las notas
+ * y espacios compartidos del equipo, pero NO tienen acceso al contenido privado de
+ * ningún usuario (cada cual conserva su privacidad personal al 100%).
  */
 export const AUTHORIZED_ADMIN_EMAILS: string[] = [
   'kevin.rozeh@gmail.com',
   'kevin.rozeh2@gmail.com',
   'badmaik60@gmail.com',
-  'marcos@sevennote.local'
+  'marcos@sevennote.local',
+  'marcos.sevennote@gmail.com'
+]
+
+/**
+ * CAPA 2: TRABAJADORES (WORKERS)
+ * Lista de correos autorizados para trabajadores del equipo:
+ * - Tienen acceso a todos los espacios de trabajo del equipo.
+ * - Pueden LEER todas las notas y tableros compartidos.
+ * - SOLO pueden EDITAR lo que ellos mismos creen.
+ * - Pueden crear notas/espacios privados que NADIE más (ni los administradores) podrá ver.
+ * 
+ * Puedes agregar más correos a este array o pre-autorizarlos desde el Panel de Administrador.
+ */
+export const AUTHORIZED_WORKER_EMAILS: string[] = [
+  'melgilez@gmail.com'
 ]
 
 export const TEAM_MEMBERS: TeamMember[] = [
@@ -63,6 +86,17 @@ export const TEAM_MEMBERS: TeamMember[] = [
     status: 'active',
     icon: '⚡',
     email: 'marcos@sevennote.local'
+  },
+  {
+    id: 'mel',
+    name: 'Mel',
+    fullName: 'Mel',
+    color: '#ec4899',
+    initial: 'M',
+    role: 'member',
+    status: 'active',
+    icon: '💼',
+    email: 'melgilez@gmail.com'
   }
 ]
 
@@ -73,6 +107,25 @@ export function isAuthorizedAdminEmail(email?: string | null): boolean {
     AUTHORIZED_ADMIN_EMAILS.some((e) => e.toLowerCase() === normalized) ||
     TEAM_MEMBERS.some((m) => m.email?.toLowerCase() === normalized && m.role === 'admin')
   )
+}
+
+export function isAuthorizedWorkerEmail(email?: string | null): boolean {
+  if (!email) return false
+  const normalized = email.toLowerCase().trim()
+  return AUTHORIZED_WORKER_EMAILS.some((e) => e.toLowerCase() === normalized)
+}
+
+/**
+ * Identifica a qué capa pertenece un usuario:
+ * - 'admin': Capa 1 (Admins: Kevin, Maikol, Marcos)
+ * - 'worker': Capa 2 (Trabajadores con correo registrado)
+ * - 'guest': Capa 3 (Visitante externo sin correo vía enlace compartido)
+ */
+export function getUserTier(member?: TeamMember | UserProfile | null, isExternalGuest?: boolean): UserTier {
+  if (isExternalGuest) return 'guest'
+  if (!member) return 'guest'
+  if (isUserAdmin(member)) return 'admin'
+  return 'worker'
 }
 
 const CURRENT_MEMBER_STORAGE_KEY = 'seven_note_current_member_id'
@@ -203,12 +256,24 @@ export function mapSupabaseUserToMember(user: any, profile?: Partial<UserProfile
   const role: UserRole = isAuthorized ? 'admin' : (profile?.role || 'member')
   const status: UserStatus = profile?.status || 'active'
 
+  const rawAvatar =
+    profile?.avatarUrl ||
+    user.user_metadata?.avatar_url ||
+    user.user_metadata?.picture ||
+    user.user_metadata?.avatar ||
+    (user.identities && user.identities[0]?.identity_data?.avatar_url) ||
+    (user.identities && user.identities[0]?.identity_data?.picture) ||
+    (email ? `https://unavatar.io/${encodeURIComponent(email)}?fallback=false` : undefined)
+
+  const matchedPreset = TEAM_MEMBERS.find((tm) => tm.email && tm.email.toLowerCase() === email.toLowerCase())
+  const fallbackId = matchedPreset ? matchedPreset.id : (email.includes('maikol') || email === 'badmaik60@gmail.com' ? 'maikol' : 'kevin')
+
   const member: TeamMember = {
-    id: user.id || profile?.id || (email.includes('maikol') || email === 'badmaik60@gmail.com' ? 'maikol' : 'kevin'),
+    id: user.id || profile?.id || fallbackId,
     name: fullName,
     fullName: fullName,
     email: email,
-    avatarUrl: profile?.avatarUrl || user.user_metadata?.avatar_url,
+    avatarUrl: rawAvatar,
     color: color,
     initial: initial,
     role: role,
@@ -222,19 +287,20 @@ export function mapSupabaseUserToMember(user: any, profile?: Partial<UserProfile
 }
 
 /**
- * Comprueba si un usuario tiene permisos de Administrador
+ * Comprueba si un usuario tiene permisos de Administrador (Capa 1).
+ * Kevin, Maikol y Marcos siempre tienen rol de Administrador.
  */
 export function isUserAdmin(member?: TeamMember | UserProfile | null): boolean {
   if (!member) return false
   if (member.role === 'admin') return true
   if (member.email && isAuthorizedAdminEmail(member.email)) return true
-  if (member.id && (member.id === 'kevin' || member.id === 'maikol')) return true
+  if (member.id && (member.id === 'kevin' || member.id === 'maikol' || member.id === 'marcos')) return true
   if (member.id && TEAM_MEMBERS.some((tm) => tm.id === member.id && tm.role === 'admin')) return true
   return false
 }
 
 /**
- * Comprueba si el usuario tiene permiso de edición (Admin o Miembro)
+ * Comprueba si el usuario tiene permiso básico de edición activo.
  */
 export function canUserEdit(member?: TeamMember | UserProfile | null): boolean {
   if (!member) return true
@@ -243,8 +309,189 @@ export function canUserEdit(member?: TeamMember | UserProfile | null): boolean {
 }
 
 /**
+ * Comprueba si el usuario actual es el autor/creador de un documento o tablero.
+ */
+export function isWorkspaceOwner(
+  workspace?: {
+    ownerMember?: string
+    ownerName?: string
+    createdBy?: string
+    userId?: string
+    user_id?: string
+  } | null,
+  currentMemberOrId?: string | TeamMember | null,
+  authUserId?: string
+): boolean {
+  if (!workspace || !currentMemberOrId) return false
+
+  const member = typeof currentMemberOrId === 'string'
+    ? TEAM_MEMBERS.find((m: TeamMember) => m.id === currentMemberOrId) || getCurrentMember()
+    : currentMemberOrId
+
+  const memberId = typeof currentMemberOrId === 'string' ? currentMemberOrId : currentMemberOrId.id
+  const effectiveAuthId = authUserId || (member?.id !== 'kevin' && member?.id !== 'maikol' && member?.id !== 'marcos' ? member?.id : undefined)
+
+  // 1. Coincidencia por userId (UUID de auth de Supabase)
+  const wsUserId = workspace.userId || workspace.user_id
+  if (wsUserId) {
+    if (effectiveAuthId && wsUserId === effectiveAuthId) return true
+    if (memberId && wsUserId === memberId) return true
+  }
+
+  // 2. Coincidencia por ownerMember (ID, nombre o correo del miembro)
+  if (workspace.ownerMember) {
+    const om = workspace.ownerMember.toLowerCase().trim()
+    if (om === memberId.toLowerCase().trim()) return true
+    if (member?.name && om === member.name.toLowerCase().trim()) return true
+    if (member?.fullName && om === member.fullName.toLowerCase().trim()) return true
+    if (member?.email && om === member.email.toLowerCase().trim()) return true
+
+    if (
+      TEAM_MEMBERS.some(
+        (tm) =>
+          (tm.id === workspace.ownerMember || tm.name.toLowerCase() === workspace.ownerMember?.toLowerCase()) &&
+          (tm.id === memberId || (member?.email && tm.email?.toLowerCase() === member.email.toLowerCase()))
+      )
+    ) {
+      return true
+    }
+  }
+
+  // 3. Coincidencia por createdBy
+  if (workspace.createdBy) {
+    const cb = workspace.createdBy.toLowerCase().trim()
+    if (member?.name && cb === member.name.toLowerCase().trim()) return true
+    if (member?.fullName && cb === member.fullName.toLowerCase().trim()) return true
+    if (member?.email && cb === member.email.toLowerCase().trim()) return true
+  }
+
+  return false
+}
+
+/**
+ * REGLA FUNDAMENTAL DE EDICIÓN DEL SISTEMA DE 3 CAPAS:
+ * 
+ * - Capa 1 (Admins: Kevin, Maikol, Marcos):
+ *   Pueden editar cualquier nota o tablero compartido del equipo.
+ *   NO pueden editar notas privadas de otros usuarios.
+ * 
+ * - Capa 2 (Trabajadores / Members):
+ *   SOLO pueden editar lo que ellos mismos creen.
+ *   Si la nota fue creada por otra persona, tienen acceso de SOLO LECTURA.
+ * 
+ * - Capa 3 (Invitados externos / Enlace público):
+ *   Acceso estrictamente de SOLO LECTURA a esa nota específica.
+ */
+export function canUserEditWorkspace(
+  workspace?: {
+    isPrivate?: boolean
+    ownerMember?: string
+    ownerName?: string
+    createdBy?: string
+    userId?: string
+    user_id?: string
+    isPublicShared?: boolean
+  } | null,
+  currentMemberOrId?: string | TeamMember | null,
+  authUserId?: string,
+  isExternalGuest?: boolean
+): boolean {
+  // Capa 3: Enlaces externos compartidos son estrictamente de solo lectura
+  if (isExternalGuest) return false
+  if (!workspace || !currentMemberOrId) return false
+
+  const member = typeof currentMemberOrId === 'string'
+    ? TEAM_MEMBERS.find((m: TeamMember) => m.id === currentMemberOrId) || getCurrentMember()
+    : currentMemberOrId
+
+  if (member.status === 'suspended' || member.role === 'viewer') return false
+
+  const isOwner = isWorkspaceOwner(workspace, member, authUserId)
+
+  // Si la nota es privada: SOLO su creador puede verla y editarla (nadie más, ni los admins)
+  if (workspace.isPrivate) {
+    return isOwner
+  }
+
+  // Capa 1: Administradores pueden editar todo el contenido compartido del equipo
+  if (isUserAdmin(member)) {
+    return true
+  }
+
+  // Capa 2: Trabajadores SOLO pueden editar las notas y tableros que ellos mismos creen
+  return isOwner
+}
+
+/**
+ * Comprueba si el usuario tiene permiso para eliminar o enviar a la papelera una nota.
+ * - Admins: pueden eliminar cualquier nota compartida o sus notas privadas.
+ * - Trabajadores: SOLO pueden eliminar notas que ellos mismos crearon.
+ */
+export function canUserDeleteWorkspace(
+  workspace?: {
+    isPrivate?: boolean
+    ownerMember?: string
+    ownerName?: string
+    createdBy?: string
+    userId?: string
+    user_id?: string
+  } | null,
+  currentMemberOrId?: string | TeamMember | null,
+  authUserId?: string
+): boolean {
+  if (!workspace || !currentMemberOrId) return false
+
+  const member = typeof currentMemberOrId === 'string'
+    ? TEAM_MEMBERS.find((m: TeamMember) => m.id === currentMemberOrId) || getCurrentMember()
+    : currentMemberOrId
+
+  if (member.status === 'suspended' || member.role === 'viewer') return false
+
+  const isOwner = isWorkspaceOwner(workspace, member, authUserId)
+
+  if (workspace.isPrivate) {
+    return isOwner
+  }
+
+  if (isUserAdmin(member)) {
+    return true
+  }
+
+  return isOwner
+}
+
+/**
+ * Comprueba si el usuario puede alternar la privacidad de una nota.
+ * Solo el creador de la nota o los administradores pueden cambiar la privacidad.
+ */
+export function canUserTogglePrivacy(
+  workspace?: {
+    isPrivate?: boolean
+    ownerMember?: string
+    ownerName?: string
+    createdBy?: string
+    userId?: string
+    user_id?: string
+  } | null,
+  currentMemberOrId?: string | TeamMember | null,
+  authUserId?: string
+): boolean {
+  if (!workspace || !currentMemberOrId) return false
+  const isOwner = isWorkspaceOwner(workspace, currentMemberOrId, authUserId)
+  if (isOwner) return true
+  // Si la nota ya es privada y no eres el dueño, no puedes cambiarla
+  if (workspace.isPrivate) return false
+  // Si es pública, un admin puede cambiarla
+  return isUserAdmin(
+    typeof currentMemberOrId === 'string'
+      ? TEAM_MEMBERS.find((m) => m.id === currentMemberOrId) || getCurrentMember()
+      : currentMemberOrId
+  )
+}
+
+/**
  * Determina si un espacio de trabajo es visible para el miembro actual.
- * - Si no es privado (isPrivate === false o undefined): visible para todo el equipo.
+ * - Si no es privado (isPrivate === false o undefined): visible para todo el equipo (Admins y Trabajadores).
  * - Si es privado (isPrivate === true): SOLO visible si pertenece al usuario actual.
  *   ¡IMPORTANTE: Ni siquiera el administrador puede ver los espacios privados de otros usuarios, y viceversa!
  */
@@ -291,48 +538,18 @@ export function isSpaceVisible(
 
 /**
  * Determina si una nota o documento es visible para el miembro actual.
- * - Si no es privada (isPrivate === false o undefined): visible para todo el equipo.
+ * - Si no es privada (isPrivate === false o undefined): visible para todo el equipo (Admins y Trabajadores tienen acceso a todo).
  * - Si es privada (isPrivate === true): SOLO visible si pertenece al usuario actual (autor).
  *   ¡IMPORTANTE: Ni siquiera el administrador puede ver las notas privadas de otros usuarios, y viceversa!
  */
 export function isWorkspaceVisible(
-  workspace: { isPrivate?: boolean; ownerMember?: string; user_id?: string; userId?: string; spaceId?: string },
+  workspace: { isPrivate?: boolean; ownerMember?: string; user_id?: string; userId?: string; spaceId?: string; ownerName?: string; createdBy?: string },
   currentMemberOrId?: string | TeamMember | null,
   authUserId?: string
 ): boolean {
   if (!workspace || !workspace.isPrivate) return true
   if (!currentMemberOrId) return false
 
-  const member = typeof currentMemberOrId === 'string'
-    ? TEAM_MEMBERS.find((m: TeamMember) => m.id === currentMemberOrId) || getCurrentMember()
-    : currentMemberOrId
-
-  const memberId = typeof currentMemberOrId === 'string' ? currentMemberOrId : currentMemberOrId.id
-  const effectiveAuthId = authUserId || (member?.id !== 'kevin' && member?.id !== 'maikol' && member?.id !== 'marcos' ? member?.id : undefined)
-
-  // Estricto: Si es privada, SOLO visible para su autor original.
-  // ¡Ni siquiera el administrador puede ver las notas privadas de los demás usuarios, y viceversa!
-  const matchesOwnerMember = Boolean(
-    workspace.ownerMember && (
-      workspace.ownerMember === memberId ||
-      workspace.ownerMember.toLowerCase() === member?.name?.toLowerCase() ||
-      (member?.email && workspace.ownerMember.toLowerCase() === member.email.toLowerCase()) ||
-      TEAM_MEMBERS.some(
-        (tm) =>
-          (tm.id === workspace.ownerMember || tm.name.toLowerCase() === workspace.ownerMember?.toLowerCase()) &&
-          (tm.id === memberId || (member?.email && tm.email?.toLowerCase() === member.email.toLowerCase()))
-      )
-    )
-  )
-
-  const wsUserId = workspace.userId || workspace.user_id
-  const matchesUserId = Boolean(
-    wsUserId && (
-      wsUserId === memberId ||
-      (effectiveAuthId && wsUserId === effectiveAuthId)
-    )
-  )
-
-  return matchesOwnerMember || matchesUserId
+  return isWorkspaceOwner(workspace, currentMemberOrId, authUserId)
 }
 

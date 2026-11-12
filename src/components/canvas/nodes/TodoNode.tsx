@@ -74,6 +74,7 @@ export const TodoNode = memo(({ id, data, selected }: any) => {
   const [isEditingTitle, setIsEditingTitle] = useState(false)
 
   const save = async (updates: any) => {
+    if (data?.readOnly) return
     try {
       const node = await db.canvasNodes.get(id)
       if (node) {
@@ -90,6 +91,7 @@ export const TodoNode = memo(({ id, data, selected }: any) => {
   }
 
   const toggleTodo = (todoId: string) => {
+    if (data?.readOnly) return
     const updated = todos.map((t) => (t.id === todoId ? { ...t, completed: !t.completed } : t))
     setTodos(updated)
     save({ todos: updated })
@@ -107,7 +109,7 @@ export const TodoNode = memo(({ id, data, selected }: any) => {
 
   const addTodo = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newTaskText.trim()) return
+    if (data?.readOnly || !newTaskText.trim()) return
     const newTodo: CanvasTodoItem = {
       id: crypto.randomUUID(),
       text: newTaskText.trim(),
@@ -120,12 +122,14 @@ export const TodoNode = memo(({ id, data, selected }: any) => {
   }
 
   const removeTodo = (todoId: string) => {
+    if (data?.readOnly) return
     const updated = todos.filter((t) => t.id !== todoId)
     setTodos(updated)
     save({ todos: updated })
   }
 
   const handleDelete = async () => {
+    if (data?.readOnly) return
     try {
       await db.canvasNodes.update(id, { isDeleted: true, updatedAt: Date.now(), syncStatus: 'pending' })
       syncEngine.scheduleSync(1000)
