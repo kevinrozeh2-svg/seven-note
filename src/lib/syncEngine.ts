@@ -240,6 +240,8 @@ class SyncEngine {
             updated_at: s.updatedAt,
             is_deleted: Boolean(s.isDeleted),
             is_private: Boolean(s.isPrivate),
+            admin_only: Boolean(s.adminOnly),
+            sort_order: typeof s.sortOrder === 'number' ? s.sortOrder : s.createdAt,
             owner_member: s.ownerMember || currentMember.id,
             user_id: authUserId
           }))
@@ -456,6 +458,8 @@ class SyncEngine {
       const lastSync = isInitialDevicePull ? 0 : (this.lastSyncTime || 0)
 
       let hasPullErrors = false
+      const restrictedAdminSpaceIds = new Set<string>()
+      const isCurrentAdmin = isUserAdmin(currentMember)
 
       // Pull Spaces
       const { data: remoteSpaces, error: spPullErr } = await supabase
@@ -486,6 +490,16 @@ class SyncEngine {
             continue
           }
 
+          // Si el espacio es exclusivo para admins y el usuario es trabajador (Capa 2), no lo guardamos localmente
+          if (rs.admin_only && !isCurrentAdmin) {
+            restrictedAdminSpaceIds.add(rs.id)
+            const existingLocal = await db.spaces.get(rs.id)
+            if (existingLocal) {
+              await db.spaces.delete(rs.id).catch(() => {})
+            }
+            continue
+          }
+
           const local = await db.spaces.get(rs.id)
           // Si en Supabase ya fue eliminado, aseguramos que en local tampoco exista
           if (rs.is_deleted) {
@@ -505,6 +519,8 @@ class SyncEngine {
               updatedAt: rs.updated_at,
               isDeleted: false,
               isPrivate: Boolean(rs.is_private),
+              adminOnly: Boolean(rs.admin_only),
+              sortOrder: typeof rs.sort_order === 'number' ? rs.sort_order : rs.created_at,
               ownerMember: rs.owner_member,
               userId: rs.user_id,
               syncStatus: 'synced'
@@ -524,6 +540,9 @@ class SyncEngine {
         hasPullErrors = true
       } else if (remoteWorkspaces && remoteWorkspaces.length > 0) {
         for (const rw of remoteWorkspaces) {
+          if (rw.space_id && restrictedAdminSpaceIds.has(rw.space_id) && !isCurrentAdmin) {
+            continue
+          }
           // Si la nota remota es privada y NO pertenece al miembro actual, NO la guardamos localmente
           // ¡Ni siquiera el administrador puede recibir o guardar notas privadas de otros usuarios, y viceversa!
           const isOwner =

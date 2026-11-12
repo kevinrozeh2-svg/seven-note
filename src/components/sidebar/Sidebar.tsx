@@ -26,7 +26,6 @@ import {
   Copy,
   ArrowSquareOut,
   DotsThree,
-  Vault,
   NotePencil,
   ArrowsDownUp,
   CaretDoubleUp,
@@ -34,7 +33,9 @@ import {
   SortDescending,
   Clock,
   Calendar,
-  Folders
+  Folders,
+  Shield,
+  SlidersHorizontal
 } from '@phosphor-icons/react'
 import {
   db,
@@ -62,7 +63,8 @@ import {
   isSpaceVisible,
   canUserEditWorkspace,
   canUserDeleteWorkspace,
-  canUserTogglePrivacy
+  canUserTogglePrivacy,
+  canUserManageSpace
 } from '../../lib/teamAuth'
 import { toast } from 'sonner'
 
@@ -78,6 +80,7 @@ export interface SidebarProps {
   onOpenUserManagementModal?: () => void
   onSignOut?: () => void
   onOpenCreateSpace?: () => void
+  onOpenManageSpaces?: () => void
   onRenameSpace?: (id: string, newName: string) => void
   onDeleteSpace?: (id: string) => void
   workspaces: WorkspaceItem[]
@@ -277,6 +280,7 @@ export function Sidebar({
   onOpenUserManagementModal: _onOpenUserManagementModal,
   onSignOut: _onSignOut,
   onOpenCreateSpace,
+  onOpenManageSpaces,
   onRenameSpace,
   onDeleteSpace,
   workspaces,
@@ -2015,6 +2019,11 @@ export function Sidebar({
                 <Lock size={12} weight="bold" />
               </span>
             )}
+            {!isCurrentSpacePrivate && currentSpace.adminOnly && (
+              <span className="text-indigo-400 shrink-0" title="Solo Admins: Oculto para empleados">
+                <Shield size={12} weight="bold" />
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-1 shrink-0 ml-1">
             {visibleSpaces.some((s) => s.id !== currentSpace.id && isItemUnread(s, 'space', activeMember, authUser?.id)) && (
@@ -2099,23 +2108,33 @@ export function Sidebar({
                             <Lock size={9} weight="bold" />
                           </span>
                         )}
+                        {!sp.isPrivate && sp.adminOnly && (
+                          <span
+                            className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[9px] font-semibold bg-indigo-500/20 text-indigo-300 shrink-0"
+                            title="Solo Admins: Oculto para empleados"
+                          >
+                            <Shield size={9} weight="bold" />
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-1.5 shrink-0 ml-2">
                         {isSelected && <Check size={14} weight="bold" className="text-white shrink-0" />}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setEditingSpaceId(sp.id)
-                            setEditingSpaceName(sp.name)
-                          }}
-                          className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/10 text-neutral-400 hover:text-white transition"
-                          title="Renombrar espacio"
-                        >
-                          <PencilSimple size={12} weight="bold" />
-                        </button>
-                        {visibleSpaces.length > 1 && (
+                        {canUserManageSpace(sp, activeMember, authUser?.id) && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setEditingSpaceId(sp.id)
+                              setEditingSpaceName(sp.name)
+                            }}
+                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/10 text-neutral-400 hover:text-white transition"
+                            title="Renombrar espacio"
+                          >
+                            <PencilSimple size={12} weight="bold" />
+                          </button>
+                        )}
+                        {visibleSpaces.length > 1 && canUserManageSpace(sp, activeMember, authUser?.id) && (
                           <button
                             type="button"
                             onClick={(e) => {
@@ -2144,9 +2163,23 @@ export function Sidebar({
                 }}
                 className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-white/5 text-neutral-200 hover:text-white transition text-xs flex items-center gap-2 cursor-pointer font-medium"
               >
-                <Vault size={14} weight="regular" className="shrink-0 text-neutral-400" />
-                <span>Administrar bóvedas...</span>
+                <Plus size={14} weight="bold" className="shrink-0 text-blue-400" />
+                <span>Nuevo espacio...</span>
               </button>
+
+              {onOpenManageSpaces && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSpaceMenu(false)
+                    onOpenManageSpaces()
+                  }}
+                  className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-white/5 text-neutral-200 hover:text-white transition text-xs flex items-center gap-2 cursor-pointer font-medium"
+                >
+                  <SlidersHorizontal size={14} weight="regular" className="shrink-0 text-neutral-400" />
+                  <span>Ordenar y administrar espacios...</span>
+                </button>
+              )}
             </div>
           </>
         )}

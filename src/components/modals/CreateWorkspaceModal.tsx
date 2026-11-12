@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { CloseIcon, LocalWorkspaceIcon } from '@blocksuite/icons/rc'
-import { Lock, Users } from 'lucide-react'
+import { Lock, Shield, Users } from 'lucide-react'
 import { AppleEmoji } from '../ui/AppleEmoji'
 import { EmojiPickerPopover } from './EmojiPickerPopover'
 
 interface CreateWorkspaceModalProps {
   isOpen: boolean
   onClose: () => void
-  onCreate: (name: string, icon: string, color: string, isPrivate?: boolean) => Promise<void>
+  onCreate: (name: string, icon: string, color: string, isPrivate?: boolean, adminOnly?: boolean) => Promise<void>
+  isAdmin?: boolean
 }
 
 const PRESET_EMOJIS = ['✨', '🤍', '🫧', '🎧', '🪐', '🌿', '☕', '🧸', '💼', '🚀', '💡', '📚', '🎨', '💻', '🎯', '⚡']
@@ -24,11 +25,12 @@ const PRESET_COLORS = [
   { name: 'Rojo', value: '#f43f5e' }
 ]
 
-export function CreateWorkspaceModal({ isOpen, onClose, onCreate }: CreateWorkspaceModalProps) {
+export function CreateWorkspaceModal({ isOpen, onClose, onCreate, isAdmin = false }: CreateWorkspaceModalProps) {
   const [name, setName] = useState('')
   const [selectedIcon, setSelectedIcon] = useState('💼')
   const [selectedColor, setSelectedColor] = useState('#1e96eb')
   const [isPrivate, setIsPrivate] = useState(false)
+  const [adminOnly, setAdminOnly] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isPickerOpen, setIsPickerOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -39,6 +41,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onCreate }: CreateWorksp
       setSelectedIcon('💼')
       setSelectedColor('#1e96eb')
       setIsPrivate(false)
+      setAdminOnly(false)
       setIsSubmitting(false)
       setIsPickerOpen(false)
       setTimeout(() => inputRef.current?.focus(), 50)
@@ -54,7 +57,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onCreate }: CreateWorksp
 
     try {
       setIsSubmitting(true)
-      await onCreate(trimmed, selectedIcon, selectedColor, isPrivate)
+      await onCreate(trimmed, selectedIcon, selectedColor, isPrivate, isAdmin ? (!isPrivate && adminOnly) : false)
       onClose()
     } catch (err) {
       console.error('Error creating workspace', err)
@@ -208,33 +211,62 @@ export function CreateWorkspaceModal({ isOpen, onClose, onCreate }: CreateWorksp
             )}
           </div>
 
-          {/* Workspace Visibility: Public vs Private */}
+          {/* Workspace Visibility */}
           <div>
             <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--affine-text-secondary-color)' }}>
               Visibilidad del espacio
             </label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className={`grid gap-2 ${isAdmin ? 'grid-cols-3' : 'grid-cols-2'}`}>
               <button
                 type="button"
-                onClick={() => setIsPrivate(false)}
+                onClick={() => {
+                  setIsPrivate(false)
+                  setAdminOnly(false)
+                }}
                 className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 cursor-pointer ${
-                  !isPrivate
+                  !isPrivate && !adminOnly
                     ? 'border-blue-500 bg-blue-500/10 shadow-xs ring-1 ring-blue-500'
                     : 'border-black/[0.08] dark:border-white/[0.08] hover:bg-black/[0.03] dark:hover:bg-white/[0.03]'
                 }`}
               >
-                <div className="flex items-center gap-1.5 font-semibold text-xs" style={{ color: !isPrivate ? '#2563eb' : 'var(--affine-text-primary-color)' }}>
+                <div className="flex items-center gap-1.5 font-semibold text-xs" style={{ color: !isPrivate && !adminOnly ? '#2563eb' : 'var(--affine-text-primary-color)' }}>
                   <Users className="w-3.5 h-3.5 shrink-0" />
-                  <span>Público</span>
+                  <span>Todo el equipo</span>
                 </div>
                 <p className="text-[10px] leading-tight text-neutral-500 dark:text-neutral-400">
-                  Visible para todo el equipo. Cualquiera puede ver y colaborar.
+                  Visible para admins y empleados.
                 </p>
               </button>
 
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsPrivate(false)
+                    setAdminOnly(true)
+                  }}
+                  className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 cursor-pointer ${
+                    !isPrivate && adminOnly
+                      ? 'border-indigo-500 bg-indigo-500/10 shadow-xs ring-1 ring-indigo-500'
+                      : 'border-black/[0.08] dark:border-white/[0.08] hover:bg-black/[0.03] dark:hover:bg-white/[0.03]'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 font-semibold text-xs text-indigo-500 dark:text-indigo-400">
+                    <Shield className="w-3.5 h-3.5 shrink-0" />
+                    <span>Solo Admins</span>
+                  </div>
+                  <p className="text-[10px] leading-tight text-neutral-500 dark:text-neutral-400">
+                    Oculto para empleados. Solo administradores.
+                  </p>
+                </button>
+              )}
+
               <button
                 type="button"
-                onClick={() => setIsPrivate(true)}
+                onClick={() => {
+                  setIsPrivate(true)
+                  setAdminOnly(false)
+                }}
                 className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 cursor-pointer ${
                   isPrivate
                     ? 'border-amber-500 bg-amber-500/10 shadow-xs ring-1 ring-amber-500'
@@ -246,7 +278,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onCreate }: CreateWorksp
                   <span>Privado</span>
                 </div>
                 <p className="text-[10px] leading-tight text-neutral-500 dark:text-neutral-400">
-                  Solo tú tienes acceso. Ni los administradores pueden verlo.
+                  Solo tú tienes acceso. Nadie más puede verlo.
                 </p>
               </button>
             </div>

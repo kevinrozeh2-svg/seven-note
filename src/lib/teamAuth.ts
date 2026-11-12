@@ -491,49 +491,85 @@ export function canUserTogglePrivacy(
 
 /**
  * Determina si un espacio de trabajo es visible para el miembro actual.
- * - Si no es privado (isPrivate === false o undefined): visible para todo el equipo (Admins y Trabajadores).
  * - Si es privado (isPrivate === true): SOLO visible si pertenece al usuario actual.
  *   ¡IMPORTANTE: Ni siquiera el administrador puede ver los espacios privados de otros usuarios, y viceversa!
+ * - Si es Solo Admins (adminOnly === true): SOLO visible para administradores (Capa 1). Los trabajadores (Capa 2) NO pueden verlo.
+ * - Si no es privado ni adminOnly: visible para todo el equipo (Admins y Trabajadores).
  */
 export function isSpaceVisible(
-  space: { isPrivate?: boolean; ownerMember?: string; userId?: string; user_id?: string },
+  space: { isPrivate?: boolean; adminOnly?: boolean; ownerMember?: string; userId?: string; user_id?: string },
   currentMemberOrId?: string | TeamMember | null,
   authUserId?: string
 ): boolean {
-  if (!space || !space.isPrivate) return true
-  if (!currentMemberOrId) return false
+  if (!space) return true
 
   const member = typeof currentMemberOrId === 'string'
     ? TEAM_MEMBERS.find((m: TeamMember) => m.id === currentMemberOrId) || getCurrentMember()
     : currentMemberOrId
 
-  const memberId = typeof currentMemberOrId === 'string' ? currentMemberOrId : currentMemberOrId.id
-  const effectiveAuthId = authUserId || (member?.id !== 'kevin' && member?.id !== 'maikol' && member?.id !== 'marcos' ? member?.id : undefined)
+  if (space.isPrivate) {
+    if (!currentMemberOrId) return false
 
-  // Un espacio privado SOLO es visible si pertenece al usuario actual
-  // Ni el administrador puede ver los espacios privados de los demás usuarios, y viceversa
-  const matchesOwnerMember = Boolean(
-    space.ownerMember && (
-      space.ownerMember === memberId ||
-      space.ownerMember.toLowerCase() === member?.name?.toLowerCase() ||
-      (member?.email && space.ownerMember.toLowerCase() === member.email.toLowerCase()) ||
-      TEAM_MEMBERS.some(
-        (tm) =>
-          (tm.id === space.ownerMember || tm.name.toLowerCase() === space.ownerMember?.toLowerCase()) &&
-          (tm.id === memberId || (member?.email && tm.email?.toLowerCase() === member.email.toLowerCase()))
+    const memberId = typeof currentMemberOrId === 'string' ? currentMemberOrId : currentMemberOrId.id
+    const effectiveAuthId = authUserId || (member?.id !== 'kevin' && member?.id !== 'maikol' && member?.id !== 'marcos' ? member?.id : undefined)
+
+    // Un espacio privado SOLO es visible si pertenece al usuario actual
+    // Ni el administrador puede ver los espacios privados de los demás usuarios, y viceversa
+    const matchesOwnerMember = Boolean(
+      space.ownerMember && (
+        space.ownerMember === memberId ||
+        space.ownerMember.toLowerCase() === member?.name?.toLowerCase() ||
+        (member?.email && space.ownerMember.toLowerCase() === member.email.toLowerCase()) ||
+        TEAM_MEMBERS.some(
+          (tm) =>
+            (tm.id === space.ownerMember || tm.name.toLowerCase() === space.ownerMember?.toLowerCase()) &&
+            (tm.id === memberId || (member?.email && tm.email?.toLowerCase() === member.email.toLowerCase()))
+        )
       )
     )
-  )
 
-  const spUserId = space.userId || space.user_id
-  const matchesUserId = Boolean(
-    spUserId && (
-      spUserId === memberId ||
-      (effectiveAuthId && spUserId === effectiveAuthId)
+    const spUserId = space.userId || space.user_id
+    const matchesUserId = Boolean(
+      spUserId && (
+        spUserId === memberId ||
+        (effectiveAuthId && spUserId === effectiveAuthId)
+      )
     )
-  )
 
-  return matchesOwnerMember || matchesUserId
+    return matchesOwnerMember || matchesUserId
+  }
+
+  // Espacio exclusivo para administradores
+  if (space.adminOnly) {
+    return isUserAdmin(member)
+  }
+
+  return true
+}
+
+/**
+ * Comprueba si el usuario actual puede administrar (editar, renombrar, cambiar visibilidad o eliminar) un espacio.
+ * - Capa 1 (Admins): puede administrar cualquier espacio visible (público, solo admins, o sus propios privados).
+ * - Capa 2 (Trabajadores): solo puede administrar espacios que haya creado él mismo.
+ */
+export function canUserManageSpace(
+  space?: { isPrivate?: boolean; adminOnly?: boolean; ownerMember?: string; userId?: string; user_id?: string } | null,
+  currentMemberOrId?: string | TeamMember | null,
+  authUserId?: string
+): boolean {
+  if (!space || !currentMemberOrId) return false
+  const member = typeof currentMemberOrId === 'string'
+    ? TEAM_MEMBERS.find((m: TeamMember) => m.id === currentMemberOrId) || getCurrentMember()
+    : currentMemberOrId
+
+  if (space.isPrivate) {
+    return isSpaceVisible(space, currentMemberOrId, authUserId)
+  }
+
+  if (isUserAdmin(member)) return true
+  if (space.adminOnly) return false
+
+  return isWorkspaceOwner(space, currentMemberOrId, authUserId)
 }
 
 /**

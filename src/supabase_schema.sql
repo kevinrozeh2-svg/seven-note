@@ -193,10 +193,14 @@ create table if not exists public.seven_spaces (
   updated_at bigint not null,
   is_deleted boolean not null default false,
   is_private boolean not null default false,
+  admin_only boolean not null default false,
+  sort_order double precision,
   owner_member text
 );
 
 alter table public.seven_spaces add column if not exists is_private boolean not null default false;
+alter table public.seven_spaces add column if not exists admin_only boolean not null default false;
+alter table public.seven_spaces add column if not exists sort_order double precision;
 alter table public.seven_spaces add column if not exists owner_member text;
 alter table public.seven_spaces add column if not exists viewed_by text[];
 
@@ -389,7 +393,7 @@ create policy "Lectura de seven_spaces" on public.seven_spaces
   using (
     public.is_user_active(auth.uid())
     and (
-      is_private = false
+      (is_private = false and (coalesce(admin_only, false) = false or public.is_admin(auth.uid())))
       or user_id = auth.uid()
     )
   );
@@ -400,6 +404,7 @@ create policy "Modificacion de seven_spaces" on public.seven_spaces
   with check (
     public.is_user_active(auth.uid())
     and public.get_my_role() != 'viewer'
+    and (coalesce(admin_only, false) = false or public.is_admin(auth.uid()))
   );
 
 drop policy if exists "Actualizacion de seven_spaces" on public.seven_spaces;
@@ -409,18 +414,19 @@ create policy "Actualizacion de seven_spaces" on public.seven_spaces
     public.is_user_active(auth.uid())
     and public.get_my_role() != 'viewer'
     and (
-      -- Capa 1: Admin puede actualizar espacios públicos o propios
+      -- Capa 1: Admin puede actualizar espacios públicos, solo-admins o propios
       (public.is_admin(auth.uid()) and (is_private = false or user_id = auth.uid()))
-      -- Capa 2: Trabajador SOLO puede actualizar los espacios que él mismo creó
-      or (user_id = auth.uid())
+      -- Capa 2: Trabajador SOLO puede actualizar los espacios que él mismo creó (y nunca espacios solo-admins)
+      or (user_id = auth.uid() and coalesce(admin_only, false) = false)
     )
   )
   with check (
     public.is_user_active(auth.uid())
     and public.get_my_role() != 'viewer'
+    and (coalesce(admin_only, false) = false or public.is_admin(auth.uid()))
     and (
       (public.is_admin(auth.uid()) and (is_private = false or user_id = auth.uid()))
-      or (user_id = auth.uid())
+      or (user_id = auth.uid() and coalesce(admin_only, false) = false)
     )
   );
 
@@ -456,6 +462,12 @@ create policy "Lectura de workspaces" on public.seven_workspaces
       and (
         is_private = false
         or user_id = auth.uid()
+      )
+      and not exists (
+        select 1 from public.seven_spaces sp
+        where sp.id = space_id
+          and coalesce(sp.admin_only, false) = true
+          and not public.is_admin(auth.uid())
       )
     )
   );

@@ -56,6 +56,7 @@ import {
   type TeamMember,
   isWorkspaceVisible,
   isSpaceVisible,
+  isUserAdmin,
   canUserEditWorkspace,
   canUserDeleteWorkspace,
   canUserTogglePrivacy
@@ -87,6 +88,7 @@ const TemplatesModal = lazy(() => import('./components/modals/TemplatesModal').t
 const ImportModal = lazy(() => import('./components/modals/ImportModal').then(m => ({ default: m.ImportModal })))
 const ShortcutsModal = lazy(() => import('./components/modals/ShortcutsModal').then(m => ({ default: m.ShortcutsModal })))
 const CreateWorkspaceModal = lazy(() => import('./components/modals/CreateWorkspaceModal').then(m => ({ default: m.CreateWorkspaceModal })))
+const ManageSpacesModal = lazy(() => import('./components/modals/ManageSpacesModal').then(m => ({ default: m.ManageSpacesModal })))
 const AuthModal = lazy(() => import('./components/modals/AuthModal').then(m => ({ default: m.AuthModal })))
 const UserProfileModal = lazy(() => import('./components/modals/UserProfileModal').then(m => ({ default: m.UserProfileModal })))
 const UserManagementModal = lazy(() => import('./components/modals/UserManagementModal').then(m => ({ default: m.UserManagementModal })))
@@ -238,6 +240,7 @@ function MainApp() {
     return localStorage.getItem('seven_note_active_space_id') || DEFAULT_SPACE_ID
   })
   const [isCreateWorkspaceOpen, setIsCreateWorkspaceOpen] = useState(false)
+  const [isManageSpacesOpen, setIsManageSpacesOpen] = useState(false)
 
   // Modals state
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -759,11 +762,15 @@ function MainApp() {
     }
   }, [darkMode])
 
-  // Filter visible spaces for current member (Strict privacy: private spaces only visible to owner)
+  // Filter visible spaces for current member (Strict privacy & Admin-only spaces) and sort by custom sortOrder
   const visibleSpaces = useMemo(() => {
     return spaces
       .filter((s: SpaceItem) => !s.isDeleted && isSpaceVisible(s, currentMember, authUser?.id))
-      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+      .sort((a, b) => {
+        const orderA = typeof a.sortOrder === 'number' ? a.sortOrder : (a.createdAt || 0)
+        const orderB = typeof b.sortOrder === 'number' ? b.sortOrder : (b.createdAt || 0)
+        return orderA - orderB
+      })
   }, [spaces, currentMember, authUser?.id])
 
   // Keep currentSpaceId in sync with visible spaces and auto-select space with content
@@ -929,7 +936,14 @@ function MainApp() {
     }
   }
 
-  const handleCreateSpace = async (name: string, icon: string, color: string, isPrivate: boolean = false) => {
+  const handleCreateSpace = async (
+    name: string,
+    icon: string,
+    color: string,
+    isPrivate: boolean = false,
+    adminOnly: boolean = false
+  ) => {
+    const effectiveAdminOnly = isUserAdmin(currentMember) ? (!isPrivate && adminOnly) : false
     const { space, initialPageId } = await createSpace(
       name,
       icon,
@@ -937,16 +951,52 @@ function MainApp() {
       isPrivate,
       currentMember.id,
       currentMember.fullName || currentMember.name,
-      authUser?.id
+      authUser?.id,
+      effectiveAdminOnly
     )
     setCurrentSpaceId(space.id)
     localStorage.setItem('seven_note_active_space_id', space.id)
     setCurrentWorkspaceId(initialPageId)
-    toast.success(isPrivate ? `Espacio privado "${space.name}" creado (solo visible para ti)` : `Espacio "${space.name}" creado`)
+    syncEngine.scheduleSync(500)
+    toast.success(
+      isPrivate
+        ? `Espacio privado "${space.name}" creado (solo visible para ti)`
+        : effectiveAdminOnly
+          ? `Espacio "${space.name}" creado (solo visible para administradores)`
+          : `Espacio "${space.name}" creado`
+    )
+  }
+
+  const handleUpdateSpace = async (
+    id: string,
+    updates: Partial<Pick<SpaceItem, 'name' | 'icon' | 'color' | 'isPrivate' | 'adminOnly'>>
+  ) => {
+    const safeUpdates = { ...updates }
+    if (!isUserAdmin(currentMember)) {
+      delete safeUpdates.adminOnly
+    }
+    await updateSpace(id, safeUpdates)
+    syncEngine.scheduleSync(500)
+    toast.success('Espacio actualizado')
+  }
+
+  const handleReorderSpaces = async (orderedSpaceIds: string[]) => {
+    const now = Date.now()
+    await Promise.all(
+      orderedSpaceIds.map((id, idx) =>
+        db.spaces.update(id, {
+          sortOrder: (idx + 1) * 1000,
+          updatedAt: now,
+          syncStatus: 'pending'
+        })
+      )
+    )
+    syncEngine.scheduleSync(500)
   }
 
   const handleRenameSpace = async (id: string, newName: string) => {
     await updateSpace(id, { name: newName })
+    syncEngine.scheduleSync(500)
   }
 
   const handleDeleteSpace = async (id: string) => {
@@ -1262,6 +1312,7 @@ function MainApp() {
               onSignOut={handleSignOut}
               onSelectSpace={handleSelectSpace}
               onOpenCreateSpace={() => setIsCreateWorkspaceOpen(true)}
+              onOpenManageSpaces={() => setIsManageSpacesOpen(true)}
               onRenameSpace={handleRenameSpace}
               onDeleteSpace={handleDeleteSpace}
               workspaces={effectiveWorkspaces}
@@ -2202,6 +2253,25 @@ function MainApp() {
           isOpen={isCreateWorkspaceOpen}
           onClose={() => setIsCreateWorkspaceOpen(false)}
           onCreate={handleCreateSpace}
+          isAdmin={isUserAdmin(currentMember)}
+        />
+
+        <ManageSpacesModal
+          isOpen={isManageSpacesOpen}
+          onClose={() => setIsManageSpacesOpen(false)}
+          spaces={visibleSpaces}
+          activeSpaceId={currentSpaceId}
+          onSelectSpace={async (id) => {
+            await handleSelectSpace(id)
+            setIsManageSpacesOpen(false)
+          }}
+          onUpdateSpace={handleUpdateSpace}
+          onReorderSpaces={handleReorderSpaces}
+          onDeleteSpace={handleDeleteSpace}
+          onOpenCreateSpace={() => setIsCreateWorkspaceOpen(true)}
+          isAdmin={isUserAdmin(currentMember)}
+          currentMember={currentMember}
+          authUserId={authUser?.id}
         />
 
         <ShortcutsModal

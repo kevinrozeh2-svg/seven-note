@@ -16,6 +16,8 @@ export interface SpaceItem {
   isDeleted?: boolean
   syncStatus?: SyncStatus
   isPrivate?: boolean
+  adminOnly?: boolean
+  sortOrder?: number
   ownerMember?: string
   ownerName?: string
   userId?: string
@@ -727,23 +729,29 @@ export async function createSpace(
   isPrivate: boolean = false,
   ownerMember?: string,
   ownerName?: string,
-  userId?: string
+  userId?: string,
+  adminOnly: boolean = false
 ): Promise<{ space: SpaceItem; initialPageId: string }> {
   const now = Date.now()
   const spaceId = `space-${crypto.randomUUID()}`
   const trimmedName = name.trim() || 'Nuevo Espacio'
+
+  const existingSpaces = await db.spaces.toArray()
+  const maxOrder = existingSpaces.reduce((max, s) => Math.max(max, s.sortOrder ?? 0), 0)
 
   const creatorTokens = [ownerMember, ownerName, userId].filter(Boolean) as string[]
 
   const space: SpaceItem = {
     id: spaceId,
     name: trimmedName,
-    icon: icon || (isPrivate ? '🔒' : '💼'),
+    icon: icon || (isPrivate ? '🔒' : adminOnly ? '🛡️' : '💼'),
     color: color || '#1e96eb',
     createdAt: now,
     updatedAt: now,
     syncStatus: 'pending',
     isPrivate,
+    adminOnly: isPrivate ? false : adminOnly,
+    sortOrder: maxOrder + 1000,
     ownerMember: ownerMember || undefined,
     ownerName: ownerName || undefined,
     userId: userId || undefined,
