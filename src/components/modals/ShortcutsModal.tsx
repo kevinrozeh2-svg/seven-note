@@ -131,51 +131,27 @@ export function ShortcutsModal({ isOpen, onClose }: ShortcutsModalProps) {
       onClick={onClose}
     >
       <div
-        className="rounded-2xl max-w-2xl w-full border shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
-        style={{
-          backgroundColor: 'var(--affine-background-overlay-panel-color)',
-          borderColor: 'var(--affine-border-color)',
-          boxShadow: 'var(--affine-popover-shadow)',
-          color: 'var(--affine-text-primary-color)'
-        }}
+        className="rounded-xl max-w-2xl w-full border border-[var(--app-border-strong)] shadow-[var(--app-shadow-popover)] overflow-hidden flex flex-col max-h-[85vh] bg-[var(--app-bg-overlay)] text-[var(--app-text-primary)] font-sans"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div
-          className="px-4 sm:px-5 py-3.5 border-b flex items-center justify-between shrink-0"
-          style={{ borderColor: 'var(--affine-border-color)' }}
-        >
-          <div className="flex items-center gap-2.5">
-            <div
-              className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-              style={{
-                backgroundColor: 'rgba(30, 150, 235, 0.1)',
-                color: '#1e96eb'
-              }}
-            >
+        <div className="px-5 py-3.5 border-b border-[var(--app-divider)] flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 bg-[var(--app-hover)] text-[var(--app-text-secondary)]">
               <SettingsIcon style={{ width: 16, height: 16 }} />
             </div>
             <div className="min-w-0">
-              <h3 className="text-sm font-semibold truncate" style={{ color: 'var(--affine-text-primary-color)' }}>
-                Atajos de Teclado (AFFiNE Canary)
+              <h3 className="text-sm font-semibold truncate text-[var(--app-text-primary)]">
+                Atajos de teclado
               </h3>
-              <p className="text-[11px] truncate" style={{ color: 'var(--affine-text-secondary-color)' }}>
-                Referencia rápida de productividad para lienzo y editor
+              <p className="text-[11px] truncate text-[var(--app-text-muted)]">
+                Referencia rápida para lienzo y editor
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg transition shrink-0"
-            style={{ color: 'var(--affine-text-secondary-color)' }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'var(--affine-hover-color)'
-              e.currentTarget.style.color = 'var(--affine-text-primary-color)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent'
-              e.currentTarget.style.color = 'var(--affine-text-secondary-color)'
-            }}
+            className="p-1.5 rounded-md text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition-colors shrink-0 cursor-pointer"
             title="Cerrar (Esc)"
           >
             <CloseIcon style={{ width: 16, height: 16 }} />
@@ -183,13 +159,7 @@ export function ShortcutsModal({ isOpen, onClose }: ShortcutsModalProps) {
         </div>
 
         {/* Search bar */}
-        <div
-          className="px-5 py-2.5 border-b shrink-0"
-          style={{
-            borderColor: 'var(--affine-border-color)',
-            backgroundColor: 'var(--affine-background-secondary-color)'
-          }}
-        >
+        <div className="px-5 py-2.5 border-b border-[var(--app-divider)] shrink-0 bg-[var(--app-bg-secondary)]">
           <div className="relative">
             <SearchIcon
               style={{
@@ -198,7 +168,7 @@ export function ShortcutsModal({ isOpen, onClose }: ShortcutsModalProps) {
                 top: 8,
                 width: 14,
                 height: 14,
-                color: 'var(--affine-text-secondary-color)'
+                color: 'var(--app-text-muted)'
               }}
             />
             <input
@@ -206,14 +176,7 @@ export function ShortcutsModal({ isOpen, onClose }: ShortcutsModalProps) {
               placeholder="Buscar atajo o acción (ej. flecha, diapositiva, código)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-lg pl-9 pr-3 py-1.5 text-xs outline-none border transition"
-              style={{
-                backgroundColor: 'var(--affine-background-primary-color)',
-                borderColor: 'var(--affine-border-color)',
-                color: 'var(--affine-text-primary-color)'
-              }}
-              onFocus={(e) => (e.currentTarget.style.borderColor = '#1e96eb')}
-              onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--affine-border-color)')}
+              className="w-full rounded-md pl-9 pr-3 py-1.5 text-xs outline-none border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] placeholder:text-[var(--app-text-muted)] focus:border-[var(--app-accent)] transition-colors"
               autoFocus
             />
           </div>
@@ -223,13 +186,7 @@ export function ShortcutsModal({ isOpen, onClose }: ShortcutsModalProps) {
         {!searchQuery.trim() ? (
           <div className="flex flex-col sm:flex-row flex-1 min-h-0">
             {/* Category tabs sidebar */}
-            <div
-              className="w-full sm:w-48 border-b sm:border-b-0 sm:border-r p-2 flex sm:flex-col overflow-x-auto sm:overflow-x-visible shrink-0 gap-1 space-y-0 sm:space-y-1 no-scrollbar"
-              style={{
-                borderColor: 'var(--affine-border-color)',
-                backgroundColor: 'var(--affine-background-secondary-color)'
-              }}
-            >
+            <div className="w-full sm:w-48 border-b sm:border-b-0 sm:border-r border-[var(--app-divider)] bg-[var(--app-bg-secondary)] p-2 flex sm:flex-col overflow-x-auto sm:overflow-x-visible shrink-0 gap-1 no-scrollbar">
               {SHORTCUT_CATEGORIES.map((cat) => {
                 const Icon = cat.icon
                 const isActive = activeTab === cat.id
@@ -237,26 +194,20 @@ export function ShortcutsModal({ isOpen, onClose }: ShortcutsModalProps) {
                   <button
                     key={cat.id}
                     onClick={() => setActiveTab(cat.id)}
-                    className="flex items-center gap-2 px-3 py-1.5 sm:py-2 rounded-lg text-xs font-medium text-left transition whitespace-nowrap shrink-0 sm:w-full"
-                    style={{
-                      backgroundColor: isActive ? 'var(--affine-hover-color)' : 'transparent',
-                      color: isActive ? '#1e96eb' : 'var(--affine-text-secondary-color)',
-                      fontWeight: isActive ? 600 : 400
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isActive) {
-                        e.currentTarget.style.backgroundColor = 'var(--affine-hover-color)'
-                        e.currentTarget.style.color = 'var(--affine-text-primary-color)'
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isActive) {
-                        e.currentTarget.style.backgroundColor = 'transparent'
-                        e.currentTarget.style.color = 'var(--affine-text-secondary-color)'
-                      }
-                    }}
+                    className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs text-left transition-colors whitespace-nowrap shrink-0 sm:w-full cursor-pointer ${
+                      isActive
+                        ? 'bg-[var(--app-hover-filled)] text-[var(--app-text-primary)] font-semibold'
+                        : 'text-[var(--app-text-secondary)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text-primary)] font-medium'
+                    }`}
                   >
-                    <Icon style={{ width: 14, height: 14, flexShrink: 0 }} />
+                    <Icon
+                      style={{
+                        width: 14,
+                        height: 14,
+                        flexShrink: 0,
+                        color: isActive ? 'var(--app-accent)' : 'currentColor'
+                      }}
+                    />
                     <span>{cat.title}</span>
                   </button>
                 )
@@ -264,36 +215,22 @@ export function ShortcutsModal({ isOpen, onClose }: ShortcutsModalProps) {
             </div>
 
             {/* Category items list */}
-            <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2">
-              <h4
-                className="text-xs font-semibold uppercase tracking-wider mb-3"
-                style={{ color: 'var(--affine-text-secondary-color)' }}
-              >
+            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+              <h4 className="text-[11px] font-semibold uppercase tracking-wider mb-2.5 px-2 text-[var(--app-text-muted)]">
                 {currentCategory?.title}
               </h4>
-              <div className="space-y-1.5">
+              <div className="divide-y divide-[var(--app-divider)]">
                 {currentCategory?.items.map((item, idx) => (
                   <div
                     key={idx}
-                    className="flex items-center justify-between p-2 rounded-lg border transition text-xs"
-                    style={{
-                      backgroundColor: 'var(--affine-background-secondary-color)',
-                      borderColor: 'var(--affine-border-color)'
-                    }}
+                    className="flex items-center justify-between px-2 py-2 hover:bg-[var(--app-hover)] rounded-md transition-colors text-xs"
                   >
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="truncate" style={{ color: 'var(--affine-text-primary-color)' }}>
+                      <span className="truncate text-[var(--app-text-primary)]">
                         {item.description}
                       </span>
                       {item.tag && (
-                        <span
-                          className="text-[10px] px-1.5 py-0.5 rounded border"
-                          style={{
-                            backgroundColor: 'var(--affine-hover-color)',
-                            borderColor: 'var(--affine-border-color)',
-                            color: 'var(--affine-text-secondary-color)'
-                          }}
-                        >
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--app-hover)] text-[var(--app-text-muted)] shrink-0">
                           {item.tag}
                         </span>
                       )}
@@ -302,12 +239,7 @@ export function ShortcutsModal({ isOpen, onClose }: ShortcutsModalProps) {
                       {item.keys.map((k, kIdx) => (
                         <kbd
                           key={kIdx}
-                          className="px-2 py-0.5 rounded text-[11px] font-mono shadow-xs border"
-                          style={{
-                            backgroundColor: 'var(--affine-background-primary-color)',
-                            borderColor: 'var(--affine-border-color)',
-                            color: 'var(--affine-text-primary-color)'
-                          }}
+                          className="px-1.5 py-0.5 rounded text-[11px] font-mono border border-[var(--app-border-strong)] bg-[var(--app-bg-secondary)] text-[var(--app-text-primary)]"
                         >
                           {k}
                         </kbd>
@@ -320,66 +252,46 @@ export function ShortcutsModal({ isOpen, onClose }: ShortcutsModalProps) {
           </div>
         ) : (
           /* Search results */
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
             {filteredCategories.length === 0 ? (
-              <div
-                className="text-center py-8 text-xs"
-                style={{ color: 'var(--affine-text-secondary-color)' }}
-              >
+              <div className="text-center py-8 text-xs text-[var(--app-text-muted)]">
                 No se encontraron atajos para "{searchQuery}"
               </div>
             ) : (
               filteredCategories.map((cat) => (
-                <div key={cat.id} className="space-y-1.5">
-                  <h4
-                    className="text-xs font-semibold uppercase tracking-wider"
-                    style={{ color: 'var(--affine-text-secondary-color)' }}
-                  >
+                <div key={cat.id} className="space-y-1">
+                  <h4 className="text-[11px] font-semibold uppercase tracking-wider px-2 text-[var(--app-text-muted)]">
                     {cat.title}
                   </h4>
-                  {cat.items.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between p-2 rounded-lg border transition text-xs"
-                      style={{
-                        backgroundColor: 'var(--affine-background-secondary-color)',
-                        borderColor: 'var(--affine-border-color)'
-                      }}
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="truncate" style={{ color: 'var(--affine-text-primary-color)' }}>
-                          {item.description}
-                        </span>
-                        {item.tag && (
-                          <span
-                            className="text-[10px] px-1.5 py-0.5 rounded border"
-                            style={{
-                              backgroundColor: 'var(--affine-hover-color)',
-                              borderColor: 'var(--affine-border-color)',
-                              color: 'var(--affine-text-secondary-color)'
-                            }}
-                          >
-                            {item.tag}
+                  <div className="divide-y divide-[var(--app-divider)]">
+                    {cat.items.map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between px-2 py-2 hover:bg-[var(--app-hover)] rounded-md transition-colors text-xs"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="truncate text-[var(--app-text-primary)]">
+                            {item.description}
                           </span>
-                        )}
+                          {item.tag && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--app-hover)] text-[var(--app-text-muted)] shrink-0">
+                              {item.tag}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0 ml-3">
+                          {item.keys.map((k, kIdx) => (
+                            <kbd
+                              key={kIdx}
+                              className="px-1.5 py-0.5 rounded text-[11px] font-mono border border-[var(--app-border-strong)] bg-[var(--app-bg-secondary)] text-[var(--app-text-primary)]"
+                            >
+                              {k}
+                            </kbd>
+                          ))}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1 shrink-0 ml-3">
-                        {item.keys.map((k, kIdx) => (
-                          <kbd
-                            key={kIdx}
-                            className="px-2 py-0.5 rounded text-[11px] font-mono shadow-xs border"
-                            style={{
-                              backgroundColor: 'var(--affine-background-primary-color)',
-                              borderColor: 'var(--affine-border-color)',
-                              color: 'var(--affine-text-primary-color)'
-                            }}
-                          >
-                            {k}
-                          </kbd>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               ))
             )}
@@ -387,29 +299,15 @@ export function ShortcutsModal({ isOpen, onClose }: ShortcutsModalProps) {
         )}
 
         {/* Footer */}
-        <div
-          className="px-5 py-2.5 border-t flex items-center justify-between text-[11px] shrink-0"
-          style={{
-            borderColor: 'var(--affine-border-color)',
-            backgroundColor: 'var(--affine-background-secondary-color)',
-            color: 'var(--affine-text-secondary-color)'
-          }}
-        >
+        <div className="px-5 py-2.5 border-t border-[var(--app-divider)] flex items-center justify-between text-[11px] shrink-0 bg-[var(--app-bg-secondary)] text-[var(--app-text-muted)]">
           <span>
             Presiona{' '}
-            <kbd
-              className="font-mono px-1.5 py-0.5 rounded border"
-              style={{
-                backgroundColor: 'var(--affine-background-primary-color)',
-                borderColor: 'var(--affine-border-color)',
-                color: 'var(--affine-text-primary-color)'
-              }}
-            >
+            <kbd className="font-mono px-1.5 py-0.5 rounded border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)]">
               ?
             </kbd>{' '}
             en cualquier momento para ver esta guía
           </span>
-          <span>Seven Note • AFFiNE Architecture</span>
+          <span>Seven Note</span>
         </div>
       </div>
     </div>

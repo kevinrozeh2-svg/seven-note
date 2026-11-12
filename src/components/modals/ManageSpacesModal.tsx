@@ -148,27 +148,20 @@ export function ManageSpacesModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl rounded-2xl border shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90dvh]"
-        style={{
-          backgroundColor: 'var(--affine-background-primary-color)',
-          borderColor: 'var(--affine-border-color)'
-        }}
+        className="w-full max-w-2xl rounded-xl border border-[var(--app-border-strong)] bg-[var(--app-bg-overlay)] text-[var(--app-text-primary)] shadow-[var(--app-shadow-popover)] overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90dvh] font-sans"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div
-          className="flex items-start sm:items-center justify-between gap-2 px-3.5 sm:px-5 py-3 sm:py-4 border-b shrink-0"
-          style={{ borderColor: 'var(--affine-border-color)' }}
-        >
+        <div className="flex items-start sm:items-center justify-between gap-2 px-5 py-3.5 border-b border-[var(--app-divider)] shrink-0">
           <div className="min-w-0">
-            <h2 className="text-sm sm:text-base font-semibold" style={{ color: 'var(--affine-text-primary-color)' }}>
+            <h2 className="text-sm font-semibold text-[var(--app-text-primary)]">
               Administrar espacios de trabajo
             </h2>
-            <p className="text-[11px] sm:text-xs mt-0.5" style={{ color: 'var(--affine-text-secondary-color)' }}>
+            <p className="text-[11px] mt-0.5 text-[var(--app-text-muted)]">
               Ordena tus espacios, personaliza su aspecto y controla quién puede verlos.
             </p>
           </div>
@@ -177,8 +170,7 @@ export function ManageSpacesModal({
               <button
                 type="button"
                 onClick={handleSortAlphabetical}
-                className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-medium border border-black/[0.08] dark:border-white/[0.1] hover:bg-black/[0.04] dark:hover:bg-white/[0.06] transition cursor-pointer"
-                style={{ color: 'var(--affine-text-secondary-color)' }}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-secondary)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition-colors cursor-pointer"
                 title="Ordenar espacios alfabéticamente (A-Z)"
                 aria-label="Ordenar espacios alfabéticamente (A-Z)"
               >
@@ -189,16 +181,16 @@ export function ManageSpacesModal({
             <button
               type="button"
               onClick={onClose}
-              className="p-2 sm:p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-neutral-400 hover:text-neutral-200 cursor-pointer"
+              className="p-1.5 rounded-md hover:bg-[var(--app-hover)] transition-colors text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] cursor-pointer"
               aria-label="Cerrar modal"
             >
-              <CloseIcon className="w-5 h-5" />
+              <CloseIcon className="w-4 h-4" />
             </button>
           </div>
         </div>
 
         {/* Space List */}
-        <div className="p-3 sm:p-4 overflow-y-auto space-y-2.5 flex-1">
+        <div className="p-4 overflow-y-auto space-y-2 flex-1 custom-scrollbar">
           {spaces.map((sp, idx) => {
             const isEditing = editingId === sp.id
             const canManage = canUserManageSpace(sp, currentMember, authUserId)
@@ -230,18 +222,18 @@ export function ManageSpacesModal({
                   setDraggedId(null)
                   setDragOverId(null)
                 }}
-                className={`rounded-xl border transition-all ${
+                className={`rounded-lg border transition-colors ${
                   isDragOver
-                    ? 'border-blue-500 ring-2 ring-blue-500/30 bg-blue-500/5'
+                    ? 'border-[var(--app-accent)] bg-[var(--app-accent-soft)]'
                     : isActive
-                      ? 'border-blue-500/40 bg-black/[0.02] dark:bg-white/[0.03]'
-                      : 'border-black/[0.08] dark:border-white/[0.08]'
+                      ? 'border-[var(--app-border-strong)] bg-[var(--app-hover-filled)]'
+                      : 'border-[var(--app-border)] bg-[var(--app-bg-secondary)] hover:border-[var(--app-border-strong)]'
                 } ${draggedId === sp.id ? 'opacity-50' : ''}`}
               >
                 {/* Row Summary */}
-                <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-2.5 px-2.5 sm:px-3 py-2.5">
+                <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 px-3 py-2">
                   <div
-                    className="hidden sm:block cursor-grab active:cursor-grabbing text-neutral-400 hover:text-neutral-200 p-0.5 shrink-0"
+                    className="hidden sm:block cursor-grab active:cursor-grabbing text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] p-0.5 shrink-0"
                     title="Arrastra para reordenar"
                   >
                     <GripVertical className="w-4 h-4" />
@@ -251,11 +243,11 @@ export function ManageSpacesModal({
                   <button
                     type="button"
                     onClick={() => onSelectSpace(sp.id)}
-                    className="w-8 h-8 rounded-lg flex items-center justify-center text-white shrink-0 shadow-xs cursor-pointer transition hover:scale-105"
-                    style={{ backgroundColor: sp.color || '#1e96eb' }}
+                    className="w-7 h-7 rounded-md flex items-center justify-center text-white shrink-0 cursor-pointer transition-opacity hover:opacity-90"
+                    style={{ backgroundColor: sp.color || '#7c3aed' }}
                     title="Abrir espacio"
                   >
-                    {sp.icon ? <AppleEmoji emoji={sp.icon} size={17} /> : sp.name.charAt(0).toUpperCase()}
+                    {sp.icon ? <AppleEmoji emoji={sp.icon} size={16} /> : sp.name.charAt(0).toUpperCase()}
                   </button>
 
                   {/* Name & Visibility Badge */}
@@ -264,21 +256,20 @@ export function ManageSpacesModal({
                       <button
                         type="button"
                         onClick={() => onSelectSpace(sp.id)}
-                        className="text-sm font-semibold truncate hover:underline text-left cursor-pointer"
-                        style={{ color: 'var(--affine-text-primary-color)' }}
+                        className="text-xs sm:text-sm font-medium truncate hover:underline text-left cursor-pointer text-[var(--app-text-primary)]"
                       >
                         {sp.name}
                       </button>
 
                       {isActive && (
-                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-500">
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[var(--app-accent-soft)] text-[var(--app-accent)]">
                           Activo
                         </span>
                       )}
 
                       {sp.isPrivate ? (
                         <span
-                          className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-500"
+                          className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400"
                           title="Solo visible para su creador"
                         >
                           <Lock className="w-2.5 h-2.5" />
@@ -286,7 +277,7 @@ export function ManageSpacesModal({
                         </span>
                       ) : sp.adminOnly ? (
                         <span
-                          className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-indigo-500/15 text-indigo-400"
+                          className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-[var(--app-hover)] text-[var(--app-text-secondary)]"
                           title="Solo visible para administradores (oculto para empleados)"
                         >
                           <Shield className="w-2.5 h-2.5" />
@@ -294,7 +285,7 @@ export function ManageSpacesModal({
                         </span>
                       ) : (
                         <span
-                          className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400"
+                          className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-[var(--app-hover)] text-[var(--app-text-muted)]"
                           title="Visible para administradores y empleados"
                         >
                           <Users className="w-2.5 h-2.5" />
@@ -305,12 +296,12 @@ export function ManageSpacesModal({
                   </div>
 
                   {/* Row Actions: Reorder + Edit + Delete */}
-                  <div className="flex items-center gap-1 shrink-0 ml-auto">
+                  <div className="flex items-center gap-0.5 shrink-0 ml-auto">
                     <button
                       type="button"
                       disabled={idx === 0}
                       onClick={() => moveSpace(idx, -1)}
-                      className="p-2 sm:p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-neutral-400 hover:text-neutral-200 disabled:opacity-25 disabled:pointer-events-none transition cursor-pointer"
+                      className="p-1.5 rounded-md hover:bg-[var(--app-hover)] text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
                       title="Subir"
                       aria-label="Subir espacio"
                     >
@@ -320,7 +311,7 @@ export function ManageSpacesModal({
                       type="button"
                       disabled={idx === spaces.length - 1}
                       onClick={() => moveSpace(idx, 1)}
-                      className="p-2 sm:p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-neutral-400 hover:text-neutral-200 disabled:opacity-25 disabled:pointer-events-none transition cursor-pointer"
+                      className="p-1.5 rounded-md hover:bg-[var(--app-hover)] text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] disabled:opacity-25 disabled:pointer-events-none transition-colors cursor-pointer"
                       title="Bajar"
                       aria-label="Bajar espacio"
                     >
@@ -331,10 +322,10 @@ export function ManageSpacesModal({
                       <button
                         type="button"
                         onClick={() => (isEditing ? cancelEditing() : startEditing(sp))}
-                        className={`p-2 sm:p-1.5 rounded-lg transition cursor-pointer ${
+                        className={`p-1.5 rounded-md transition-colors cursor-pointer ${
                           isEditing
-                            ? 'bg-blue-500/15 text-blue-400'
-                            : 'hover:bg-black/5 dark:hover:bg-white/10 text-neutral-400 hover:text-neutral-200'
+                            ? 'bg-[var(--app-accent-soft)] text-[var(--app-accent)]'
+                            : 'hover:bg-[var(--app-hover)] text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)]'
                         }`}
                         title="Editar espacio"
                         aria-label="Editar espacio"
@@ -347,7 +338,7 @@ export function ManageSpacesModal({
                       <button
                         type="button"
                         onClick={() => onDeleteSpace(sp.id)}
-                        className="p-2 sm:p-1.5 rounded-lg hover:bg-rose-500/15 text-neutral-400 hover:text-rose-400 transition cursor-pointer"
+                        className="p-1.5 rounded-md hover:bg-rose-500/10 text-[var(--app-text-muted)] hover:text-rose-500 transition-colors cursor-pointer"
                         title="Eliminar espacio"
                         aria-label="Eliminar espacio"
                       >
@@ -359,29 +350,22 @@ export function ManageSpacesModal({
 
                 {/* Inline Editor */}
                 {isEditing && (
-                  <div
-                    className="px-4 pb-4 pt-3 border-t space-y-3 bg-black/[0.02] dark:bg-white/[0.02]"
-                    style={{ borderColor: 'var(--affine-border-color)' }}
-                  >
+                  <div className="px-4 pb-3.5 pt-3 border-t border-[var(--app-divider)] space-y-3 bg-[var(--app-bg-primary)] rounded-b-lg">
                     {/* Name & Icon */}
                     <div className="flex items-center gap-2.5">
                       <button
                         ref={emojiBtnRef}
                         type="button"
                         onClick={() => setIsPickerOpen((p) => !p)}
-                        className="w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 hover:bg-black/5 dark:hover:bg-white/5 transition cursor-pointer"
-                        style={{
-                          borderColor: 'var(--affine-border-color)',
-                          backgroundColor: 'var(--affine-background-secondary-color)'
-                        }}
+                        className="w-9 h-9 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-secondary)] flex items-center justify-center shrink-0 hover:bg-[var(--app-hover)] transition-colors cursor-pointer"
                         title="Cambiar icono"
                       >
-                        <AppleEmoji emoji={editIcon} size={22} />
+                        <AppleEmoji emoji={editIcon} size={20} />
                       </button>
 
                       {isPickerOpen && typeof document !== 'undefined' && createPortal(
                         <div
-                          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-100"
+                          className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-100"
                           onClick={() => setIsPickerOpen(false)}
                         >
                           <div onClick={(e) => e.stopPropagation()} className="relative">
@@ -406,19 +390,14 @@ export function ManageSpacesModal({
                         value={editName}
                         onChange={(e) => setEditName(e.target.value)}
                         placeholder="Nombre del espacio"
-                        className="flex-1 px-3 py-2 rounded-xl border text-sm outline-none focus:ring-2 focus:ring-blue-500/40"
-                        style={{
-                          backgroundColor: 'var(--affine-background-secondary-color)',
-                          borderColor: 'var(--affine-border-color)',
-                          color: 'var(--affine-text-primary-color)'
-                        }}
+                        className="flex-1 px-3 py-1.5 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-secondary)] text-[var(--app-text-primary)] text-xs outline-none focus:border-[var(--app-accent)] transition-colors"
                       />
                     </div>
 
                     {/* Color */}
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-xs font-medium mr-1" style={{ color: 'var(--affine-text-secondary-color)' }}>
-                        Color:
+                      <span className="text-[11px] font-medium mr-1 text-[var(--app-text-secondary)]">
+                        Color
                       </span>
                       {PRESET_COLORS.map((c) => (
                         <button
@@ -426,8 +405,8 @@ export function ManageSpacesModal({
                           type="button"
                           onClick={() => setEditColor(c.value)}
                           title={c.name}
-                          className={`w-5 h-5 rounded-full transition-transform cursor-pointer ${
-                            editColor === c.value ? 'scale-125 ring-2 ring-white shadow-sm' : 'opacity-75 hover:opacity-100'
+                          className={`w-5 h-5 rounded-md transition-transform cursor-pointer ${
+                            editColor === c.value ? 'ring-2 ring-offset-2 ring-[var(--app-text-primary)] ring-offset-[var(--app-bg-primary)]' : 'opacity-80 hover:opacity-100'
                           }`}
                           style={{ backgroundColor: c.value }}
                         />
@@ -436,8 +415,8 @@ export function ManageSpacesModal({
 
                     {/* Visibility */}
                     <div>
-                      <span className="block text-xs font-medium mb-1.5" style={{ color: 'var(--affine-text-secondary-color)' }}>
-                        ¿Quién puede ver este espacio?
+                      <span className="block text-[11px] font-medium mb-1.5 text-[var(--app-text-secondary)]">
+                        Visibilidad
                       </span>
                       <div className={`grid gap-2 ${isAdmin ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
                         <button
@@ -446,17 +425,17 @@ export function ManageSpacesModal({
                             setEditIsPrivate(false)
                             setEditAdminOnly(false)
                           }}
-                          className={`p-2 rounded-xl border text-left transition flex flex-col gap-0.5 cursor-pointer ${
+                          className={`p-2 rounded-md border text-left transition-colors flex flex-col gap-0.5 cursor-pointer ${
                             !editIsPrivate && !editAdminOnly
-                              ? 'border-blue-500 bg-blue-500/10 ring-1 ring-blue-500'
-                              : 'border-black/[0.08] dark:border-white/[0.08] hover:bg-black/[0.03] dark:hover:bg-white/[0.03]'
+                              ? 'border-[var(--app-accent)] bg-[var(--app-accent-soft)]'
+                              : 'border-[var(--app-border)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)]'
                           }`}
                         >
-                          <div className="flex items-center gap-1.5 font-semibold text-xs text-blue-500">
-                            <Users className="w-3.5 h-3.5 shrink-0" />
+                          <div className="flex items-center gap-1.5 font-medium text-xs text-[var(--app-text-primary)]">
+                            <Users className="w-3.5 h-3.5 shrink-0 text-[var(--app-text-secondary)]" />
                             <span>Todo el equipo</span>
                           </div>
-                          <span className="text-[10px] text-neutral-500 dark:text-neutral-400">
+                          <span className="text-[10px] text-[var(--app-text-muted)]">
                             Admins y empleados
                           </span>
                         </button>
@@ -468,17 +447,17 @@ export function ManageSpacesModal({
                               setEditIsPrivate(false)
                               setEditAdminOnly(true)
                             }}
-                            className={`p-2 rounded-xl border text-left transition flex flex-col gap-0.5 cursor-pointer ${
+                            className={`p-2 rounded-md border text-left transition-colors flex flex-col gap-0.5 cursor-pointer ${
                               !editIsPrivate && editAdminOnly
-                                ? 'border-indigo-500 bg-indigo-500/10 ring-1 ring-indigo-500'
-                                : 'border-black/[0.08] dark:border-white/[0.08] hover:bg-black/[0.03] dark:hover:bg-white/[0.03]'
+                                ? 'border-[var(--app-accent)] bg-[var(--app-accent-soft)]'
+                                : 'border-[var(--app-border)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)]'
                             }`}
                           >
-                            <div className="flex items-center gap-1.5 font-semibold text-xs text-indigo-400">
-                              <Shield className="w-3.5 h-3.5 shrink-0" />
+                            <div className="flex items-center gap-1.5 font-medium text-xs text-[var(--app-text-primary)]">
+                              <Shield className="w-3.5 h-3.5 shrink-0 text-[var(--app-text-secondary)]" />
                               <span>Solo Admins</span>
                             </div>
-                            <span className="text-[10px] text-neutral-500 dark:text-neutral-400">
+                            <span className="text-[10px] text-[var(--app-text-muted)]">
                               Oculto a empleados
                             </span>
                           </button>
@@ -490,17 +469,17 @@ export function ManageSpacesModal({
                             setEditIsPrivate(true)
                             setEditAdminOnly(false)
                           }}
-                          className={`p-2 rounded-xl border text-left transition flex flex-col gap-0.5 cursor-pointer ${
+                          className={`p-2 rounded-md border text-left transition-colors flex flex-col gap-0.5 cursor-pointer ${
                             editIsPrivate
-                              ? 'border-amber-500 bg-amber-500/10 ring-1 ring-amber-500'
-                              : 'border-black/[0.08] dark:border-white/[0.08] hover:bg-black/[0.03] dark:hover:bg-white/[0.03]'
+                              ? 'border-[var(--app-accent)] bg-[var(--app-accent-soft)]'
+                              : 'border-[var(--app-border)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)]'
                           }`}
                         >
-                          <div className="flex items-center gap-1.5 font-semibold text-xs text-amber-500">
-                            <Lock className="w-3.5 h-3.5 shrink-0" />
+                          <div className="flex items-center gap-1.5 font-medium text-xs text-[var(--app-text-primary)]">
+                            <Lock className="w-3.5 h-3.5 shrink-0 text-[var(--app-text-secondary)]" />
                             <span>Privado</span>
                           </div>
-                          <span className="text-[10px] text-neutral-500 dark:text-neutral-400">
+                          <span className="text-[10px] text-[var(--app-text-muted)]">
                             Solo tú lo ves
                           </span>
                         </button>
@@ -512,8 +491,7 @@ export function ManageSpacesModal({
                       <button
                         type="button"
                         onClick={cancelEditing}
-                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer"
-                        style={{ color: 'var(--affine-text-secondary-color)' }}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] transition-colors cursor-pointer"
                       >
                         <X className="w-3.5 h-3.5" />
                         Cancelar
@@ -522,7 +500,7 @@ export function ManageSpacesModal({
                         type="button"
                         disabled={!editName.trim() || savingId === sp.id}
                         onClick={() => handleSaveEdit(sp)}
-                        className="flex items-center gap-1 px-3.5 py-1.5 rounded-lg text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 transition cursor-pointer"
+                        className="flex items-center gap-1 px-3.5 py-1.5 rounded-md text-xs font-medium bg-[var(--app-text-primary)] text-[var(--app-bg-primary)] hover:opacity-90 disabled:opacity-50 transition-opacity cursor-pointer"
                       >
                         <Check className="w-3.5 h-3.5" />
                         {savingId === sp.id ? 'Guardando...' : 'Guardar cambios'}
@@ -536,15 +514,9 @@ export function ManageSpacesModal({
         </div>
 
         {/* Footer */}
-        <div
-          className="px-3.5 sm:px-5 py-3 sm:py-3.5 border-t flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 shrink-0"
-          style={{
-            borderColor: 'var(--affine-border-color)',
-            backgroundColor: 'var(--affine-background-secondary-color)'
-          }}
-        >
-          <span className="text-[11px] text-center sm:text-left" style={{ color: 'var(--affine-text-secondary-color)' }}>
-            Tip: usa las flechas o arrastra las filas para cambiar el orden.
+        <div className="px-5 py-3 border-t border-[var(--app-divider)] bg-[var(--app-bg-secondary)] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 shrink-0">
+          <span className="text-[11px] text-center sm:text-left text-[var(--app-text-muted)]">
+            Usa las flechas o arrastra las filas para cambiar el orden.
           </span>
           <div className="flex items-center gap-2">
             <button
@@ -553,7 +525,7 @@ export function ManageSpacesModal({
                 onClose()
                 onOpenCreateSpace()
               }}
-              className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 sm:py-1.5 rounded-lg text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white transition cursor-pointer"
+              className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-medium bg-[var(--app-text-primary)] text-[var(--app-bg-primary)] hover:opacity-90 transition-opacity cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Nuevo espacio</span>

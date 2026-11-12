@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { CloseIcon } from '@blocksuite/icons/rc'
 import {
   User,
@@ -10,7 +10,9 @@ import {
   RefreshCw,
   Palette,
   AlertCircle,
-  CheckCircle2
+  CheckCircle2,
+  Upload,
+  X
 } from 'lucide-react'
 import {
   updateUserProfile,
@@ -22,6 +24,7 @@ import {
   setCurrentMember,
   type TeamMember
 } from '../../lib/teamAuth'
+import { PRESET_AVATARS, resizeAvatarFile } from '../../lib/avatars'
 import { clearLocalUserData } from '../../db'
 import { toast } from 'sonner'
 
@@ -54,7 +57,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [activeTab, setActiveTab] = useState<'profile' | 'security'>('profile')
   const [fullName, setFullName] = useState('')
   const [color, setColor] = useState('#2563eb')
+  const [avatarUrl, setAvatarUrl] = useState<string>('')
   const [savingProfile, setSavingProfile] = useState(false)
+  const avatarInputRef = useRef<HTMLInputElement>(null)
 
   // Password change state
   const [newPassword, setNewPassword] = useState('')
@@ -70,6 +75,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     if (isOpen) {
       setFullName(currentMember.fullName || currentMember.name || '')
       setColor(currentMember.color || '#2563eb')
+      setAvatarUrl(currentMember.avatarUrl || '')
       setNewPassword('')
       setConfirmPassword('')
       setPasswordError(null)
@@ -78,6 +84,19 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   }, [isOpen, currentMember])
 
   if (!isOpen) return null
+
+  const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    try {
+      const dataUrl = await resizeAvatarFile(file)
+      setAvatarUrl(dataUrl)
+    } catch {
+      toast.error('No se pudo procesar la imagen seleccionada.')
+    } finally {
+      e.target.value = ''
+    }
+  }
 
   const handleCopyUserId = async () => {
     if (currentMember.id) {
@@ -100,7 +119,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
       if (user?.id) {
         const res = await updateUserProfile(user.id, {
           fullName: fullName.trim(),
-          color: color
+          color: color,
+          avatarUrl: avatarUrl
         })
         if (!res.success) throw new Error(res.error)
       }
@@ -110,6 +130,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         name: fullName.trim(),
         fullName: fullName.trim(),
         color: color,
+        avatarUrl: avatarUrl || undefined,
         initial: fullName.trim().charAt(0).toUpperCase()
       }
 
@@ -176,86 +197,86 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
       ? 'Lector'
       : 'Miembro'
 
-  const roleBadgeStyle =
-    currentMember.role === 'admin'
-      ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
-      : currentMember.role === 'viewer'
-      ? 'bg-neutral-500/10 text-neutral-600 dark:text-neutral-400 border-neutral-500/20'
-      : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+      onClick={onClose}
+    >
       <div
-        className="w-full max-w-lg bg-white dark:bg-[#1a1b1e] border border-black/[0.08] dark:border-white/[0.1] rounded-3xl shadow-2xl overflow-hidden flex flex-col text-neutral-900 dark:text-neutral-100 font-sans"
+        className="w-full max-w-lg bg-[var(--app-bg-overlay)] border border-[var(--app-border-strong)] rounded-xl shadow-[var(--app-shadow-popover)] overflow-hidden flex flex-col text-[var(--app-text-primary)] font-sans"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-black/[0.06] dark:border-white/[0.08]">
-          <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--app-divider)]">
+          <div className="flex items-center gap-3 min-w-0">
             <div
-              className="w-10 h-10 rounded-2xl flex items-center justify-center text-white font-bold text-base shadow-2xs"
-              style={{ backgroundColor: color }}
+              className="w-9 h-9 rounded-lg flex items-center justify-center text-white font-semibold text-sm shrink-0 overflow-hidden"
+              style={{ backgroundColor: avatarUrl ? 'transparent' : color }}
             >
-              {(fullName || currentMember.name || 'U').charAt(0).toUpperCase()}
+              {avatarUrl ? (
+                <img src={avatarUrl} alt={fullName || currentMember.name} className="w-full h-full object-cover" />
+              ) : (
+                (fullName || currentMember.name || 'U').charAt(0).toUpperCase()
+              )}
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold truncate max-w-[160px] sm:max-w-[200px]">
+                <h2 className="text-sm font-semibold truncate max-w-[160px] sm:max-w-[200px]">
                   {fullName || currentMember.name}
                 </h2>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${roleBadgeStyle}`}>
+                <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-[var(--app-hover)] text-[var(--app-text-secondary)]">
                   {roleLabel}
                 </span>
               </div>
-              <p className="text-[11px] text-neutral-400 truncate max-w-[200px] sm:max-w-[250px]">
+              <p className="text-[11px] text-[var(--app-text-muted)] truncate max-w-[200px] sm:max-w-[250px]">
                 {currentMember.email || 'Sin correo asociado'}
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer"
+            className="p-1.5 rounded-md text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition-colors cursor-pointer"
           >
             <CloseIcon style={{ width: 16, height: 16 }} />
           </button>
         </div>
 
         {/* Navigation Tabs */}
-        <div className="flex border-b border-black/[0.06] dark:border-white/[0.08] px-4 sm:px-6 pt-2 bg-black/[0.01] dark:bg-white/[0.01] overflow-x-auto no-scrollbar">
+        <div className="flex border-b border-[var(--app-divider)] px-5 bg-[var(--app-bg-secondary)] overflow-x-auto no-scrollbar gap-1">
           <button
             type="button"
             onClick={() => setActiveTab('profile')}
-            className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+            className={`py-2.5 px-3 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
               activeTab === 'profile'
-                ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
-                : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
+                ? 'border-[var(--app-accent)] text-[var(--app-text-primary)]'
+                : 'border-transparent text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)]'
             }`}
           >
             <User className="w-3.5 h-3.5" />
-            <span>Perfil &amp; Apariencia</span>
+            <span>Perfil y Apariencia</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('security')}
-            className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+            className={`py-2.5 px-3 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
               activeTab === 'security'
-                ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
-                : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
+                ? 'border-[var(--app-accent)] text-[var(--app-text-primary)]'
+                : 'border-transparent text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)]'
             }`}
           >
             <Shield className="w-3.5 h-3.5" />
-            <span>Seguridad &amp; Sesión</span>
+            <span>Seguridad y Sesión</span>
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-4 sm:p-6 space-y-5 text-xs overflow-y-auto max-h-[75vh] custom-scrollbar">
+        <div className="p-5 space-y-5 text-xs overflow-y-auto max-h-[75vh] custom-scrollbar">
           {activeTab === 'profile' && (
             <form onSubmit={handleSaveProfile} className="space-y-4">
               <div>
-                <label className="block text-[11px] font-semibold text-neutral-600 dark:text-neutral-400 mb-1">
-                  Nombre para mostrar:
+                <label className="block text-[11px] font-medium text-[var(--app-text-secondary)] mb-1.5">
+                  Nombre para mostrar
                 </label>
                 <input
                   type="text"
@@ -263,14 +284,70 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="Tu nombre completo"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.04] text-xs outline-none focus:border-blue-500 transition"
+                  className="w-full px-3 py-2 rounded-lg border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-xs text-[var(--app-text-primary)] outline-none focus:border-[var(--app-accent)] transition-colors"
                 />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-neutral-600 dark:text-neutral-400 mb-1.5 flex items-center gap-1.5">
-                  <Palette className="w-3.5 h-3.5 text-neutral-400" />
-                  Color identificador de avatar y notas:
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-[11px] font-medium text-[var(--app-text-secondary)]">
+                    Avatar
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      ref={avatarInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleAvatarFileChange}
+                      className="hidden"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => avatarInputRef.current?.click()}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-[11px] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] transition-colors cursor-pointer"
+                    >
+                      <Upload className="w-3 h-3" />
+                      <span>Subir imagen</span>
+                    </button>
+                    {avatarUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setAvatarUrl('')}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-[var(--app-border)] hover:bg-[var(--app-hover)] text-[11px] text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] transition-colors cursor-pointer"
+                        title="Usar inicial"
+                      >
+                        <X className="w-3 h-3" />
+                        <span>Quitar</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="grid grid-cols-6 sm:grid-cols-9 gap-2">
+                  {PRESET_AVATARS.map((av) => {
+                    const isSelected = avatarUrl === av.url
+                    return (
+                      <button
+                        key={av.id}
+                        type="button"
+                        onClick={() => setAvatarUrl(av.url)}
+                        title={av.label}
+                        className={`aspect-square rounded-lg overflow-hidden border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'border-[var(--app-accent)] ring-2 ring-[var(--app-accent)] ring-offset-2 ring-offset-[var(--app-bg-overlay)]'
+                            : 'border-[var(--app-border)] hover:border-[var(--app-border-strong)] opacity-85 hover:opacity-100'
+                        }`}
+                      >
+                        <img src={av.url} alt={av.label} className="w-full h-full object-cover" />
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-medium text-[var(--app-text-secondary)] mb-2 flex items-center gap-1.5">
+                  <Palette className="w-3.5 h-3.5 text-[var(--app-text-muted)]" />
+                  Color identificador de avatar y notas
                 </label>
                 <div className="flex items-center gap-2 flex-wrap">
                   {PRESET_COLORS.map((c) => (
@@ -278,8 +355,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                       key={c}
                       type="button"
                       onClick={() => setColor(c)}
-                      className={`w-7 h-7 rounded-xl transition flex items-center justify-center cursor-pointer ${
-                        color === c ? 'scale-110 ring-2 ring-offset-2 ring-blue-500' : 'hover:scale-105'
+                      className={`w-6 h-6 rounded-md transition flex items-center justify-center cursor-pointer ${
+                        color === c ? 'ring-2 ring-offset-2 ring-[var(--app-text-primary)] ring-offset-[var(--app-bg-overlay)]' : 'hover:opacity-90'
                       }`}
                       style={{ backgroundColor: c }}
                     >
@@ -290,24 +367,24 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     type="color"
                     value={color}
                     onChange={(e) => setColor(e.target.value)}
-                    className="w-7 h-7 rounded-xl border-0 cursor-pointer p-0 bg-transparent"
+                    className="w-6 h-6 rounded-md border border-[var(--app-border-strong)] cursor-pointer p-0 bg-transparent"
                     title="Color personalizado"
                   />
                 </div>
               </div>
 
               {/* ID de usuario y Metadatos */}
-              <div className="p-3.5 rounded-2xl bg-black/[0.02] dark:bg-white/[0.02] border border-black/[0.05] dark:border-white/[0.07] space-y-2">
+              <div className="p-3 rounded-lg bg-[var(--app-bg-secondary)] border border-[var(--app-border)] space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] text-neutral-400">ID de Usuario:</span>
+                  <span className="text-[11px] text-[var(--app-text-secondary)]">ID de Usuario</span>
                   <div className="flex items-center gap-1.5">
-                    <code className="font-mono text-[10px] bg-black/5 dark:bg-white/10 px-2 py-0.5 rounded-md">
+                    <code className="font-mono text-[11px] bg-[var(--app-hover)] text-[var(--app-text-primary)] px-1.5 py-0.5 rounded">
                       {currentMember.id ? `${currentMember.id.slice(0, 12)}...` : 'N/A'}
                     </code>
                     <button
                       type="button"
                       onClick={handleCopyUserId}
-                      className="p-1 rounded-lg text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer"
+                      className="p-1 rounded text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition-colors cursor-pointer"
                       title="Copiar ID completo"
                     >
                       {copiedId ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
@@ -315,24 +392,24 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between text-[11px] text-neutral-400">
-                  <span>Rol asignado:</span>
-                  <span className="font-semibold text-neutral-700 dark:text-neutral-300">
+                <div className="flex items-center justify-between text-[11px] text-[var(--app-text-secondary)]">
+                  <span>Rol asignado</span>
+                  <span className="font-medium text-[var(--app-text-primary)]">
                     {roleLabel} ({currentMember.role})
                   </span>
                 </div>
               </div>
 
-              <div className="pt-2">
+              <div className="pt-1 flex justify-end">
                 <button
                   type="submit"
                   disabled={savingProfile}
-                  className="w-full py-2.5 px-4 rounded-xl bg-neutral-900 hover:bg-black dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 font-semibold text-xs shadow-md transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="w-full py-2 px-4 rounded-lg bg-[var(--app-text-primary)] text-[var(--app-bg-primary)] hover:opacity-90 font-medium text-xs transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {savingProfile ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                   ) : (
-                    <span>Guardar Cambios de Perfil</span>
+                    <span>Guardar cambios</span>
                   )}
                 </button>
               </div>
@@ -342,29 +419,29 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           {activeTab === 'security' && (
             <div className="space-y-5">
               {/* Change Password Form */}
-              <form onSubmit={handleChangePassword} className="space-y-3.5">
+              <form onSubmit={handleChangePassword} className="space-y-3">
                 <div className="flex items-center gap-2">
-                  <Key className="w-4 h-4 text-blue-500" />
-                  <h3 className="text-xs font-bold">Cambiar Contraseña</h3>
+                  <Key className="w-3.5 h-3.5 text-[var(--app-text-secondary)]" />
+                  <h3 className="text-xs font-semibold text-[var(--app-text-primary)]">Cambiar contraseña</h3>
                 </div>
 
                 {passwordError && (
-                  <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs flex items-start gap-2">
+                  <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs flex items-start gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
                     <span>{passwordError}</span>
                   </div>
                 )}
 
                 {passwordSuccess && (
-                  <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-xs flex items-start gap-2">
+                  <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-xs flex items-start gap-2">
                     <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
                     <span>{passwordSuccess}</span>
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-[11px] font-medium text-neutral-600 dark:text-neutral-400 mb-1">
-                    Nueva Contraseña (mínimo 8 caracteres):
+                  <label className="block text-[11px] font-medium text-[var(--app-text-secondary)] mb-1">
+                    Nueva contraseña (mínimo 8 caracteres)
                   </label>
                   <input
                     type="password"
@@ -372,13 +449,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.04] text-xs outline-none focus:border-blue-500 transition"
+                    className="w-full px-3 py-2 rounded-lg border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-xs text-[var(--app-text-primary)] outline-none focus:border-[var(--app-accent)] transition-colors [&:-webkit-autofill]:shadow-[inset_0_0_0_1000px_var(--app-bg-primary)] [&:-webkit-autofill]:[-webkit-text-fill-color:var(--app-text-primary)]"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-medium text-neutral-600 dark:text-neutral-400 mb-1">
-                    Confirmar Nueva Contraseña:
+                  <label className="block text-[11px] font-medium text-[var(--app-text-secondary)] mb-1">
+                    Confirmar nueva contraseña
                   </label>
                   <input
                     type="password"
@@ -386,49 +463,49 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.04] text-xs outline-none focus:border-blue-500 transition"
+                    className="w-full px-3 py-2 rounded-lg border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-xs text-[var(--app-text-primary)] outline-none focus:border-[var(--app-accent)] transition-colors [&:-webkit-autofill]:shadow-[inset_0_0_0_1000px_var(--app-bg-primary)] [&:-webkit-autofill]:[-webkit-text-fill-color:var(--app-text-primary)]"
                   />
                 </div>
 
                 <button
                   type="submit"
                   disabled={savingPassword}
-                  className="w-full py-2.5 px-4 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-[#222428] hover:bg-black/5 dark:hover:bg-white/10 text-xs font-semibold transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                  className="w-full py-2 px-4 rounded-lg border border-[var(--app-border-strong)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] text-xs font-medium transition-colors cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {savingPassword ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                   ) : (
-                    <span>Actualizar Contraseña</span>
+                    <span>Actualizar contraseña</span>
                   )}
                 </button>
               </form>
 
               {/* Session Termination / Logout */}
-              <div className="pt-3 border-t border-black/[0.06] dark:border-white/[0.08] space-y-3">
+              <div className="pt-4 border-t border-[var(--app-divider)] space-y-3">
                 <div className="flex items-center gap-2">
-                  <LogOut className="w-4 h-4 text-rose-500" />
-                  <h3 className="text-xs font-bold text-rose-600 dark:text-rose-400">
-                    Cerrar Sesión Activa
+                  <LogOut className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
+                  <h3 className="text-xs font-semibold text-[var(--app-text-primary)]">
+                    Sesión activa
                   </h3>
                 </div>
 
-                <label className="flex items-center gap-2 text-[11px] text-neutral-500 dark:text-neutral-400 cursor-pointer">
+                <label className="flex items-center gap-2 text-[11px] text-[var(--app-text-secondary)] cursor-pointer">
                   <input
                     type="checkbox"
                     checked={clearCacheOnLogout}
                     onChange={(e) => setClearCacheOnLogout(e.target.checked)}
-                    className="rounded text-blue-600"
+                    className="rounded accent-[var(--app-accent)]"
                   />
-                  <span>Limpiar caché local de documentos al salir para mayor privacidad</span>
+                  <span>Limpiar caché local de documentos al salir</span>
                 </label>
 
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="w-full py-2.5 px-4 rounded-xl bg-rose-50 dark:bg-rose-950/30 hover:bg-rose-100 dark:hover:bg-rose-900/40 text-rose-600 dark:text-rose-400 font-semibold text-xs border border-rose-500/20 transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                  className="w-full py-2 px-4 rounded-lg bg-rose-500/8 hover:bg-rose-500/15 text-rose-500 dark:text-rose-400 font-medium text-xs border border-rose-500/20 transition-colors flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <LogOut className="w-4 h-4" />
-                  <span>Cerrar Sesión Segura</span>
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Cerrar sesión</span>
                 </button>
               </div>
             </div>

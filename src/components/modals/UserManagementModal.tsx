@@ -154,46 +154,49 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   })
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+      onClick={onClose}
+    >
       <div
-        className="w-full max-w-2xl bg-white dark:bg-[#1a1b1e] border border-black/[0.08] dark:border-white/[0.1] rounded-3xl shadow-2xl overflow-hidden flex flex-col text-neutral-900 dark:text-neutral-100 font-sans max-h-[85vh]"
+        className="w-full max-w-2xl bg-[var(--app-bg-overlay)] border border-[var(--app-border-strong)] rounded-xl shadow-[var(--app-shadow-popover)] overflow-hidden flex flex-col text-[var(--app-text-primary)] font-sans max-h-[85vh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-black/[0.06] dark:border-white/[0.08] shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold shadow-2xs shrink-0">
-              <Shield className="w-5 h-5" />
+        <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--app-divider)] shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-8 h-8 rounded-md bg-[var(--app-hover)] text-[var(--app-text-secondary)] flex items-center justify-center shrink-0">
+              <Shield className="w-4 h-4" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold">Gestión de Usuarios y Equipo</h2>
-                <span className="hidden sm:inline-block text-[10px] px-2 py-0.5 rounded-full font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
-                  Panel de Administrador
+                <h2 className="text-sm font-semibold truncate">Gestión de Usuarios y Equipo</h2>
+                <span className="hidden sm:inline-block text-[10px] px-1.5 py-0.5 rounded font-medium bg-[var(--app-hover)] text-[var(--app-text-secondary)]">
+                  Administrador
                 </span>
               </div>
-              <p className="text-[11px] text-neutral-400">
+              <p className="text-[11px] text-[var(--app-text-muted)]">
                 {profiles.length} miembros registrados • {invitations.length} invitaciones pendientes
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-xl text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer"
+            className="p-1.5 rounded-md text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition-colors cursor-pointer shrink-0"
           >
             <CloseIcon style={{ width: 16, height: 16 }} />
           </button>
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-black/[0.06] dark:border-white/[0.08] px-4 sm:px-6 pt-2 bg-black/[0.01] dark:bg-white/[0.01] shrink-0 overflow-x-auto no-scrollbar">
+        <div className="flex border-b border-[var(--app-divider)] px-5 bg-[var(--app-bg-secondary)] shrink-0 overflow-x-auto no-scrollbar gap-1">
           <button
             type="button"
             onClick={() => setActiveTab('members')}
-            className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+            className={`py-2.5 px-3 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
               activeTab === 'members'
-                ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
-                : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
+                ? 'border-[var(--app-accent)] text-[var(--app-text-primary)]'
+                : 'border-transparent text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)]'
             }`}
           >
             <Users className="w-3.5 h-3.5" />
@@ -203,10 +206,10 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('invitations')}
-            className={`pb-2.5 px-3 text-xs font-semibold border-b-2 transition flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
+            className={`py-2.5 px-3 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
               activeTab === 'invitations'
-                ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
-                : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
+                ? 'border-[var(--app-accent)] text-[var(--app-text-primary)]'
+                : 'border-transparent text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)]'
             }`}
           >
             <Mail className="w-3.5 h-3.5" />
@@ -215,40 +218,40 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
         </div>
 
         {/* Tab Content */}
-        <div className="p-3.5 sm:p-6 overflow-y-auto flex-1 custom-scrollbar space-y-4 text-xs">
+        <div className="p-5 overflow-y-auto flex-1 custom-scrollbar space-y-4 text-xs">
           {/* Architecture 3 Layers Info Banner */}
-          <div className="p-3 rounded-2xl bg-blue-500/[0.06] border border-blue-500/15 text-neutral-600 dark:text-neutral-300 space-y-1.5 text-[11px] leading-relaxed">
-            <div className="font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-1.5 text-xs">
-              <Shield className="w-3.5 h-3.5" />
+          <div className="p-3 rounded-lg bg-[var(--app-bg-secondary)] border border-[var(--app-border)] text-[var(--app-text-secondary)] space-y-1.5 text-[11px] leading-relaxed">
+            <div className="font-semibold text-[var(--app-text-primary)] flex items-center gap-1.5 text-xs">
+              <Shield className="w-3.5 h-3.5 text-[var(--app-text-secondary)]" />
               <span>Sistema de Permisos de 3 Capas</span>
             </div>
-            <ul className="space-y-1 text-[11px] list-disc list-inside text-neutral-600 dark:text-neutral-400">
-              <li><strong className="text-neutral-800 dark:text-neutral-200">Capa 1 (Admins - Kevin, Maikol, Marcos):</strong> Control total del equipo, editan y gestionan todo el contenido compartido. Privacidad personal preservada (nadie ve notas privadas ajenas).</li>
-              <li><strong className="text-neutral-800 dark:text-neutral-200">Capa 2 (Trabajadores):</strong> Acceso a todos los espacios de trabajo. Leen todas las notas y tableros. <em>Solo pueden editar lo que ellos mismos creen</em>. Sus cosas privadas no las puede ver nadie más.</li>
-              <li><strong className="text-neutral-800 dark:text-neutral-200">Capa 3 (Enlaces Externos):</strong> Invitados web sin registro ni inicio de sesión con lectura exclusiva de la nota compartida.</li>
+            <ul className="space-y-1 text-[11px] list-disc list-inside text-[var(--app-text-muted)]">
+              <li><strong className="text-[var(--app-text-primary)] font-medium">Capa 1 (Admins):</strong> Control total del equipo, editan y gestionan todo el contenido compartido. Privacidad personal preservada (nadie ve notas privadas ajenas).</li>
+              <li><strong className="text-[var(--app-text-primary)] font-medium">Capa 2 (Trabajadores):</strong> Acceso a todos los espacios de trabajo. Leen todas las notas y tableros. <em>Solo pueden editar lo que ellos mismos creen</em>.</li>
+              <li><strong className="text-[var(--app-text-primary)] font-medium">Capa 3 (Enlaces Externos):</strong> Invitados web sin registro con lectura exclusiva de la nota compartida.</li>
             </ul>
           </div>
 
           {/* TAB 1: MEMBERS */}
           {activeTab === 'members' && (
-            <div className="space-y-3.5">
+            <div className="space-y-3">
               {/* Search & Refresh */}
               <div className="flex items-center gap-2">
                 <div className="relative flex-1 flex items-center">
-                  <Search className="w-3.5 h-3.5 absolute left-3 text-neutral-400 pointer-events-none" />
+                  <Search className="w-3.5 h-3.5 absolute left-3 text-[var(--app-text-muted)] pointer-events-none" />
                   <input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Buscar por nombre, correo o rol..."
-                    className="w-full pl-8 pr-3 py-2 rounded-xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.04] text-xs outline-none focus:border-blue-500 transition"
+                    className="w-full pl-8 pr-3 py-1.5 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] placeholder:text-[var(--app-text-muted)] text-xs outline-none focus:border-[var(--app-accent)] transition-colors"
                   />
                 </div>
                 <button
                   type="button"
                   onClick={loadData}
                   disabled={loading}
-                  className="p-2 rounded-xl border border-black/10 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer"
+                  className="p-1.5 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] transition-colors cursor-pointer"
                   title="Actualizar lista"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -258,7 +261,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               {/* Members List */}
               <div className="space-y-2">
                 {filteredProfiles.length === 0 ? (
-                  <div className="p-8 text-center text-neutral-400">
+                  <div className="p-8 text-center text-[var(--app-text-muted)]">
                     No se encontraron miembros registrados.
                   </div>
                 ) : (
@@ -269,48 +272,48 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                     return (
                       <div
                         key={p.id}
-                        className={`p-3 rounded-2xl border transition flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 ${
+                        className={`p-2.5 rounded-lg border transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 ${
                           isSuspended
-                            ? 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-500/20 opacity-75'
-                            : 'bg-black/[0.015] dark:bg-white/[0.025] border-black/[0.05] dark:border-white/[0.07]'
+                            ? 'bg-rose-500/5 border-rose-500/20 opacity-75'
+                            : 'bg-[var(--app-bg-secondary)] border-[var(--app-border)]'
                         }`}
                       >
-                        <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex items-center gap-2.5 min-w-0">
                           <div
-                            className="w-8 h-8 rounded-xl flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-2xs"
-                            style={{ backgroundColor: p.color || '#2563eb' }}
+                            className="w-8 h-8 rounded-md flex items-center justify-center text-white font-semibold text-xs shrink-0"
+                            style={{ backgroundColor: p.color || '#7c3aed' }}
                           >
                             {p.initial || p.fullName.charAt(0).toUpperCase()}
                           </div>
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className="font-semibold truncate max-w-[170px]">
+                              <span className="font-medium truncate max-w-[170px] text-[var(--app-text-primary)]">
                                 {p.fullName || 'Sin nombre'}
                               </span>
                               {isSelf && (
-                                <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold">
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--app-accent-soft)] text-[var(--app-accent)] font-medium">
                                   Tú
                                 </span>
                               )}
                               {isSuspended && (
-                                <span className="text-[9px] px-1.5 py-0.2 rounded-md bg-rose-500/15 text-rose-600 dark:text-rose-400 font-bold">
+                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-500 font-medium">
                                   Suspendido
                                 </span>
                               )}
                             </div>
-                            <div className="text-[11px] text-neutral-400 truncate max-w-[200px]">
+                            <div className="text-[11px] text-[var(--app-text-muted)] truncate max-w-[200px]">
                               {p.email}
                             </div>
                           </div>
                         </div>
 
                         {/* Actions: Role Selector and Status Toggle */}
-                        <div className="flex items-center justify-end gap-2 shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-black/[0.04] dark:border-white/[0.06]">
+                        <div className="flex items-center justify-end gap-2 shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-[var(--app-divider)]">
                           <select
                             value={p.role}
                             disabled={isSelf}
                             onChange={(e) => handleRoleChange(p.id, e.target.value as UserRole, p.status)}
-                            className="text-xs px-2.5 py-1.5 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-[#1a1b1e] outline-none cursor-pointer disabled:opacity-60 flex-1 sm:flex-none"
+                            className="text-xs px-2.5 py-1.5 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] outline-none focus:border-[var(--app-accent)] cursor-pointer disabled:opacity-60 flex-1 sm:flex-none"
                           >
                             <option value="admin">Administrador (Capa 1)</option>
                             <option value="member">Trabajador (Capa 2)</option>
@@ -321,10 +324,10 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                             <button
                               type="button"
                               onClick={() => handleToggleStatus(p.id, p.role, p.status)}
-                              className={`p-1.5 rounded-xl border transition cursor-pointer shrink-0 ${
+                              className={`p-1.5 rounded-md border transition-colors cursor-pointer shrink-0 ${
                                 isSuspended
-                                  ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/20'
-                                  : 'bg-rose-500/10 text-rose-600 border-rose-500/20 hover:bg-rose-500/20'
+                                  ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20'
+                                  : 'border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-[var(--app-text-muted)] hover:text-rose-500 hover:border-rose-500/25 hover:bg-rose-500/10'
                               }`}
                               title={isSuspended ? 'Reactivar usuario' : 'Suspender usuario'}
                             >
@@ -346,28 +349,28 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
               {/* Form to Invite / Whitelist Email */}
               <form
                 onSubmit={handleCreateInvitation}
-                className="p-4 rounded-2xl border border-black/[0.06] dark:border-white/[0.08] bg-black/[0.02] dark:bg-white/[0.02] space-y-3"
+                className="p-3.5 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)] space-y-2.5"
               >
-                <div className="font-semibold text-xs text-neutral-800 dark:text-neutral-200">
+                <div className="font-medium text-xs text-[var(--app-text-primary)]">
                   Pre-autorizar nuevo correo en el equipo
                 </div>
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                   <div className="relative flex-1">
-                    <Mail className="w-3.5 h-3.5 absolute left-3 top-3 text-neutral-400 pointer-events-none" />
+                    <Mail className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[var(--app-text-muted)] pointer-events-none" />
                     <input
                       type="email"
                       required
                       value={inviteEmail}
                       onChange={(e) => setInviteEmail(e.target.value)}
                       placeholder="nuevo-miembro@equipo.com"
-                      className="w-full pl-8 pr-3 py-2 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-[#1a1b1e] text-xs outline-none focus:border-blue-500 transition"
+                      className="w-full pl-8 pr-3 py-1.5 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] placeholder:text-[var(--app-text-muted)] text-xs outline-none focus:border-[var(--app-accent)] transition-colors"
                     />
                   </div>
 
                   <select
                     value={inviteRole}
                     onChange={(e) => setInviteRole(e.target.value as UserRole)}
-                    className="text-xs px-3 py-2 rounded-xl border border-black/10 dark:border-white/10 bg-white dark:bg-[#1a1b1e] outline-none cursor-pointer"
+                    className="text-xs px-2.5 py-1.5 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] outline-none focus:border-[var(--app-accent)] cursor-pointer"
                   >
                     <option value="member">Trabajador (Capa 2)</option>
                     <option value="admin">Administrador (Capa 1)</option>
@@ -377,7 +380,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                   <button
                     type="submit"
                     disabled={inviting}
-                    className="py-2 px-3.5 rounded-xl bg-neutral-900 hover:bg-black dark:bg-white dark:hover:bg-neutral-100 text-white dark:text-neutral-900 font-semibold text-xs shadow-sm transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    className="py-1.5 px-3 rounded-md bg-[var(--app-text-primary)] text-[var(--app-bg-primary)] hover:opacity-90 font-medium text-xs transition-opacity flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
                   >
                     {inviting ? (
                       <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -389,31 +392,31 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                     )}
                   </button>
                 </div>
-                <p className="text-[11px] text-neutral-400">
+                <p className="text-[11px] text-[var(--app-text-muted)]">
                   Cuando este correo se registre en Seven Note, se le asignará automáticamente el rol predefinido.
                 </p>
               </form>
 
               {/* Pending Invitations List */}
               <div className="space-y-2">
-                <div className="font-semibold text-xs text-neutral-600 dark:text-neutral-400">
-                  Correos autorizados pendientes de registro:
+                <div className="font-medium text-xs text-[var(--app-text-secondary)]">
+                  Correos autorizados pendientes de registro
                 </div>
 
                 {invitations.length === 0 ? (
-                  <div className="p-6 text-center text-neutral-400 border border-dashed border-black/10 dark:border-white/10 rounded-2xl">
+                  <div className="p-6 text-center text-[var(--app-text-muted)] border border-dashed border-[var(--app-border-strong)] rounded-lg">
                     No hay invitaciones pendientes.
                   </div>
                 ) : (
                   invitations.map((inv) => (
                     <div
                       key={inv.id}
-                      className="p-3 rounded-2xl border border-black/[0.05] dark:border-white/[0.07] bg-black/[0.015] dark:bg-white/[0.025] flex items-center justify-between gap-3"
+                      className="p-2.5 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)] flex items-center justify-between gap-3"
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <Mail className="w-4 h-4 text-blue-500 shrink-0" />
-                        <span className="font-mono text-xs truncate">{inv.email}</span>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 font-medium capitalize">
+                        <Mail className="w-3.5 h-3.5 text-[var(--app-text-secondary)] shrink-0" />
+                        <span className="font-mono text-xs truncate text-[var(--app-text-primary)]">{inv.email}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--app-hover)] text-[var(--app-text-secondary)] font-medium capitalize">
                           {inv.role}
                         </span>
                       </div>
@@ -421,7 +424,7 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                       <button
                         type="button"
                         onClick={() => handleDeleteInvitation(inv.id)}
-                        className="p-1.5 rounded-xl text-neutral-400 hover:text-rose-600 hover:bg-rose-500/10 transition cursor-pointer"
+                        className="p-1.5 rounded-md text-[var(--app-text-muted)] hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
                         title="Revocar autorización"
                       >
                         <Trash2 className="w-3.5 h-3.5" />

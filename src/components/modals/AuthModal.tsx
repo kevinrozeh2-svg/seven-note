@@ -390,20 +390,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     </>
                   )}
                 </button>
-
-                <div className="text-center pt-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setErrorMsg(null)
-                      setSuccessMsg(null)
-                      setMode('register')
-                    }}
-                    className="text-[11px] text-neutral-500 dark:text-neutral-400 hover:text-blue-600 dark:hover:text-blue-400 cursor-pointer"
-                  >
-                    ¿No tienes cuenta? <span className="font-semibold underline">Crear una cuenta</span>
-                  </button>
-                </div>
               </div>
             </form>
           )}

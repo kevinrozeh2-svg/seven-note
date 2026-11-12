@@ -191,11 +191,11 @@ export function ObsidianRibbon({
       </div>
 
       {/* Bottom tools: Sync status, Theme, User Avatar, Trash, Settings */}
-      <div className="flex flex-col items-center gap-1.5 w-full px-1">
-        {/* Sync Status Icon Button */}
+      <div className="flex flex-col items-center gap-1 w-full px-1">
+        {/* Sync Status Icon */}
         {syncStatus && (
           <div
-            className="w-8 h-8 rounded-md flex items-center justify-center cursor-default transition"
+            className="w-8 h-8 rounded-md flex items-center justify-center text-[var(--app-text-muted)] cursor-default transition"
             title={
               syncStatus.state === 'syncing'
                 ? 'Sincronizando notas...'
@@ -207,13 +207,11 @@ export function ObsidianRibbon({
             }
           >
             {syncStatus.state === 'syncing' ? (
-              <ArrowsClockwise size={16} weight="duotone" className="text-blue-400 animate-spin" />
-            ) : syncStatus.state === 'error' ? (
-              <CloudSlash size={16} weight="duotone" className="text-rose-400" />
-            ) : syncStatus.state === 'offline' ? (
-              <CloudSlash size={16} weight="duotone" className="text-amber-400" />
+              <ArrowsClockwise size={17} className="animate-spin" />
+            ) : syncStatus.state === 'error' || syncStatus.state === 'offline' ? (
+              <CloudSlash size={17} />
             ) : (
-              <CloudCheck size={16} weight="duotone" className="text-emerald-400" />
+              <CloudCheck size={17} />
             )}
           </div>
         )}
@@ -225,13 +223,13 @@ export function ObsidianRibbon({
             className="w-8 h-8 rounded-md flex items-center justify-center text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5 transition cursor-pointer"
             title={darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
           >
-            {darkMode ? <Sun size={17} weight="duotone" /> : <Moon size={17} weight="duotone" />}
+            {darkMode ? <Sun size={17} /> : <Moon size={17} />}
           </button>
         )}
 
         {/* Team Member / User Profile Switcher */}
         {currentMember && (
-          <div className="py-0.5">
+          <div className="w-8 h-8 flex items-center justify-center">
             <TeamMemberSwitcher
               variant="circular"
               popoverDirection="up"
@@ -266,7 +264,7 @@ export function ObsidianRibbon({
           className="w-8 h-8 rounded-md flex items-center justify-center text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5 transition cursor-pointer"
           title="Ajustes y opciones"
         >
-          <Gear size={18} />
+          <Gear size={17} />
         </button>
       </div>
     </nav>

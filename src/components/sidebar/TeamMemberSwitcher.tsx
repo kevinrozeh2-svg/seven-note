@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown, Shield, LogOut, Key, User, Users } from 'lucide-react'
+import { ChevronDown, Shield, LogOut, Key, User, Users, Lock } from 'lucide-react'
 import { type TeamMember, isUserAdmin } from '../../lib/teamAuth'
 
 interface TeamMemberSwitcherProps {
@@ -85,8 +85,7 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
           ref={buttonRef}
           type="button"
           onClick={handleToggle}
-          className="relative w-7 h-7 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-xs hover:scale-105 active:scale-95 transition-all cursor-pointer ring-1 ring-black/10 dark:ring-white/15 overflow-hidden"
-          style={{ backgroundColor: currentMember.color || '#2563eb' }}
+          className="relative w-7 h-7 rounded-full flex items-center justify-center font-semibold text-xs transition-colors cursor-pointer bg-black/[0.06] dark:bg-white/[0.08] hover:bg-black/[0.1] dark:hover:bg-white/[0.14] text-[var(--app-text-primary)] border border-black/[0.08] dark:border-white/[0.12] overflow-hidden"
           title={`Mi Cuenta: ${displayName} (${roleLabel})`}
         >
           {effectiveAvatar ? (
@@ -94,16 +93,10 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
               src={effectiveAvatar}
               alt={displayName}
               onError={() => setImgError(true)}
-              className="w-full h-full rounded-full object-cover"
+              className="w-full h-full object-cover"
             />
           ) : (
             <span>{displayName.charAt(0).toUpperCase()}</span>
-          )}
-          {authUser && (
-            <span
-              className="w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#161619] absolute -bottom-0.5 -right-0.5"
-              title="Sesión activa"
-            />
           )}
         </button>
       ) : (
@@ -160,7 +153,7 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
             onClick={() => setIsOpen(false)}
           />
           <div
-            className="fixed z-[99999] bg-white dark:bg-[#1e1f23] border border-black/[0.08] dark:border-white/[0.1] rounded-2xl shadow-2xl p-2.5 animate-in fade-in zoom-in-95 duration-100 flex flex-col gap-1.5 sm:gap-2 font-sans text-xs max-h-[min(420px,80vh)] overflow-y-auto custom-scrollbar w-64"
+            className="fixed z-[99999] bg-[var(--app-bg-overlay)] border border-[var(--app-border-strong)] rounded-xl shadow-[var(--app-shadow-popover)] p-1.5 animate-in fade-in zoom-in-95 duration-100 flex flex-col gap-1 font-sans text-xs max-h-[min(420px,80vh)] overflow-y-auto custom-scrollbar w-60 text-[var(--app-text-primary)]"
             style={
               variant === 'circular'
                 ? {
@@ -174,23 +167,10 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
             }
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between px-1">
-              <span className="text-[9px] sm:text-[10px] uppercase font-bold text-neutral-400 tracking-wider">
-                Mi Cuenta
-              </span>
-              <span className={`text-[9px] sm:text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                authUser
-                  ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                  : 'bg-black/5 dark:bg-white/10 text-neutral-500'
-              }`}>
-                {roleLabel}
-              </span>
-            </div>
-
-            {/* Tarjeta de la cuenta conectada */}
-            <div className="p-2 sm:p-2.5 rounded-lg sm:rounded-xl bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.04] dark:border-white/[0.06] flex items-center gap-2 sm:gap-2.5">
+            {/* Account Header */}
+            <div className="px-2 py-2 flex items-center gap-2.5 border-b border-[var(--app-divider)]">
               <div
-                className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center text-white font-bold text-xs sm:text-sm shrink-0 shadow-2xs overflow-hidden"
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-semibold text-xs shrink-0 overflow-hidden"
                 style={{ backgroundColor: currentMember.color || '#2563eb' }}
               >
                 {effectiveAvatar ? (
@@ -205,11 +185,16 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
                 )}
               </div>
               <div className="min-w-0 flex-1 leading-tight">
-                <div className="font-semibold text-neutral-900 dark:text-neutral-100 text-xs truncate">
-                  {displayName}
+                <div className="flex items-center justify-between gap-1.5">
+                  <span className="font-semibold text-[var(--app-text-primary)] text-xs truncate">
+                    {displayName}
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-[var(--app-hover)] text-[var(--app-text-secondary)] shrink-0">
+                    {roleLabel}
+                  </span>
                 </div>
                 {displayEmail && (
-                  <div className="text-[10px] sm:text-[11px] text-neutral-400 truncate">
+                  <div className="text-[11px] text-[var(--app-text-muted)] truncate mt-0.5">
                     {displayEmail}
                   </div>
                 )}
@@ -217,7 +202,7 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
             </div>
 
             {/* Acciones de Cuenta */}
-            <div className="space-y-0.5 sm:space-y-1 pt-0.5 sm:pt-1">
+            <div className="space-y-0.5 py-0.5">
               {authUser ? (
                 <>
                   <button
@@ -226,10 +211,10 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
                       setIsOpen(false)
                       onOpenProfileModal?.()
                     }}
-                    className="w-full py-1 sm:py-1.5 px-2 sm:px-2.5 rounded-lg sm:rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-300 text-[11px] sm:text-xs font-medium transition flex items-center gap-2 cursor-pointer"
+                    className="w-full py-1.5 px-2 rounded-md hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] text-xs font-medium transition-colors flex items-center gap-2.5 cursor-pointer"
                   >
-                    <User className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                    <span>Mi Perfil &amp; Seguridad</span>
+                    <User className="w-3.5 h-3.5 text-[var(--app-text-secondary)] shrink-0" />
+                    <span>Mi Perfil y Seguridad</span>
                   </button>
 
                   {isAdmin && (
@@ -239,9 +224,9 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
                         setIsOpen(false)
                         onOpenUserManagementModal?.()
                       }}
-                      className="w-full py-1.5 px-2.5 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-neutral-700 dark:text-neutral-300 text-xs font-medium transition flex items-center gap-2 cursor-pointer"
+                      className="w-full py-1.5 px-2 rounded-md hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] text-xs font-medium transition-colors flex items-center gap-2.5 cursor-pointer"
                     >
-                      <Users className="w-3.5 h-3.5 text-purple-500" />
+                      <Users className="w-3.5 h-3.5 text-[var(--app-text-secondary)] shrink-0" />
                       <span>Gestión de Usuarios</span>
                     </button>
                   )}
@@ -252,9 +237,9 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
                       setIsOpen(false)
                       onSignOut?.()
                     }}
-                    className="w-full py-1.5 px-2.5 rounded-xl hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400 text-xs font-medium transition flex items-center gap-2 cursor-pointer"
+                    className="w-full py-1.5 px-2 rounded-md hover:bg-rose-500/10 text-rose-500 dark:text-rose-400 text-xs font-medium transition-colors flex items-center gap-2.5 cursor-pointer"
                   >
-                    <LogOut className="w-3.5 h-3.5" />
+                    <LogOut className="w-3.5 h-3.5 shrink-0" />
                     <span>Cerrar Sesión</span>
                   </button>
                 </>
@@ -265,7 +250,7 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
                     setIsOpen(false)
                     onOpenAuthModal?.()
                   }}
-                  className="w-full py-2 px-3 rounded-xl bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-blue-600 dark:text-blue-400 text-xs font-semibold border border-blue-500/20 transition flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                  className="w-full py-1.5 px-2.5 rounded-md bg-[var(--app-text-primary)] text-[var(--app-bg-primary)] hover:opacity-90 text-xs font-medium transition flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Key className="w-3.5 h-3.5" />
                   <span>Iniciar Sesión / Registrarse</span>
@@ -273,8 +258,9 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
               )}
             </div>
 
-            <div className="px-1 text-[10px] text-neutral-400 dark:text-neutral-500 leading-normal border-t border-black/[0.04] dark:border-white/[0.06] pt-1.5">
-              🔒 Privacidad activa: Tus notas privadas solo son visibles para ti.
+            <div className="px-2 py-1.5 text-[11px] text-[var(--app-text-muted)] leading-snug border-t border-[var(--app-divider)] flex items-start gap-1.5">
+              <Lock className="w-3 h-3 shrink-0 mt-0.5 text-[var(--app-text-muted)]" />
+              <span>Tus notas privadas solo son visibles para ti.</span>
             </div>
           </div>
         </>,
