@@ -1249,7 +1249,7 @@ function MainApp() {
   }
 
   return (
-    <div className="relative flex h-screen w-screen overflow-hidden bg-[var(--obsidian-sidebar-bg,#181818)] text-[var(--app-text-primary)] font-sans select-none">
+    <div className="relative flex h-dvh w-full overflow-hidden bg-[var(--obsidian-sidebar-bg,#181818)] text-[var(--app-text-primary)] font-sans select-none">
       {/* 0. Obsidian Left Ribbon (Compact 40px Tool strip) */}
       {!isPresentationMode && !focusMode && (
         <ObsidianRibbon
@@ -1293,10 +1293,10 @@ function MainApp() {
         <>
           {/* Mobile backdrop overlay */}
           <div
-            className="fixed inset-0 bg-black/50 backdrop-blur-xs z-40 md:hidden animate-in fade-in duration-150"
+            className="fixed inset-y-0 left-11 right-0 bg-black/50 backdrop-blur-xs z-40 md:hidden animate-in fade-in duration-150"
             onClick={() => setSidebarOpen(false)}
           />
-          <div className="fixed inset-y-0 left-10 md:left-0 z-50 md:relative md:z-auto h-full flex shrink-0">
+          <div className="fixed inset-y-0 left-11 md:left-0 z-50 md:relative md:z-auto h-full max-w-[calc(100vw-44px)] md:max-w-none flex shrink-0">
             <Sidebar
               spaces={visibleSpaces}
               currentSpaceId={currentSpaceId}

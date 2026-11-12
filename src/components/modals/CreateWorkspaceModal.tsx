@@ -68,11 +68,11 @@ export function CreateWorkspaceModal({ isOpen, onClose, onCreate, isAdmin = fals
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-2xl border shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90vh] overflow-y-auto"
+        className="w-full max-w-md rounded-2xl border shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90dvh] overflow-y-auto"
         style={{
           backgroundColor: 'var(--affine-background-primary-color)',
           borderColor: 'var(--affine-border-color)'
@@ -81,7 +81,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onCreate, isAdmin = fals
       >
         {/* Header */}
         <div
-          className="px-5 py-4 border-b flex items-center justify-between"
+          className="px-4 sm:px-5 py-3.5 sm:py-4 border-b flex items-center justify-between gap-2"
           style={{ borderColor: 'var(--affine-border-color)' }}
         >
           <div className="flex items-center gap-2.5">
@@ -109,7 +109,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onCreate, isAdmin = fals
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-5 space-y-4 text-xs">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-4 text-xs">
           {/* Workspace Name */}
           <div>
             <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--affine-text-secondary-color)' }}>
@@ -167,13 +167,13 @@ export function CreateWorkspaceModal({ isOpen, onClose, onCreate, isAdmin = fals
               </div>
             </div>
 
-            <div className="grid grid-cols-8 gap-1.5 p-2 rounded-xl border" style={{ borderColor: 'var(--affine-border-color)', backgroundColor: 'var(--affine-background-secondary-color)' }}>
+            <div className="grid grid-cols-6 sm:grid-cols-8 gap-1.5 p-2 rounded-xl border place-items-center" style={{ borderColor: 'var(--affine-border-color)', backgroundColor: 'var(--affine-background-secondary-color)' }}>
               {PRESET_EMOJIS.map((emoji) => (
                 <button
                   key={emoji}
                   type="button"
                   onClick={() => setSelectedIcon(emoji)}
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center transition cursor-pointer ${
+                  className={`w-9 h-9 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center transition cursor-pointer ${
                     selectedIcon === emoji
                       ? 'scale-110 shadow-sm ring-2 ring-offset-1'
                       : 'hover:bg-[var(--affine-hover-color)] opacity-85 hover:opacity-100'
@@ -216,7 +216,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onCreate, isAdmin = fals
             <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--affine-text-secondary-color)' }}>
               Visibilidad del espacio
             </label>
-            <div className={`grid gap-2 ${isAdmin ? 'grid-cols-3' : 'grid-cols-2'}`}>
+            <div className={`grid gap-2 ${isAdmin ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
               <button
                 type="button"
                 onClick={() => {
@@ -289,7 +289,7 @@ export function CreateWorkspaceModal({ isOpen, onClose, onCreate, isAdmin = fals
             <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--affine-text-secondary-color)' }}>
               Color del espacio
             </label>
-            <div className="flex items-center gap-2 p-2 rounded-xl border" style={{ borderColor: 'var(--affine-border-color)', backgroundColor: 'var(--affine-background-secondary-color)' }}>
+            <div className="flex items-center flex-wrap gap-2.5 sm:gap-2 p-2.5 sm:p-2 rounded-xl border" style={{ borderColor: 'var(--affine-border-color)', backgroundColor: 'var(--affine-background-secondary-color)' }}>
               {PRESET_COLORS.map((c) => (
                 <button
                   key={c.value}

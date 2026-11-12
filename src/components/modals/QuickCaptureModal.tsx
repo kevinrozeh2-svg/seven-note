@@ -100,11 +100,11 @@ export const QuickCaptureModal: React.FC<QuickCaptureModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/40 backdrop-blur-xs animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-2xl bg-[var(--app-bg-overlay,#ffffff)] dark:bg-[#202020] border border-[var(--app-border,#e5e5e5)] dark:border-[#333333] shadow-2xl p-4 sm:p-5 text-[var(--app-text-primary,#111111)] dark:text-[#f0f0f0] animate-in zoom-in-95 duration-150"
+        className="w-full max-w-lg rounded-2xl bg-[var(--app-bg-overlay,#ffffff)] dark:bg-[#202020] border border-[var(--app-border,#e5e5e5)] dark:border-[#333333] shadow-2xl p-4 sm:p-5 text-[var(--app-text-primary,#111111)] dark:text-[#f0f0f0] animate-in zoom-in-95 duration-150 max-h-[90dvh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleKeyDown}
       >

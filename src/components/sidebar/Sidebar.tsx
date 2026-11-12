@@ -2253,7 +2253,7 @@ export function Sidebar({
               className="fixed inset-0 z-40"
               onClick={() => setIsSortMenuOpen(false)}
             />
-            <div className="absolute left-2 right-2 top-full mt-1 bg-white dark:bg-[#1e1e22] border border-black/10 dark:border-white/10 rounded-xl shadow-2xl p-1.5 z-50 text-xs backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 max-h-[460px] overflow-y-auto custom-scrollbar">
+            <div className="absolute left-2 right-2 top-full mt-1 bg-white dark:bg-[#1e1e22] border border-black/10 dark:border-white/10 rounded-xl shadow-2xl p-1.5 z-50 text-xs backdrop-blur-md animate-in fade-in zoom-in-95 duration-100 max-h-[65dvh] sm:max-h-[460px] overflow-y-auto custom-scrollbar">
               <div className="px-2 py-1 text-[10px] font-semibold tracking-wider uppercase text-neutral-400 dark:text-neutral-500">
                 Ordenar notas y carpetas
               </div>

@@ -1280,7 +1280,7 @@ export function DocEditor({
     <div className="flex flex-col h-full bg-[var(--app-bg-primary)] overflow-y-auto text-[var(--app-text-primary)] select-text relative">
       {/* Top Floating Formatting Toolbar (Floating Buttons Without Solid Background Bar) */}
       <div className="sticky top-2 z-20 pointer-events-none w-full px-3 sm:px-6 flex items-center justify-between gap-2 select-none shrink-0 mb-1">
-          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 overflow-x-auto no-scrollbar pointer-events-auto max-w-[calc(100vw-180px)] sm:max-w-none py-1">
+          <div className="flex items-center gap-1 sm:gap-1.5 flex-1 min-w-0 overflow-x-auto no-scrollbar pointer-events-auto py-1">
             {/* Quick insert block button */}
             <button
               onClick={() => {
@@ -1316,7 +1316,7 @@ export function DocEditor({
             </div>
 
             {/* Formato de texto: Negrita, Cursiva, Subrayado, Código */}
-            <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-white/80 dark:bg-[#1a1b1e]/80 backdrop-blur-md border border-black/[0.08] dark:border-white/[0.12] shadow-sm">
+            <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-white/80 dark:bg-[#1a1b1e]/80 backdrop-blur-md border border-black/[0.08] dark:border-white/[0.12] shadow-sm shrink-0">
               <button
                 onClick={() => editor.chain().focus().toggleBold().run()}
                 className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${
@@ -2109,14 +2109,14 @@ export function DocEditor({
                     value={tempBannerTitle}
                     onChange={(e) => setTempBannerTitle(e.target.value)}
                     placeholder="PROJECTS &"
-                    className="font-serif italic tracking-[0.25em] text-xl sm:text-2xl text-center uppercase bg-black/5 dark:bg-white/10 px-3 py-1 rounded-lg border border-neutral-300 dark:border-neutral-600 outline-none w-72 sm:w-96 text-neutral-900 dark:text-white"
+                    className="font-serif italic tracking-[0.25em] text-lg sm:text-2xl text-center uppercase bg-black/5 dark:bg-white/10 px-3 py-1 rounded-lg border border-neutral-300 dark:border-neutral-600 outline-none w-full max-w-72 sm:max-w-96 text-neutral-900 dark:text-white"
                   />
                   <input
                     type="text"
                     value={tempBannerSubtitle}
                     onChange={(e) => setTempBannerSubtitle(e.target.value)}
                     placeholder="SUB-PROJECTS"
-                    className="font-serif italic tracking-[0.25em] text-xl sm:text-2xl text-center uppercase bg-black/5 dark:bg-white/10 px-3 py-1 rounded-lg border border-neutral-300 dark:border-neutral-600 outline-none w-72 sm:w-96 text-neutral-900 dark:text-white"
+                    className="font-serif italic tracking-[0.25em] text-lg sm:text-2xl text-center uppercase bg-black/5 dark:bg-white/10 px-3 py-1 rounded-lg border border-neutral-300 dark:border-neutral-600 outline-none w-full max-w-72 sm:max-w-96 text-neutral-900 dark:text-white"
                   />
                   <div className="flex items-center gap-2 mt-1">
                     <button
@@ -2148,11 +2148,11 @@ export function DocEditor({
                   onClick={() => {
                     if (!readOnly) setIsEditingBannerText(true)
                   }}
-                  className="flex flex-col items-center justify-center cursor-pointer hover:opacity-85 transition select-text"
+                  className="flex flex-col items-center justify-center cursor-pointer hover:opacity-85 transition select-text px-4 max-w-full"
                   title="Clic para editar el texto del banner"
                 >
                   <span
-                    className="font-serif italic tracking-[0.25em] text-2xl sm:text-3xl md:text-4xl uppercase font-light leading-snug drop-shadow-2xs text-center"
+                    className="font-serif italic tracking-[0.18em] sm:tracking-[0.25em] text-xl sm:text-3xl md:text-4xl uppercase font-light leading-snug drop-shadow-2xs text-center break-words max-w-full"
                     style={{
                       color:
                         workspace.coverColor === '#18181b'
@@ -2163,7 +2163,7 @@ export function DocEditor({
                     {workspace.coverBannerTitle || 'PROJECTS &'}
                   </span>
                   <span
-                    className="font-serif italic tracking-[0.25em] text-2xl sm:text-3xl md:text-4xl uppercase font-light leading-snug drop-shadow-2xs text-center mt-0.5"
+                    className="font-serif italic tracking-[0.18em] sm:tracking-[0.25em] text-xl sm:text-3xl md:text-4xl uppercase font-light leading-snug drop-shadow-2xs text-center mt-0.5 break-words max-w-full"
                     style={{
                       color:
                         workspace.coverColor === '#18181b'
@@ -2190,29 +2190,31 @@ export function DocEditor({
             />
           )}
 
-          {/* Banner Hover Floating Controls */}
+          {/* Banner Hover Floating Controls (always accessible on touch/mobile) */}
           {!readOnly && (
-            <div className="absolute right-4 bottom-3 flex items-center gap-1.5 opacity-0 group-hover/cover:opacity-100 transition-opacity bg-black/60 dark:bg-neutral-900/80 backdrop-blur-md px-2.5 py-1 rounded-xl text-white shadow-lg z-20">
+            <div className="absolute right-2.5 sm:right-4 bottom-2.5 sm:bottom-3 flex items-center gap-1 sm:gap-1.5 opacity-95 sm:opacity-0 sm:group-hover/cover:opacity-100 transition-opacity bg-black/65 dark:bg-neutral-900/85 backdrop-blur-md px-2 sm:px-2.5 py-1 rounded-xl text-white shadow-lg z-20">
               <button
                 onClick={() => setIsCoverPickerOpen(true)}
-                className="flex items-center gap-1 px-2.5 py-1 text-xs hover:bg-white/20 rounded-lg transition font-medium cursor-pointer"
+                className="flex items-center gap-1 px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs hover:bg-white/20 rounded-lg transition font-medium cursor-pointer"
               >
                 <Palette className="w-3.5 h-3.5" />
-                <span>Cambiar portada</span>
+                <span className="hidden xs:inline sm:inline">Cambiar portada</span>
+                <span className="xs:hidden sm:hidden">Portada</span>
               </button>
               {workspace.coverType === 'bannerText' && (
                 <button
                   onClick={() => setIsEditingBannerText(true)}
-                  className="flex items-center gap-1 px-2.5 py-1 text-xs hover:bg-white/20 rounded-lg transition font-medium cursor-pointer"
+                  className="flex items-center gap-1 px-2 sm:px-2.5 py-1 text-[11px] sm:text-xs hover:bg-white/20 rounded-lg transition font-medium cursor-pointer"
                 >
                   <Edit3 className="w-3.5 h-3.5" />
-                  <span>Editar texto</span>
+                  <span className="hidden sm:inline">Editar texto</span>
                 </button>
               )}
               <button
                 onClick={handleRemoveCover}
                 className="flex items-center gap-1 px-2 py-1 text-xs hover:bg-rose-500/30 text-rose-300 rounded-lg transition cursor-pointer"
                 title="Quitar portada"
+                aria-label="Quitar portada"
               >
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
@@ -2246,7 +2248,7 @@ export function DocEditor({
 
               {/* Action Buttons alongside icon */}
               {!readOnly && (
-                <div className="flex items-center gap-1 pb-1 opacity-0 group-hover/icon:opacity-100 transition-opacity">
+                <div className="flex flex-wrap items-center gap-1 pb-1 opacity-90 sm:opacity-0 sm:group-hover/icon:opacity-100 transition-opacity">
                   <button
                     onClick={() => setIsIconModalOpen(true)}
                     className="text-[11px] text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] px-2 py-1 rounded-md hover:bg-[var(--affine-hover-color)] transition cursor-pointer"
@@ -2272,8 +2274,8 @@ export function DocEditor({
               )}
             </div>
           ) : (
-            /* Ghost action buttons when neither cover nor icon is present - Subtle hover only like Obsidian */
-            <div className="flex items-center gap-2 mb-2 opacity-0 hover:opacity-100 transition-opacity">
+            /* Ghost action buttons when neither cover nor icon is present - visible on touch, hover on desktop */
+            <div className="flex flex-wrap items-center gap-2 mb-2 opacity-75 sm:opacity-0 sm:hover:opacity-100 transition-opacity">
               <button
                 onClick={() => setIsIconModalOpen(true)}
                 className="flex items-center gap-1.5 text-xs text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] py-0.5 px-2 rounded hover:bg-white/5 transition font-normal cursor-pointer"

@@ -148,11 +148,11 @@ export function ManageSpacesModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/60 backdrop-blur-xs animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl rounded-2xl border shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[88vh]"
+        className="w-full max-w-2xl rounded-2xl border shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 flex flex-col max-h-[90dvh]"
         style={{
           backgroundColor: 'var(--affine-background-primary-color)',
           borderColor: 'var(--affine-border-color)'
@@ -161,34 +161,36 @@ export function ManageSpacesModal({
       >
         {/* Header */}
         <div
-          className="flex items-center justify-between px-5 py-4 border-b shrink-0"
+          className="flex items-start sm:items-center justify-between gap-2 px-3.5 sm:px-5 py-3 sm:py-4 border-b shrink-0"
           style={{ borderColor: 'var(--affine-border-color)' }}
         >
-          <div>
-            <h2 className="text-base font-semibold" style={{ color: 'var(--affine-text-primary-color)' }}>
+          <div className="min-w-0">
+            <h2 className="text-sm sm:text-base font-semibold" style={{ color: 'var(--affine-text-primary-color)' }}>
               Administrar espacios de trabajo
             </h2>
-            <p className="text-xs mt-0.5" style={{ color: 'var(--affine-text-secondary-color)' }}>
+            <p className="text-[11px] sm:text-xs mt-0.5" style={{ color: 'var(--affine-text-secondary-color)' }}>
               Ordena tus espacios, personaliza su aspecto y controla quién puede verlos.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {spaces.length > 1 && (
               <button
                 type="button"
                 onClick={handleSortAlphabetical}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-black/[0.08] dark:border-white/[0.1] hover:bg-black/[0.04] dark:hover:bg-white/[0.06] transition cursor-pointer"
+                className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-medium border border-black/[0.08] dark:border-white/[0.1] hover:bg-black/[0.04] dark:hover:bg-white/[0.06] transition cursor-pointer"
                 style={{ color: 'var(--affine-text-secondary-color)' }}
                 title="Ordenar espacios alfabéticamente (A-Z)"
+                aria-label="Ordenar espacios alfabéticamente (A-Z)"
               >
                 <ArrowDownAZ className="w-3.5 h-3.5" />
-                <span>Ordenar A–Z</span>
+                <span className="hidden sm:inline">Ordenar A–Z</span>
               </button>
             )}
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-neutral-400 hover:text-neutral-200 cursor-pointer"
+              className="p-2 sm:p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 transition text-neutral-400 hover:text-neutral-200 cursor-pointer"
+              aria-label="Cerrar modal"
             >
               <CloseIcon className="w-5 h-5" />
             </button>
@@ -196,7 +198,7 @@ export function ManageSpacesModal({
         </div>
 
         {/* Space List */}
-        <div className="p-4 overflow-y-auto space-y-2.5 flex-1">
+        <div className="p-3 sm:p-4 overflow-y-auto space-y-2.5 flex-1">
           {spaces.map((sp, idx) => {
             const isEditing = editingId === sp.id
             const canManage = canUserManageSpace(sp, currentMember, authUserId)
@@ -237,9 +239,9 @@ export function ManageSpacesModal({
                 } ${draggedId === sp.id ? 'opacity-50' : ''}`}
               >
                 {/* Row Summary */}
-                <div className="flex items-center gap-2.5 px-3 py-2.5">
+                <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 sm:gap-2.5 px-2.5 sm:px-3 py-2.5">
                   <div
-                    className="cursor-grab active:cursor-grabbing text-neutral-400 hover:text-neutral-200 p-0.5 shrink-0"
+                    className="hidden sm:block cursor-grab active:cursor-grabbing text-neutral-400 hover:text-neutral-200 p-0.5 shrink-0"
                     title="Arrastra para reordenar"
                   >
                     <GripVertical className="w-4 h-4" />
@@ -303,13 +305,14 @@ export function ManageSpacesModal({
                   </div>
 
                   {/* Row Actions: Reorder + Edit + Delete */}
-                  <div className="flex items-center gap-1 shrink-0">
+                  <div className="flex items-center gap-1 shrink-0 ml-auto">
                     <button
                       type="button"
                       disabled={idx === 0}
                       onClick={() => moveSpace(idx, -1)}
-                      className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-neutral-400 hover:text-neutral-200 disabled:opacity-25 disabled:pointer-events-none transition cursor-pointer"
+                      className="p-2 sm:p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-neutral-400 hover:text-neutral-200 disabled:opacity-25 disabled:pointer-events-none transition cursor-pointer"
                       title="Subir"
+                      aria-label="Subir espacio"
                     >
                       <ArrowUp className="w-3.5 h-3.5" />
                     </button>
@@ -317,8 +320,9 @@ export function ManageSpacesModal({
                       type="button"
                       disabled={idx === spaces.length - 1}
                       onClick={() => moveSpace(idx, 1)}
-                      className="p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-neutral-400 hover:text-neutral-200 disabled:opacity-25 disabled:pointer-events-none transition cursor-pointer"
+                      className="p-2 sm:p-1.5 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-neutral-400 hover:text-neutral-200 disabled:opacity-25 disabled:pointer-events-none transition cursor-pointer"
                       title="Bajar"
+                      aria-label="Bajar espacio"
                     >
                       <ArrowDown className="w-3.5 h-3.5" />
                     </button>
@@ -327,12 +331,13 @@ export function ManageSpacesModal({
                       <button
                         type="button"
                         onClick={() => (isEditing ? cancelEditing() : startEditing(sp))}
-                        className={`p-1.5 rounded-lg transition cursor-pointer ${
+                        className={`p-2 sm:p-1.5 rounded-lg transition cursor-pointer ${
                           isEditing
                             ? 'bg-blue-500/15 text-blue-400'
                             : 'hover:bg-black/5 dark:hover:bg-white/10 text-neutral-400 hover:text-neutral-200'
                         }`}
                         title="Editar espacio"
+                        aria-label="Editar espacio"
                       >
                         <Pencil className="w-3.5 h-3.5" />
                       </button>
@@ -342,8 +347,9 @@ export function ManageSpacesModal({
                       <button
                         type="button"
                         onClick={() => onDeleteSpace(sp.id)}
-                        className="p-1.5 rounded-lg hover:bg-rose-500/15 text-neutral-400 hover:text-rose-400 transition cursor-pointer"
+                        className="p-2 sm:p-1.5 rounded-lg hover:bg-rose-500/15 text-neutral-400 hover:text-rose-400 transition cursor-pointer"
                         title="Eliminar espacio"
+                        aria-label="Eliminar espacio"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -433,7 +439,7 @@ export function ManageSpacesModal({
                       <span className="block text-xs font-medium mb-1.5" style={{ color: 'var(--affine-text-secondary-color)' }}>
                         ¿Quién puede ver este espacio?
                       </span>
-                      <div className={`grid gap-2 ${isAdmin ? 'grid-cols-3' : 'grid-cols-2'}`}>
+                      <div className={`grid gap-2 ${isAdmin ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'}`}>
                         <button
                           type="button"
                           onClick={() => {
@@ -531,14 +537,14 @@ export function ManageSpacesModal({
 
         {/* Footer */}
         <div
-          className="px-5 py-3.5 border-t flex items-center justify-between shrink-0"
+          className="px-3.5 sm:px-5 py-3 sm:py-3.5 border-t flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2 shrink-0"
           style={{
             borderColor: 'var(--affine-border-color)',
             backgroundColor: 'var(--affine-background-secondary-color)'
           }}
         >
-          <span className="text-[11px]" style={{ color: 'var(--affine-text-secondary-color)' }}>
-            Tip: arrastra las filas o usa las flechas para cambiar el orden.
+          <span className="text-[11px] text-center sm:text-left" style={{ color: 'var(--affine-text-secondary-color)' }}>
+            Tip: usa las flechas o arrastra las filas para cambiar el orden.
           </span>
           <div className="flex items-center gap-2">
             <button
@@ -547,7 +553,7 @@ export function ManageSpacesModal({
                 onClose()
                 onOpenCreateSpace()
               }}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white transition cursor-pointer"
+              className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 sm:py-1.5 rounded-lg text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white transition cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Nuevo espacio</span>

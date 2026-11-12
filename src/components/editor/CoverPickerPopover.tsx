@@ -219,15 +219,15 @@ export function CoverPickerPopover({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/50 backdrop-blur-xs animate-in fade-in"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-2xl bg-white dark:bg-[#18181b] border border-neutral-200 dark:border-neutral-800 shadow-2xl overflow-hidden flex flex-col text-neutral-800 dark:text-neutral-100 max-h-[85vh]"
+        className="w-full max-w-lg rounded-2xl bg-white dark:bg-[#18181b] border border-neutral-200 dark:border-neutral-800 shadow-2xl overflow-hidden flex flex-col text-neutral-800 dark:text-neutral-100 max-h-[90dvh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-neutral-200 dark:border-neutral-800">
+        <div className="flex items-center justify-between px-3.5 sm:px-5 py-3 sm:py-3.5 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
           <div className="flex items-center gap-2 font-semibold text-sm">
             <Sparkles className="w-4 h-4 text-neutral-500" />
             <span>Portada de la Nota</span>
@@ -256,21 +256,21 @@ export function CoverPickerPopover({
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center gap-1 px-4 pt-3 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/40">
+        <div className="flex items-center gap-1 px-3 sm:px-4 pt-2.5 sm:pt-3 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-900/40 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden shrink-0">
           <button
             onClick={() => setActiveTab('typography')}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-lg border-b-2 transition ${
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-xs font-semibold rounded-t-lg border-b-2 transition whitespace-nowrap shrink-0 cursor-pointer ${
               activeTab === 'typography'
                 ? 'border-neutral-900 dark:border-white text-neutral-900 dark:text-white bg-white dark:bg-[#18181b]'
                 : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
             }`}
           >
             <Type className="w-3.5 h-3.5" />
-            <span>Tipográfico (Estilo Imagen)</span>
+            <span>Tipográfico</span>
           </button>
           <button
             onClick={() => setActiveTab('gradient')}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-lg border-b-2 transition ${
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-xs font-semibold rounded-t-lg border-b-2 transition whitespace-nowrap shrink-0 cursor-pointer ${
               activeTab === 'gradient'
                 ? 'border-neutral-900 dark:border-white text-neutral-900 dark:text-white bg-white dark:bg-[#18181b]'
                 : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
@@ -281,7 +281,7 @@ export function CoverPickerPopover({
           </button>
           <button
             onClick={() => setActiveTab('image')}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-t-lg border-b-2 transition ${
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-2 text-xs font-semibold rounded-t-lg border-b-2 transition whitespace-nowrap shrink-0 cursor-pointer ${
               activeTab === 'image'
                 ? 'border-neutral-900 dark:border-white text-neutral-900 dark:text-white bg-white dark:bg-[#18181b]'
                 : 'border-transparent text-neutral-500 hover:text-neutral-800 dark:hover:text-neutral-200'
@@ -293,7 +293,7 @@ export function CoverPickerPopover({
         </div>
 
         {/* Tab Content */}
-        <div className="p-5 overflow-y-auto space-y-4">
+        <div className="p-3.5 sm:p-5 overflow-y-auto space-y-4">
           {/* TAB 1: TYPOGRAPHY (MATCHES USER IMAGE) */}
           {activeTab === 'typography' && (
             <div className="space-y-4">

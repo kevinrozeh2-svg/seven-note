@@ -132,6 +132,7 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = ({
   // Canvas and transform state
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const pinchDistRef = useRef<number | null>(null)
   const [transform, setTransform] = useState<{ x: number; y: number; k: number }>({
     x: 0,
     y: 0,
@@ -820,6 +821,115 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = ({
     setTransform({ x: newX, y: newY, k: newK })
   }
 
+  // Touch Handlers for mobile pan, pinch-zoom, node drag & tap
+  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length === 2) {
+      isPanningRef.current = false
+      draggedNodeRef.current = null
+      const dx = e.touches[0].clientX - e.touches[1].clientX
+      const dy = e.touches[0].clientY - e.touches[1].clientY
+      pinchDistRef.current = Math.hypot(dx, dy)
+      return
+    }
+    if (e.touches.length !== 1) return
+    const touch = e.touches[0]
+    const { x: worldX, y: worldY } = screenToWorld(touch.clientX, touch.clientY)
+    const tappedNode = getNodeAtPoint(worldX, worldY)
+
+    if (tappedNode) {
+      draggedNodeRef.current = tappedNode
+      dragStartPosRef.current = { x: touch.clientX, y: touch.clientY }
+      tappedNode.fx = tappedNode.x
+      tappedNode.fy = tappedNode.y
+      if (simulationRef.current) {
+        simulationRef.current.alphaTarget(0.3).restart()
+      }
+    } else {
+      isPanningRef.current = true
+      panStartRef.current = {
+        x: touch.clientX - transformRef.current.x,
+        y: touch.clientY - transformRef.current.y
+      }
+    }
+  }
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length === 2 && pinchDistRef.current !== null) {
+      const canvas = canvasRef.current
+      if (!canvas) return
+      const dx = e.touches[0].clientX - e.touches[1].clientX
+      const dy = e.touches[0].clientY - e.touches[1].clientY
+      const dist = Math.hypot(dx, dy)
+      if (dist <= 0) return
+
+      const rect = canvas.getBoundingClientRect()
+      const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2 - rect.left
+      const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2 - rect.top
+
+      const scale = dist / pinchDistRef.current
+      pinchDistRef.current = dist
+
+      const { x, y, k } = transformRef.current
+      const newK = Math.min(4.0, Math.max(0.15, k * scale))
+      const newX = midX - (midX - x) * (newK / k)
+      const newY = midY - (midY - y) * (newK / k)
+      setTransform({ x: newX, y: newY, k: newK })
+      return
+    }
+    if (e.touches.length !== 1) return
+    const touch = e.touches[0]
+
+    if (draggedNodeRef.current) {
+      const { x: worldX, y: worldY } = screenToWorld(touch.clientX, touch.clientY)
+      draggedNodeRef.current.fx = worldX
+      draggedNodeRef.current.fy = worldY
+      drawCanvas()
+    } else if (isPanningRef.current) {
+      const newX = touch.clientX - panStartRef.current.x
+      const newY = touch.clientY - panStartRef.current.y
+      setTransform((prev) => ({ ...prev, x: newX, y: newY }))
+    }
+  }
+
+  const handleTouchEnd = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length < 2) {
+      pinchDistRef.current = null
+    }
+    if (draggedNodeRef.current && e.changedTouches.length > 0) {
+      const touch = e.changedTouches[0]
+      const startPos = dragStartPosRef.current
+      const distMoved = startPos
+        ? Math.hypot(touch.clientX - startPos.x, touch.clientY - startPos.y)
+        : 0
+      const node = draggedNodeRef.current
+
+      if (distMoved < 8) {
+        if (node.isUnresolved) {
+          if (onCreateWorkspace) {
+            onCreateWorkspace(node.title)
+            toast.success(`Nota creada: "${node.title}"`)
+          } else {
+            toast.info(`Enlace no resuelto a "${node.title}"`)
+          }
+        } else if (node.workspaceId) {
+          onSelectWorkspace(node.workspaceId)
+        }
+      }
+
+      node.fx = null
+      node.fy = null
+      draggedNodeRef.current = null
+      dragStartPosRef.current = null
+
+      if (simulationRef.current) {
+        simulationRef.current.alphaTarget(0)
+      }
+    }
+    if (e.touches.length === 0) {
+      isPanningRef.current = false
+    }
+  }
+
   // Export as PNG
   const handleExportPNG = () => {
     const canvas = canvasRef.current
@@ -951,15 +1061,18 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = ({
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onWheel={handleWheel}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
           onDoubleClick={fitView}
-          className={`w-full h-full block ${
+          className={`w-full h-full block touch-none ${
             hoveredNodeId ? 'cursor-pointer' : isPanningRef.current ? 'cursor-grabbing' : 'cursor-default'
           }`}
         />
 
         {/* 3. Obsidian "Ajustes del gráfico" (Floating Settings Drawer) */}
         {isSettingsOpen && (
-          <div className="absolute top-3 right-3 w-72 sm:w-80 bg-[#1e1e1e]/95 backdrop-blur-md border border-[#333] rounded-xl shadow-2xl z-30 flex flex-col text-xs text-neutral-200 animate-in fade-in slide-in-from-top-2 duration-150">
+          <div className="absolute top-3 left-3 right-3 sm:left-auto sm:right-3 sm:w-80 max-h-[calc(100%-24px)] overflow-y-auto bg-[#1e1e1e]/95 backdrop-blur-md border border-[#333] rounded-xl shadow-2xl z-30 flex flex-col text-xs text-neutral-200 animate-in fade-in slide-in-from-top-2 duration-150">
             {/* Header */}
             <div className="px-3 py-2.5 border-b border-[#2e2e2e] flex items-center justify-between">
               <span className="font-semibold text-neutral-100 flex items-center gap-2">

@@ -196,11 +196,11 @@ Ayuda al usuario a estructurar sus pensamientos, notas, listas y tableros visual
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/40 backdrop-blur-xs animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-xl rounded-2xl bg-[var(--app-bg-overlay,#ffffff)] dark:bg-[#202020] border border-[var(--app-border,#e5e5e5)] dark:border-[#333333] shadow-2xl p-5 text-[var(--app-text-primary,#111111)] dark:text-[#f0f0f0] animate-in zoom-in-95 duration-150 flex flex-col max-h-[85vh]"
+        className="w-full max-w-xl rounded-2xl bg-[var(--app-bg-overlay,#ffffff)] dark:bg-[#202020] border border-[var(--app-border,#e5e5e5)] dark:border-[#333333] shadow-2xl p-3.5 sm:p-5 text-[var(--app-text-primary,#111111)] dark:text-[#f0f0f0] animate-in zoom-in-95 duration-150 flex flex-col max-h-[90dvh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -236,9 +236,9 @@ Ayuda al usuario a estructurar sus pensamientos, notas, listas y tableros visual
         {/* API Key Drawer */}
         {showKeyInput && (
           <div className="mt-3 p-3 rounded-xl bg-neutral-100 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700/60 space-y-2 text-xs">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-semibold text-neutral-700 dark:text-neutral-300">Proveedor de IA:</span>
-              <div className="flex gap-1">
+              <div className="flex flex-wrap gap-1">
                 <button
                   type="button"
                   onClick={() => setProvider('gemini')}
@@ -362,7 +362,7 @@ Ayuda al usuario a estructurar sus pensamientos, notas, listas y tableros visual
 
         {/* Footer Actions */}
         {result && (
-          <div className="mt-3 flex items-center justify-between pt-3 border-t border-black/[0.06] dark:border-white/[0.08]">
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-black/[0.06] dark:border-white/[0.08]">
             <button
               onClick={handleCopy}
               className="px-3 py-1.5 rounded-xl hover:bg-black/5 dark:hover:bg-white/10 text-neutral-600 dark:text-neutral-300 text-xs font-medium flex items-center gap-1.5 transition cursor-pointer"

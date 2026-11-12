@@ -78,7 +78,7 @@ export function ObsidianRibbon({
   return (
     <nav
       aria-label="Barra de acciones rápidas (Ribbon)"
-      className="w-11 h-full bg-[#141414] dark:bg-[#141414] light:bg-[#f3f3f3] border-r border-white/[0.06] dark:border-white/[0.06] flex flex-col items-center justify-between py-2 shrink-0 select-none z-30"
+      className="w-11 h-full bg-[#141414] dark:bg-[#141414] light:bg-[#f3f3f3] border-r border-white/[0.06] dark:border-white/[0.06] flex flex-col items-center justify-between gap-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden shrink-0 select-none z-30"
       style={{
         backgroundColor: 'var(--obsidian-ribbon-bg, #141414)'
       }}
