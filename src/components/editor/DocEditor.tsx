@@ -1361,7 +1361,8 @@ export function DocEditor({
   return (
     <div className="flex flex-col h-full bg-[var(--app-bg-primary)] overflow-y-auto text-[var(--app-text-primary)] select-text relative">
       {/* Top Floating Formatting Toolbar (Floating Buttons Without Solid Background Bar) */}
-      <div className="sticky top-2 z-20 pointer-events-none w-full px-3 sm:px-6 flex items-center justify-between gap-2 select-none shrink-0 mb-1">
+      {!readOnly && (
+        <div className="sticky top-2 z-20 pointer-events-none w-full px-3 sm:px-6 flex items-center justify-between gap-2 select-none shrink-0 mb-1">
           <div className="flex items-center gap-1 sm:gap-1.5 flex-1 min-w-0 overflow-x-auto no-scrollbar pointer-events-auto py-1">
             {/* Quick insert block button */}
             <button
@@ -1592,9 +1593,10 @@ export function DocEditor({
             </div>
           </div>
         </div>
+      )}
 
       {/* Interactive Sticky Table Toolbar when inside a table */}
-      {editor.isActive('table') && (
+      {!readOnly && editor.isActive('table') && (
         <div className="sticky top-11 z-20 flex items-center justify-center py-2 px-3 bg-white/70 dark:bg-[#121214]/70 backdrop-blur-md">
           <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/90 dark:bg-[#1a1b1e]/90 border border-black/[0.08] dark:border-white/[0.1] text-xs text-[var(--app-text-primary)] shadow-lg flex-wrap">
             <span className="text-[10px] uppercase font-bold text-blue-500 px-1">
@@ -2355,7 +2357,7 @@ export function DocEditor({
                 </div>
               )}
             </div>
-          ) : (
+          ) : !readOnly ? (
             /* Ghost action buttons when neither cover nor icon is present - visible on touch, hover on desktop */
             <div className="flex flex-wrap items-center gap-2 mb-2 opacity-75 sm:opacity-0 sm:hover:opacity-100 transition-opacity">
               <button
@@ -2373,7 +2375,7 @@ export function DocEditor({
                 <span>Añadir portada</span>
               </button>
             </div>
-          )}
+          ) : null}
         </div>
 
         {/* Big Title - Obsidian Style */}
@@ -2536,7 +2538,8 @@ export function DocEditor({
         </div>
 
         {/* Action Pills Row ("Iniciar", "Plantilla", "Sin bordes", Notion Tools) */}
-        <div className="flex items-center gap-2 mb-6 flex-wrap select-none text-xs">
+        {!readOnly && (
+          <div className="flex items-center gap-2 mb-6 flex-wrap select-none text-xs">
           <span className="text-[var(--affine-text-secondary-color)] font-medium mr-1">Iniciar</span>
 
           {/* Notion Tools Dropdown Pill (Exact UI from Notion screenshot) */}
@@ -2601,7 +2604,8 @@ export function DocEditor({
             <span>Sin bordes</span>
             <EdgelessIcon className="w-3.5 h-3.5 text-indigo-500 group-hover:scale-110 transition-transform" />
           </button>
-        </div>
+          </div>
+        )}
 
         {/* Interactive Notion Database Component Widget */}
         {databaseData?.enabled && (
