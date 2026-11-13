@@ -7,14 +7,10 @@ import { areNodePropsEqual, NodeHandles, SourceNodeBadge, getCardCustomStyle, is
 import { AppleEmoji, renderWithAppleEmoji, isSingleEmoji } from '../../ui/AppleEmoji'
 import { FontPickerPopover } from './FontPickerPopover'
 import {
-  hasHtmlFormatting,
+  hasStoredHtmlMarkup,
   cleanPastedHtml,
-  cleanPastedText,
   sanitizeHtmlContent,
-  isPdfHtml,
-  isPdfOrStructuredText,
-  isLegalContractOrPdfText,
-  cleanPdfContent
+  prepareClipboardPaste
 } from '../../../lib/pasteUtils'
 
 interface ColorScheme {
@@ -146,7 +142,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
   useEffect(() => {
     if (isEditingContent && contentEditableRef.current) {
       const el = contentEditableRef.current
-      if (hasHtmlFormatting(content) || data.hasHtmlHighlight) {
+      if (hasStoredHtmlMarkup(content) || data.hasHtmlHighlight) {
         el.innerHTML = sanitizeHtmlContent(content)
       } else if (content) {
         el.innerText = content
@@ -185,58 +181,65 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
       const html = e.clipboardData?.getData('text/html')
       const text = e.clipboardData?.getData('text/plain')
 
-      let clean = ''
-      const isPdf = Boolean(
-        (html && isPdfHtml(html)) ||
-        (text && (isPdfOrStructuredText(text) || isLegalContractOrPdfText(text)))
-      )
+      const prepared = prepareClipboardPaste(html || '', text || '')
+      const richHtml =
+        prepared.kind === 'internal'
+          ? cleanPastedHtml(prepared.html)
+          : prepared.kind === 'pdf' || prepared.kind === 'rich-html'
+            ? prepared.html
+            : ''
 
-      if (isPdf) {
-        clean = cleanPdfContent(html || '', text || '')
-      } else if (html && hasHtmlFormatting(html)) {
-        clean = cleanPastedHtml(html || '')
-      }
+      const escapeToHtmlLines = (raw: string) =>
+        raw
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\r?\n/g, '<br/>')
 
-      if (clean && clean.trim()) {
+      const existingIsHtml = hasStoredHtmlMarkup(content) || Boolean(data.hasHtmlHighlight)
+
+      if (richHtml && richHtml.trim()) {
         e.preventDefault()
-        const updated = content && content.trim() ? `${content}<br/>${clean}` : clean
+        const baseHtml = content && content.trim() ? (existingIsHtml ? content : escapeToHtmlLines(content)) : ''
+        const updated = baseHtml ? `${baseHtml}<br/>${richHtml}` : richHtml
         setContent(updated)
         save({ content: updated, hasHtmlHighlight: true })
-        toast.success(isPdf ? 'Texto de PDF pegado con formato' : 'Formato de texto conservado en la nota')
-      } else if (text && text.trim()) {
+        toast.success(prepared.kind === 'pdf' ? 'Texto de PDF pegado con formato' : 'Formato de texto conservado en la nota')
+      } else if (prepared.text && prepared.text.trim()) {
         e.preventDefault()
-        const cleanedText = cleanPastedText(text)
-        const updated = content && content.trim() ? `${content}\n${cleanedText}` : cleanedText
-        setContent(updated)
-        save({ content: updated })
+        if (existingIsHtml && content && content.trim()) {
+          const updated = `${content}<br/>${escapeToHtmlLines(prepared.text)}`
+          setContent(updated)
+          save({ content: updated, hasHtmlHighlight: true })
+        } else {
+          const updated = content && content.trim() ? `${content}\n${prepared.text}` : prepared.text
+          setContent(updated)
+          save({ content: updated })
+        }
       }
     }
 
     window.addEventListener('paste', handleCardPaste)
     return () => window.removeEventListener('paste', handleCardPaste)
-  }, [selected, isEditingContent, isEditingTitle, content])
+  }, [selected, isEditingContent, isEditingTitle, content, data.hasHtmlHighlight])
 
   const handleContentPaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
     e.preventDefault()
     const html = e.clipboardData.getData('text/html')
     const text = e.clipboardData.getData('text/plain')
 
-    let clean = ''
-    const isPdf = Boolean(
-      (html && isPdfHtml(html)) ||
-      (text && (isPdfOrStructuredText(text) || isLegalContractOrPdfText(text)))
-    )
+    const prepared = prepareClipboardPaste(html || '', text || '')
+    const richHtml =
+      prepared.kind === 'internal'
+        ? cleanPastedHtml(prepared.html)
+        : prepared.kind === 'pdf' || prepared.kind === 'rich-html'
+          ? prepared.html
+          : ''
 
-    if (isPdf) {
-      clean = cleanPdfContent(html || '', text || '')
-    } else if (html && hasHtmlFormatting(html)) {
-      clean = cleanPastedHtml(html || '')
-    }
-
-    if (clean && clean.trim()) {
-      document.execCommand('insertHTML', false, clean)
-    } else if (text) {
-      document.execCommand('insertText', false, cleanPastedText(text))
+    if (richHtml && richHtml.trim()) {
+      document.execCommand('insertHTML', false, richHtml)
+    } else if (prepared.text) {
+      document.execCommand('insertText', false, prepared.text)
     }
 
     if (contentEditableRef.current) {
@@ -244,7 +247,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
       setContent(htmlVal)
       save({
         content: htmlVal,
-        hasHtmlHighlight: hasHtmlFormatting(htmlVal) || Boolean(isPdf)
+        hasHtmlHighlight: hasStoredHtmlMarkup(htmlVal) || prepared.kind === 'pdf'
       })
     }
   }
@@ -256,7 +259,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
       setContent(htmlVal)
       save({
         content: htmlVal,
-        hasHtmlHighlight: hasHtmlFormatting(htmlVal)
+        hasHtmlHighlight: hasStoredHtmlMarkup(htmlVal)
       })
     }
   }
@@ -269,7 +272,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
         setContent(htmlVal)
         save({
           content: htmlVal,
-          hasHtmlHighlight: hasHtmlFormatting(htmlVal)
+          hasHtmlHighlight: hasStoredHtmlMarkup(htmlVal)
         })
       }
     }
@@ -305,7 +308,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
   }
 
   // Standalone Emoji Sticker (pure emoji without card background)
-  const isEmojiSticker = !title && isSingleEmoji(content.trim()) && !isQuote && !alertBox && !isBanner && !linkUrl && !hasHtmlFormatting(content)
+  const isEmojiSticker = !title && isSingleEmoji(content.trim()) && !isQuote && !alertBox && !isBanner && !linkUrl && !hasStoredHtmlMarkup(content)
 
   if (isEmojiSticker) {
     return (
@@ -557,16 +560,16 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
               onKeyDown={handleContentKeyDown}
               onPointerDown={(e) => e.stopPropagation()}
               data-placeholder="Escribe tu cita aquí..."
-              className="nodrag nowheel w-full bg-transparent border-none outline-none text-[13px] leading-relaxed italic text-zinc-800 dark:text-zinc-200 empty:before:content-[attr(data-placeholder)] empty:before:text-zinc-400 dark:empty:before:text-zinc-500 [&_a]:text-blue-500 [&_a]:underline"
+              className="seven-rich-content nodrag nowheel w-full bg-transparent border-none outline-none text-[13px] leading-relaxed italic text-zinc-800 dark:text-zinc-200 empty:before:content-[attr(data-placeholder)] empty:before:text-zinc-400 dark:empty:before:text-zinc-500 [&_a]:text-blue-500 [&_a]:underline"
               style={{ minHeight: '36px' }}
             />
           ) : (
             <div
               onDoubleClick={() => !data?.readOnly && setIsEditingContent(true)}
-              className="nodrag cursor-text select-text leading-relaxed text-[13px] italic text-zinc-800 dark:text-zinc-200 min-h-[36px] [&_a]:text-blue-500 [&_a]:underline"
+              className="seven-rich-content nodrag cursor-text select-text leading-relaxed text-[13px] italic text-zinc-800 dark:text-zinc-200 min-h-[36px] [&_a]:text-blue-500 [&_a]:underline"
             >
               {content ? (
-                hasHtmlFormatting(content) || data.hasHtmlHighlight ? (
+                hasStoredHtmlMarkup(content) || data.hasHtmlHighlight ? (
                   <div dangerouslySetInnerHTML={{ __html: sanitizeHtmlContent(content) }} />
                 ) : (
                   <div className="whitespace-pre-wrap">{renderWithAppleEmoji(content)}</div>
@@ -598,7 +601,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
               onKeyDown={handleContentKeyDown}
               onPointerDown={(e) => e.stopPropagation()}
               data-placeholder="Escribe tu nota aquí..."
-              className={`nodrag nowheel w-full bg-transparent border-none outline-none text-[14px] leading-relaxed font-normal ${
+              className={`seven-rich-content nodrag nowheel w-full bg-transparent border-none outline-none text-[14px] leading-relaxed font-normal ${
                 isDarkFill ? 'text-white' : 'text-zinc-800 dark:text-zinc-200'
               } empty:before:content-[attr(data-placeholder)] empty:before:text-zinc-400 dark:empty:before:text-zinc-500 [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through [&_del]:line-through [&_a]:text-blue-500 [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:border-l-2 [&_blockquote]:pl-2 [&_blockquote]:italic [&_code]:bg-black/10 dark:[&_code]:bg-white/10 [&_code]:px-1 [&_code]:rounded`}
               style={{ minHeight: '36px' }}
@@ -606,16 +609,16 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
           ) : (
             <div
               onDoubleClick={() => !data?.readOnly && setIsEditingContent(true)}
-              className={`nodrag cursor-text select-text leading-relaxed text-[14px] font-normal ${
+              className={`seven-rich-content nodrag cursor-text select-text leading-relaxed text-[14px] font-normal ${
                 isDarkFill ? 'text-zinc-100' : 'text-zinc-800 dark:text-zinc-200'
               } min-h-[36px] [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through [&_del]:line-through [&_a]:text-blue-500 [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:border-l-2 [&_blockquote]:pl-2 [&_blockquote]:italic [&_code]:bg-black/10 dark:[&_code]:bg-white/10 [&_code]:px-1 [&_code]:rounded`}
             >
               {content ? (
-                isSingleEmoji(content.trim()) && !title && !hasHtmlFormatting(content) ? (
+                isSingleEmoji(content.trim()) && !title && !hasStoredHtmlMarkup(content) ? (
                   <div className="py-2 flex items-center justify-center">
                     <AppleEmoji emoji={content.trim()} size={56} className="drop-shadow-md hover:scale-110 transition-transform duration-150 cursor-pointer" />
                   </div>
-                ) : hasHtmlFormatting(content) || data.hasHtmlHighlight ? (
+                ) : hasStoredHtmlMarkup(content) || data.hasHtmlHighlight ? (
                   <div dangerouslySetInnerHTML={{ __html: sanitizeHtmlContent(content) }} />
                 ) : (
                   <div className="whitespace-pre-wrap">{renderWithAppleEmoji(content)}</div>

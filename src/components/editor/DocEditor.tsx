@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useEditor, EditorContent } from '@tiptap/react'
-import { Mark, mergeAttributes } from '@tiptap/core'
+import { Extension, Mark, mergeAttributes } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
@@ -15,11 +15,13 @@ import { DOMParser as PMDOMParser } from '@tiptap/pm/model'
 import {
   cleanPastedHtml,
   cleanPastedText,
-  isPdfHtml,
-  isPdfOrStructuredText,
-  isLegalContractOrPdfText,
-  cleanPdfContent
+  prepareClipboardPaste
 } from '../../lib/pasteUtils'
+import {
+  isNeutralTextColor,
+  isNeutralBackgroundColor,
+  parseCssLengthPx
+} from '../../lib/pasteCssUtils'
 import { Table } from '@tiptap/extension-table'
 import { TableRow } from '@tiptap/extension-table-row'
 import { TableHeader } from '@tiptap/extension-table-header'
@@ -134,7 +136,7 @@ interface DocEditorProps {
   readOnly?: boolean
 }
 
-// Custom Marks to preserve styles (color, highlight, sub, sup, font styles) during paste & editing
+// Custom Marks to preserve styles (color, highlight, sub, sup, indentation) during paste & editing
 const TextStyle = Mark.create({
   name: 'textStyle',
   addOptions() {
@@ -143,15 +145,7 @@ const TextStyle = Mark.create({
     }
   },
   parseHTML() {
-    return [
-      {
-        tag: 'span',
-        getAttrs: (element) => {
-          const el = element as HTMLElement
-          return el.hasAttribute('style') ? {} : false
-        }
-      }
-    ]
+    return []
   },
   renderHTML({ HTMLAttributes }) {
     return ['span', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes), 0]
@@ -169,7 +163,10 @@ const ColorMark = Mark.create({
     return {
       color: {
         default: null,
-        parseHTML: (element) => element.style.color || element.getAttribute('color') || null,
+        parseHTML: (element) => {
+          const color = element.style.color || element.getAttribute('color')
+          return color && !isNeutralTextColor(color) ? color : null
+        },
         renderHTML: (attributes) => {
           if (!attributes.color) return {}
           return {
@@ -185,14 +182,14 @@ const ColorMark = Mark.create({
         tag: 'span[style*=color]',
         getAttrs: (element) => {
           const color = (element as HTMLElement).style.color
-          return color ? { color } : false
+          return color && !isNeutralTextColor(color) ? { color } : false
         }
       },
       {
         tag: 'font[color]',
         getAttrs: (element) => {
           const color = (element as HTMLElement).getAttribute('color')
-          return color ? { color } : false
+          return color && !isNeutralTextColor(color) ? { color } : false
         }
       }
     ]
@@ -215,7 +212,7 @@ const HighlightMark = Mark.create({
         default: null,
         parseHTML: (element) => {
           const bg = element.style.backgroundColor || element.style.background
-          return bg || null
+          return bg && !isNeutralBackgroundColor(bg) ? bg : null
         },
         renderHTML: (attributes) => {
           if (!attributes.color) return {}
@@ -231,21 +228,62 @@ const HighlightMark = Mark.create({
       {
         tag: 'mark',
         getAttrs: (element) => {
-          const bg = (element as HTMLElement).style.backgroundColor || (element as HTMLElement).style.background
-          return { color: bg || null }
+          const rawBg = (element as HTMLElement).style.backgroundColor || (element as HTMLElement).style.background
+          const bg = rawBg && !isNeutralBackgroundColor(rawBg) ? rawBg : null
+          return { color: bg }
         }
       },
       {
         tag: 'span[style*=background]',
         getAttrs: (element) => {
-          const bg = (element as HTMLElement).style.backgroundColor || (element as HTMLElement).style.background
-          return bg ? { color: bg } : false
+          const rawBg = (element as HTMLElement).style.backgroundColor || (element as HTMLElement).style.background
+          return rawBg && !isNeutralBackgroundColor(rawBg) ? { color: rawBg } : false
         }
       }
     ]
   },
   renderHTML({ HTMLAttributes }) {
     return ['mark', mergeAttributes(this.options.HTMLAttributes, HTMLAttributes), 0]
+  }
+})
+
+const BlockLayout = Extension.create({
+  name: 'blockLayout',
+  addGlobalAttributes() {
+    return [
+      {
+        types: ['paragraph', 'heading', 'blockquote'],
+        attributes: {
+          indent: {
+            default: 0,
+            parseHTML: (element) => {
+              const ml = parseCssLengthPx(element.style.marginLeft)
+              const pl = parseCssLengthPx(element.style.paddingLeft)
+              const total = (ml ?? 0) + (pl ?? 0)
+              if (total < 14) return 0
+              return Math.min(6, Math.max(1, Math.round(total / 24)))
+            },
+            renderHTML: (attributes) => {
+              const level = Number(attributes.indent || 0)
+              if (!level || level <= 0) return {}
+              const capped = Math.min(6, Math.max(1, Math.round(level)))
+              return { style: `margin-left: ${capped * 1.5}rem` }
+            }
+          },
+          textIndent: {
+            default: false,
+            parseHTML: (element) => {
+              const ti = parseCssLengthPx(element.style.textIndent)
+              return ti !== null && ti >= 10
+            },
+            renderHTML: (attributes) => {
+              if (!attributes.textIndent) return {}
+              return { style: 'text-indent: 1.5em' }
+            }
+          }
+        }
+      }
+    ]
   }
 })
 
@@ -440,6 +478,7 @@ export function DocEditor({
         alignments: ['left', 'center', 'right', 'justify'],
         defaultAlignment: 'left'
       }),
+      BlockLayout,
       Placeholder.configure({
         placeholder: 'Escribe algo o pulsa "/" para insertar bloques de AFFiNE...'
       })
@@ -448,9 +487,10 @@ export function DocEditor({
     editorProps: {
       attributes: {
         class:
-          'prose prose-invert max-w-none focus:outline-none min-h-[350px] text-zinc-200 font-sans leading-relaxed text-sm selection:bg-blue-600/30'
+          'max-w-none focus:outline-none min-h-[350px] text-[var(--app-text-primary)] font-sans leading-relaxed text-sm selection:bg-blue-600/30'
       },
       transformPastedHTML: (html) => {
+        if (html.includes('data-pm-slice')) return html
         return cleanPastedHtml(html)
       },
       transformPastedText: (text) => {
@@ -460,30 +500,72 @@ export function DocEditor({
         const html = event.clipboardData?.getData('text/html')
         const text = event.clipboardData?.getData('text/plain')
 
-        // 1. Check if pasted content is from a PDF (either browser PDF viewer or desktop PDF reader like Acrobat)
-        const isPdf = Boolean(
-          (html && isPdfHtml(html)) ||
-          (text && (isPdfOrStructuredText(text) || isLegalContractOrPdfText(text)))
-        )
-        if (isPdf) {
-          const formatted = cleanPdfContent(html || '', text || '')
-          if (formatted && formatted.trim()) {
-            const targetEditor = editorRef.current || editor
-            if (targetEditor) {
-              targetEditor.commands.insertContent(formatted)
-            } else {
-              const div = document.createElement('div')
-              div.innerHTML = formatted
-              const slice = PMDOMParser.fromSchema(view.state.schema).parseSlice(div)
-              const tr = view.state.tr.replaceSelection(slice)
-              view.dispatch(tr)
-            }
-            toast.success('Texto de PDF pegado conservando formato')
+        // Inside a code block, preserve exact raw indentation & spacing as plain text
+        if (view.state.selection.$from.parent.type.name === 'codeBlock') {
+          if (text) {
+            const rawCode = text.replace(/\r\n?/g, '\n').replace(/\u00A0/g, ' ')
+            view.dispatch(view.state.tr.insertText(rawCode))
+            return true
+          }
+          return false
+        }
+
+        const prepared = prepareClipboardPaste(html || '', text || '')
+
+        // 1. Internal Seven Note / ProseMirror copy-paste -> handle natively untouched
+        if (prepared.kind === 'internal') {
+          return false
+        }
+
+        // 2. PDF paste (browser PDF viewer, Acrobat, Preview, Foxit, etc.)
+        if (prepared.kind === 'pdf' && prepared.html && prepared.html.trim()) {
+          const targetEditor = editorRef.current || editor
+          if (targetEditor) {
+            targetEditor.commands.insertContent(prepared.html, {
+              parseOptions: { preserveWhitespace: false }
+            })
+          } else {
+            const div = document.createElement('div')
+            div.innerHTML = prepared.html
+            const slice = PMDOMParser.fromSchema(view.state.schema).parseSlice(div, {
+              preserveWhitespace: false
+            })
+            const tr = view.state.tr.replaceSelection(slice)
+            view.dispatch(tr)
+          }
+          toast.success('Texto de PDF pegado conservando formato')
+          return true
+        }
+
+        // 3. Rich HTML (Word, Google Docs, Notion, web) -> let ProseMirror parse transformPastedHTML cleanly
+        if (prepared.kind === 'rich-html') {
+          return false
+        }
+
+        // 4. Plain text wrapped in trivial HTML <span> -> preserve explicit line breaks instead of collapsing HTML newlines
+        if (prepared.kind === 'plain-text' && html && prepared.text.includes('\n')) {
+          const lineHtml = prepared.text
+            .split('\n')
+            .map((line) => {
+              const trimmedLine = line.trim()
+              if (!trimmedLine) return '<p></p>'
+              const safe = line
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+              return `<p>${safe}</p>`
+            })
+            .join('')
+          const targetEditor = editorRef.current || editor
+          if (targetEditor) {
+            targetEditor.commands.insertContent(lineHtml, {
+              parseOptions: { preserveWhitespace: false }
+            })
             return true
           }
         }
 
-        // If the clipboard contains HTML or plain text, allow ProseMirror to handle rich paste
+        // If the clipboard contains HTML or plain text, allow ProseMirror to handle paste
         if ((html && html.trim()) || (text && text.trim())) {
           return false
         }

@@ -47,13 +47,8 @@ import {
   LockKey
 } from '@phosphor-icons/react'
 import {
-  hasHtmlFormatting,
   cleanPastedHtml,
-  cleanPastedText,
-  isPdfHtml,
-  isPdfOrStructuredText,
-  isLegalContractOrPdfText,
-  cleanPdfContent
+  prepareClipboardPaste
 } from '../../lib/pasteUtils'
 import {
   SelectIcon,
@@ -1497,28 +1492,23 @@ function CanvasBoardInner({
       const html = e.clipboardData?.getData('text/html')
       const text = e.clipboardData?.getData('text/plain')
 
-      let clean = ''
-      const isPdf = Boolean(
-        (html && isPdfHtml(html)) ||
-        (text && (isPdfOrStructuredText(text) || isLegalContractOrPdfText(text)))
-      )
+      const prepared = prepareClipboardPaste(html || '', text || '')
+      const richHtml =
+        prepared.kind === 'internal'
+          ? cleanPastedHtml(prepared.html)
+          : prepared.kind === 'pdf' || prepared.kind === 'rich-html'
+            ? prepared.html
+            : ''
 
-      if (isPdf) {
-        clean = cleanPdfContent(html || '', text || '')
-      } else if (html && hasHtmlFormatting(html)) {
-        clean = cleanPastedHtml(html || '')
-      }
-
-      if (clean && clean.trim()) {
+      if (richHtml && richHtml.trim()) {
         await addNewNode('note', {
-          content: clean,
+          content: richHtml,
           hasHtmlHighlight: true
         })
-        toast.success(isPdf ? 'Nota creada desde PDF con formato' : 'Nota creada con el formato copiado')
-      } else if (text && text.trim()) {
-        const cleanedText = cleanPastedText(text)
+        toast.success(prepared.kind === 'pdf' ? 'Nota creada desde PDF con formato' : 'Nota creada con el formato copiado')
+      } else if (prepared.text && prepared.text.trim()) {
         await addNewNode('note', {
-          content: cleanedText
+          content: prepared.text
         })
         toast.success('Nota creada desde el portapapeles')
       }

@@ -13,14 +13,10 @@ import { renderWithAppleEmoji } from '../../ui/AppleEmoji'
 import { FONT_FAMILIES, type FontOption } from '../../../lib/fonts'
 import { FontPickerPopover } from './FontPickerPopover'
 import {
-  hasHtmlFormatting,
+  hasStoredHtmlMarkup,
   cleanPastedHtml,
-  cleanPastedText,
   sanitizeHtmlContent,
-  isPdfHtml,
-  isPdfOrStructuredText,
-  isLegalContractOrPdfText,
-  cleanPdfContent
+  prepareClipboardPaste
 } from '../../../lib/pasteUtils'
 
 export { FONT_FAMILIES }
@@ -66,7 +62,7 @@ export const TextNode = memo(({ id, data, selected }: any) => {
   useEffect(() => {
     if (isEditing && contentEditableRef.current) {
       const el = contentEditableRef.current
-      if (hasHtmlFormatting(content)) {
+      if (hasStoredHtmlMarkup(content)) {
         el.innerHTML = sanitizeHtmlContent(content)
       } else if (content) {
         el.innerText = content
@@ -105,30 +101,41 @@ export const TextNode = memo(({ id, data, selected }: any) => {
       const html = e.clipboardData?.getData('text/html')
       const text = e.clipboardData?.getData('text/plain')
 
-      let clean = ''
-      const isPdf = Boolean(
-        (html && isPdfHtml(html)) ||
-        (text && (isPdfOrStructuredText(text) || isLegalContractOrPdfText(text)))
-      )
+      const prepared = prepareClipboardPaste(html || '', text || '')
+      const richHtml =
+        prepared.kind === 'internal'
+          ? cleanPastedHtml(prepared.html)
+          : prepared.kind === 'pdf' || prepared.kind === 'rich-html'
+            ? prepared.html
+            : ''
 
-      if (isPdf) {
-        clean = cleanPdfContent(html || '', text || '')
-      } else if (html && hasHtmlFormatting(html)) {
-        clean = cleanPastedHtml(html || '')
-      }
+      const escapeToHtmlLines = (raw: string) =>
+        raw
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/\r?\n/g, '<br/>')
 
-      if (clean && clean.trim()) {
+      const existingIsHtml = hasStoredHtmlMarkup(content)
+
+      if (richHtml && richHtml.trim()) {
         e.preventDefault()
-        const updated = content && content.trim() ? `${content}<br/>${clean}` : clean
+        const baseHtml = content && content.trim() ? (existingIsHtml ? content : escapeToHtmlLines(content)) : ''
+        const updated = baseHtml ? `${baseHtml}<br/>${richHtml}` : richHtml
         setContent(updated)
         save({ content: updated })
-        toast.success(isPdf ? 'Texto de PDF pegado con formato' : 'Formato de texto conservado')
-      } else if (text && text.trim()) {
+        toast.success(prepared.kind === 'pdf' ? 'Texto de PDF pegado con formato' : 'Formato de texto conservado')
+      } else if (prepared.text && prepared.text.trim()) {
         e.preventDefault()
-        const cleanedText = cleanPastedText(text)
-        const updated = content && content.trim() ? `${content}\n${cleanedText}` : cleanedText
-        setContent(updated)
-        save({ content: updated })
+        if (existingIsHtml && content && content.trim()) {
+          const updated = `${content}<br/>${escapeToHtmlLines(prepared.text)}`
+          setContent(updated)
+          save({ content: updated })
+        } else {
+          const updated = content && content.trim() ? `${content}\n${prepared.text}` : prepared.text
+          setContent(updated)
+          save({ content: updated })
+        }
       }
     }
 
@@ -141,22 +148,18 @@ export const TextNode = memo(({ id, data, selected }: any) => {
     const html = e.clipboardData.getData('text/html')
     const text = e.clipboardData.getData('text/plain')
 
-    let clean = ''
-    const isPdf = Boolean(
-      (html && isPdfHtml(html)) ||
-      (text && (isPdfOrStructuredText(text) || isLegalContractOrPdfText(text)))
-    )
+    const prepared = prepareClipboardPaste(html || '', text || '')
+    const richHtml =
+      prepared.kind === 'internal'
+        ? cleanPastedHtml(prepared.html)
+        : prepared.kind === 'pdf' || prepared.kind === 'rich-html'
+          ? prepared.html
+          : ''
 
-    if (isPdf) {
-      clean = cleanPdfContent(html, text || '')
-    } else if (html && hasHtmlFormatting(html)) {
-      clean = cleanPastedHtml(html)
-    }
-
-    if (clean && clean.trim()) {
-      document.execCommand('insertHTML', false, clean)
-    } else if (text) {
-      document.execCommand('insertText', false, cleanPastedText(text))
+    if (richHtml && richHtml.trim()) {
+      document.execCommand('insertHTML', false, richHtml)
+    } else if (prepared.text) {
+      document.execCommand('insertText', false, prepared.text)
     }
 
     if (contentEditableRef.current) {
@@ -381,17 +384,17 @@ export const TextNode = memo(({ id, data, selected }: any) => {
           }}
           onPointerDown={(e) => e.stopPropagation()}
           data-placeholder="Escribe texto..."
-          className={`nodrag nowheel w-full bg-transparent border-none outline-none leading-relaxed select-text ${textColorClass} ${fontSizeClass} text-${align} empty:before:content-[attr(data-placeholder)] empty:before:opacity-60 [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through [&_del]:line-through [&_a]:text-sky-500 [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5`}
+          className={`seven-rich-content nodrag nowheel w-full bg-transparent border-none outline-none leading-relaxed select-text ${textColorClass} ${fontSizeClass} text-${align} empty:before:content-[attr(data-placeholder)] empty:before:opacity-60 [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through [&_del]:line-through [&_a]:text-sky-500 [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5`}
           style={{ fontFamily, minHeight: '24px' }}
         />
       ) : (
         <div
           onDoubleClick={() => !data?.readOnly && setIsEditing(true)}
-          className={`nodrag cursor-text select-text leading-relaxed ${textColorClass} ${fontSizeClass} text-${align} [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through [&_del]:line-through [&_a]:text-sky-500 [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5`}
+          className={`seven-rich-content nodrag cursor-text select-text leading-relaxed ${textColorClass} ${fontSizeClass} text-${align} [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through [&_del]:line-through [&_a]:text-sky-500 [&_a]:underline [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5`}
           style={{ fontFamily }}
         >
           {content ? (
-            hasHtmlFormatting(content) ? (
+            hasStoredHtmlMarkup(content) ? (
               <div dangerouslySetInnerHTML={{ __html: sanitizeHtmlContent(content) }} />
             ) : (
               <div className="whitespace-pre-wrap">{renderWithAppleEmoji(content)}</div>

@@ -235,8 +235,46 @@
 }
 
 .ProseMirror p {
-  margin-top: 2px;
-  margin-bottom: 6px;
+  margin-top: 0.25rem;
+  margin-bottom: 0.55rem;
+  min-height: 1.1em;
+}
+
+.ProseMirror strong,
+.ProseMirror b {
+  font-weight: 700;
+}
+
+.ProseMirror em,
+.ProseMirror i {
+  font-style: italic;
+}
+
+.ProseMirror a {
+  color: var(--app-accent, #3b82f6);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.ProseMirror mark {
+  background-color: rgba(250, 204, 21, 0.35);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0.05em 0.2em;
+}
+
+.ProseMirror code:not(pre code) {
+  background-color: rgba(127, 127, 127, 0.14);
+  font-family: var(--app-font-mono);
+  font-size: 0.9em;
+  padding: 0.12rem 0.35rem;
+  border-radius: 4px;
+}
+
+.ProseMirror hr {
+  border: none;
+  border-top: 1px solid var(--app-border-strong, var(--app-border));
+  margin: 1.1rem 0;
 }
 
 .ProseMirror p.is-editor-empty:first-child::before {
@@ -248,21 +286,21 @@
 }
 
 .ProseMirror h1 {
-  font-size: 30px;
+  font-size: 28px;
   font-weight: 700;
   letter-spacing: -0.025em;
   line-height: 1.25;
-  margin-top: 1.75rem;
+  margin-top: 1.6rem;
   margin-bottom: 0.5rem;
   color: var(--app-text-primary);
 }
 
 .ProseMirror h2 {
-  font-size: 22px;
-  font-weight: 600;
+  font-size: 21px;
+  font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.3;
-  margin-top: 1.4rem;
+  margin-top: 1.35rem;
   margin-bottom: 0.4rem;
   color: var(--app-text-primary);
 }
@@ -272,9 +310,214 @@
   font-weight: 600;
   letter-spacing: -0.015em;
   line-height: 1.35;
-  margin-top: 1.15rem;
+  margin-top: 1.1rem;
   margin-bottom: 0.35rem;
   color: var(--app-text-primary);
+}
+
+.ProseMirror h4 {
+  font-size: 15.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-top: 0.9rem;
+  margin-bottom: 0.25rem;
+  color: var(--app-text-primary);
+}
+
+.ProseMirror h5,
+.ProseMirror h6 {
+  font-size: 14.5px;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-top: 0.75rem;
+  margin-bottom: 0.2rem;
+  color: var(--app-text-secondary);
+}
+
+/* TipTap Bullet & Ordered Lists (restored over Tailwind Preflight) */
+.ProseMirror ul:not([data-type="taskList"]) {
+  list-style-type: disc;
+  padding-left: 1.5rem;
+  margin: 0.45rem 0;
+}
+
+.ProseMirror ul:not([data-type="taskList"]) ul:not([data-type="taskList"]) {
+  list-style-type: circle;
+  margin: 0.2rem 0;
+}
+
+.ProseMirror ul:not([data-type="taskList"]) ul:not([data-type="taskList"]) ul:not([data-type="taskList"]) {
+  list-style-type: square;
+}
+
+.ProseMirror ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem;
+  margin: 0.45rem 0;
+}
+
+.ProseMirror ol[type="a"] {
+  list-style-type: lower-alpha;
+}
+
+.ProseMirror ol[type="A"] {
+  list-style-type: upper-alpha;
+}
+
+.ProseMirror ol[type="i"] {
+  list-style-type: lower-roman;
+}
+
+.ProseMirror ol[type="I"] {
+  list-style-type: upper-roman;
+}
+
+.ProseMirror ol ol:not([type]) {
+  list-style-type: lower-alpha;
+  margin: 0.2rem 0;
+}
+
+.ProseMirror li {
+  margin: 0.2rem 0;
+}
+
+.ProseMirror li > p {
+  margin-top: 0.1rem;
+  margin-bottom: 0.15rem;
+  min-height: 0;
+}
+
+/* Canvas NoteNode & TextNode rich-text & PDF paste typography */
+.seven-rich-content p {
+  margin-top: 0.2rem;
+  margin-bottom: 0.45rem;
+  min-height: 1em;
+}
+
+.seven-rich-content p:last-child {
+  margin-bottom: 0;
+}
+
+.seven-rich-content strong,
+.seven-rich-content b {
+  font-weight: 700;
+}
+
+.seven-rich-content h1 {
+  font-size: 1.3em;
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 0.55rem 0 0.3rem;
+}
+
+.seven-rich-content h2 {
+  font-size: 1.15em;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0.5rem 0 0.25rem;
+}
+
+.seven-rich-content h3,
+.seven-rich-content h4,
+.seven-rich-content h5,
+.seven-rich-content h6 {
+  font-size: 1.04em;
+  font-weight: 600;
+  line-height: 1.35;
+  margin: 0.4rem 0 0.2rem;
+}
+
+.seven-rich-content ul:not([data-type="taskList"]) {
+  list-style-type: disc;
+  padding-left: 1.35rem;
+  margin: 0.35rem 0;
+}
+
+.seven-rich-content ul:not([data-type="taskList"]) ul:not([data-type="taskList"]) {
+  list-style-type: circle;
+  margin: 0.15rem 0;
+}
+
+.seven-rich-content ol {
+  list-style-type: decimal;
+  padding-left: 1.35rem;
+  margin: 0.35rem 0;
+}
+
+.seven-rich-content ol[type="a"] {
+  list-style-type: lower-alpha;
+}
+
+.seven-rich-content ol[type="A"] {
+  list-style-type: upper-alpha;
+}
+
+.seven-rich-content ol[type="i"] {
+  list-style-type: lower-roman;
+}
+
+.seven-rich-content ol[type="I"] {
+  list-style-type: upper-roman;
+}
+
+.seven-rich-content li {
+  margin: 0.15rem 0;
+}
+
+.seven-rich-content li > p {
+  margin: 0.08rem 0;
+  min-height: 0;
+}
+
+.seven-rich-content blockquote {
+  border-left: 3px solid currentColor;
+  padding-left: 0.7rem;
+  margin: 0.45rem 0;
+  opacity: 0.9;
+}
+
+.seven-rich-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 0.45rem 0;
+  font-size: 0.92em;
+}
+
+.seven-rich-content th,
+.seven-rich-content td {
+  border: 1px solid var(--app-border, rgba(127, 127, 127, 0.35));
+  padding: 4px 7px;
+  vertical-align: top;
+}
+
+.seven-rich-content th {
+  font-weight: 600;
+  background-color: rgba(127, 127, 127, 0.1);
+}
+
+.seven-rich-content pre {
+  background-color: rgba(127, 127, 127, 0.12);
+  border: 1px solid var(--app-border, rgba(127, 127, 127, 0.25));
+  border-radius: 5px;
+  padding: 0.45rem 0.65rem;
+  margin: 0.4rem 0;
+  font-family: var(--app-font-mono);
+  font-size: 0.88em;
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+
+.seven-rich-content mark {
+  background-color: rgba(250, 204, 21, 0.35);
+  color: inherit;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+.seven-rich-content hr {
+  border: none;
+  border-top: 1px solid var(--app-border, rgba(127, 127, 127, 0.3));
+  margin: 0.65rem 0;
 }
 
 /* TipTap Task List (Notion Checkbox Style) */
