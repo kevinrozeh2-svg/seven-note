@@ -393,7 +393,7 @@ create policy "Lectura de seven_spaces" on public.seven_spaces
   using (
     public.is_user_active(auth.uid())
     and (
-      (is_private = false and (coalesce(admin_only, false) = false or public.is_admin(auth.uid())))
+      (coalesce(is_private, false) = false and (coalesce(admin_only, false) = false or public.is_admin(auth.uid())))
       or user_id = auth.uid()
     )
   );
@@ -415,7 +415,7 @@ create policy "Actualizacion de seven_spaces" on public.seven_spaces
     and public.get_my_role() != 'viewer'
     and (
       -- Capa 1: Admin puede actualizar espacios públicos, solo-admins o propios
-      (public.is_admin(auth.uid()) and (is_private = false or user_id = auth.uid()))
+      (public.is_admin(auth.uid()) and (coalesce(is_private, false) = false or user_id = auth.uid()))
       -- Capa 2: Trabajador SOLO puede actualizar los espacios que él mismo creó (y nunca espacios solo-admins)
       or (user_id = auth.uid() and coalesce(admin_only, false) = false)
     )
@@ -425,7 +425,7 @@ create policy "Actualizacion de seven_spaces" on public.seven_spaces
     and public.get_my_role() != 'viewer'
     and (coalesce(admin_only, false) = false or public.is_admin(auth.uid()))
     and (
-      (public.is_admin(auth.uid()) and (is_private = false or user_id = auth.uid()))
+      (public.is_admin(auth.uid()) and (coalesce(is_private, false) = false or user_id = auth.uid()))
       or (user_id = auth.uid() and coalesce(admin_only, false) = false)
     )
   );
@@ -437,7 +437,7 @@ create policy "Eliminacion de seven_spaces" on public.seven_spaces
     public.is_user_active(auth.uid())
     and (
       -- Capa 1: Admin puede eliminar espacios públicos o propios
-      (public.is_admin(auth.uid()) and (is_private = false or user_id = auth.uid()))
+      (public.is_admin(auth.uid()) and (coalesce(is_private, false) = false or user_id = auth.uid()))
       -- Capa 2: Trabajador SOLO puede eliminar los espacios que él mismo creó
       or (user_id = auth.uid())
     )

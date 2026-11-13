@@ -38,6 +38,7 @@ class SyncEngine {
   private intervalTimer: any = null
   private syncIntervalSec: number = 30 // Por defecto cada 30 segundos
   private isSyncing = false
+  private syncQueued = false
 
   constructor() {
     // Restaurar lastSyncTime persistido
@@ -183,7 +184,8 @@ class SyncEngine {
 
   public async triggerSync(): Promise<{ success: boolean; message?: string }> {
     if (this.isSyncing) {
-      return { success: true, message: 'Sincronización ya en curso' }
+      this.syncQueued = true
+      return { success: true, message: 'Sincronización ya en curso (en cola)' }
     }
 
     const config = getStoredSupabaseConfig()
@@ -245,7 +247,13 @@ class SyncEngine {
             owner_member: s.ownerMember || currentMember.id,
             user_id: authUserId
           }))
-          const { error: spError } = await supabase.from('seven_spaces').upsert(payload, { onConflict: 'id' })
+          let { error: spError } = await supabase.from('seven_spaces').upsert(payload, { onConflict: 'id' })
+          if (spError && (spError.message?.includes('admin_only') || spError.message?.includes('sort_order') || spError.message?.includes('schema cache'))) {
+            // Respaldo si Supabase aún no tiene las columnas admin_only / sort_order
+            const fallbackPayload = payload.map(({ admin_only: _a, sort_order: _s, ...rest }) => rest)
+            const retry = await supabase.from('seven_spaces').upsert(fallbackPayload, { onConflict: 'id' })
+            spError = retry.error
+          }
           if (!spError) {
             await db.spaces.bulkUpdate(
               pendingSpaces.map((s) => ({ key: s.id, changes: { syncStatus: 'synced' as const } }))
@@ -455,17 +463,17 @@ class SyncEngine {
       // Si la base local no tiene notas o espacios reales, forzamos un pull completo (lastSync = 0)
       // para asegurar que dispositivos móviles o navegadores nuevos obtengan todo el contenido.
       const isInitialDevicePull = localWsCount === 0 || localSpacesCount <= 1
-      const lastSync = isInitialDevicePull ? 0 : (this.lastSyncTime || 0)
+      // Ventana de seguridad de 2 minutos para evitar pérdida de cambios por desfase de reloj entre dispositivos
+      const lastSync = isInitialDevicePull ? 0 : Math.max(0, (this.lastSyncTime || 0) - 120_000)
 
       let hasPullErrors = false
       const restrictedAdminSpaceIds = new Set<string>()
       const isCurrentAdmin = isUserAdmin(currentMember)
 
-      // Pull Spaces
+      // Pull Spaces: siempre traemos todos los espacios visibles para no perder ninguno por desfase de reloj o lastSyncTime
       const { data: remoteSpaces, error: spPullErr } = await supabase
         .from('seven_spaces')
         .select('*')
-        .gt('updated_at', lastSync)
 
       if (spPullErr) {
         console.warn('Error pulling spaces:', spPullErr.message)
@@ -779,6 +787,12 @@ class SyncEngine {
       return { success: false, message: this.errorMessage || 'Error' }
     } finally {
       this.isSyncing = false
+      if (this.syncQueued) {
+        this.syncQueued = false
+        setTimeout(() => {
+          this.triggerSync()
+        }, 150)
+      }
     }
   }
 }
