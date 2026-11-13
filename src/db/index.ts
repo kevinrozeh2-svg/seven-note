@@ -492,7 +492,7 @@ export async function seedInitialData() {
         icon: '⚡',
         color: '#1e96eb',
         createdAt: Date.now(),
-        updatedAt: Date.now(),
+        updatedAt: 1,
         syncStatus: 'synced'
       }).catch(() => {})
       if (typeof localStorage !== 'undefined') localStorage.setItem(DEMO_SEEDED_KEY, 'true')
@@ -514,7 +514,7 @@ export async function seedInitialData() {
   const count = await db.workspaces.count()
   if (count > 0 || alreadySeeded) return
 
-  const now = Date.now()
+  const now = 1
   const rootWorkspaceId = 'welcome-workspace'
   const subboard1Id = 'subboard-design'
 

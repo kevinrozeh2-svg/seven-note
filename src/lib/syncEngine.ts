@@ -569,6 +569,15 @@ class SyncEngine {
             })
           }
         }
+
+        // Eliminar espacios locales ya sincronizados que fueron borrados definitivamente en Supabase
+        const remoteSpaceIds = new Set(remoteSpaces.map((rs: any) => rs.id))
+        const allLocalSpaces = await db.spaces.toArray()
+        for (const ls of allLocalSpaces) {
+          if (ls.syncStatus === 'synced' && !remoteSpaceIds.has(ls.id)) {
+            await db.spaces.delete(ls.id).catch(() => {})
+          }
+        }
       }
 
       // Pull Workspaces
@@ -663,6 +672,17 @@ class SyncEngine {
               coverBannerStyle: meta.coverBannerStyle,
               coverPosition: meta.coverPosition
             })
+          }
+        }
+
+        // En pull completo, eliminar notas locales ya sincronizadas que fueron borradas definitivamente en Supabase
+        if (lastSync === 0) {
+          const remoteWsIds = new Set(remoteWorkspaces.map((rw: any) => rw.id))
+          const allLocalWs = await db.workspaces.toArray()
+          for (const lw of allLocalWs) {
+            if (lw.syncStatus === 'synced' && !remoteWsIds.has(lw.id)) {
+              await db.workspaces.delete(lw.id).catch(() => {})
+            }
           }
         }
       }
