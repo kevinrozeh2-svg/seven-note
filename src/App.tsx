@@ -779,18 +779,17 @@ function MainApp() {
     if (visibleSpaces.length === 0) return
 
     const hasCurrentSpace = visibleSpaces.some((s: SpaceItem) => s.id === currentSpaceId)
-    const savedSpaceId = localStorage.getItem('seven_note_active_space_id')
+    // El espacio actual es válido: nunca redirigir (p. ej. al borrar notas o carpetas).
+    if (hasCurrentSpace) return
 
+    const savedSpaceId = localStorage.getItem('seven_note_active_space_id')
     if (savedSpaceId && visibleSpaces.some((s) => s.id === savedSpaceId)) {
-      if (currentSpaceId !== savedSpaceId) {
-        setCurrentSpaceId(savedSpaceId)
-      }
+      setCurrentSpaceId(savedSpaceId)
       return
     }
 
-    // Si el espacio actual no es válido o es el demo-workspace inicial pero existen otros espacios con notas,
-    // cambiamos automáticamente al espacio activo del usuario.
-    if (!hasCurrentSpace || currentSpaceId === DEFAULT_SPACE_ID) {
+    // Solo si el espacio actual ya no existe, cambiamos a otro disponible.
+    if (!hasCurrentSpace) {
       const spaceWithNotes = visibleSpaces.find((s) => {
         if (s.id === DEFAULT_SPACE_ID) return false
         return workspaces.some(
@@ -1803,8 +1802,9 @@ function MainApp() {
                         if (currentWorkspace) {
                           db.workspaces.update(currentWorkspace.id, {
                             isDeleted: true,
-                            updatedAt: Date.now()
-                          })
+                            updatedAt: Date.now(),
+                            syncStatus: 'pending'
+                          }).then(() => syncEngine.scheduleSync(500))
                         }
                         setActiveDropdown(null)
                       }}

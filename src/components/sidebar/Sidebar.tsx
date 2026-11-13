@@ -628,10 +628,14 @@ export function Sidebar({
         updatedAt: Date.now(),
         syncStatus: 'pending'
       })
+      syncEngine.scheduleSync(500)
 
       if (id === currentWorkspaceId) {
-        const remaining = workspaces.filter((w) => w.id !== id && !w.isDeleted)
-        if (remaining.length > 0) onSelectWorkspace(remaining[0].id)
+        const targetSpaceId = targetWs?.spaceId || currentSpace.id
+        const remaining = workspaces.filter(
+          (w) => w.id !== id && !w.isDeleted && (w.spaceId || currentSpace.id) === targetSpaceId
+        )
+        if (remaining.length > 0) onSelectWorkspace(remaining[0].id, targetSpaceId)
       }
     } catch (err) {
       console.error('Error moving to trash', err)

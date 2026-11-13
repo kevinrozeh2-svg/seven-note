@@ -1576,8 +1576,9 @@ function CanvasBoardInner({
     try {
       const currentNodes = await db.canvasNodes.where('workspaceId').equals(workspaceId).toArray()
       for (const n of currentNodes) {
-        await db.canvasNodes.update(n.id, { isDeleted: true, updatedAt: Date.now() })
+        await db.canvasNodes.update(n.id, { isDeleted: true, updatedAt: Date.now(), syncStatus: 'pending' })
       }
+      syncEngine.scheduleSync(1000)
       setDrawings([])
       setShowCanvasMenu(false)
     } catch (err) {

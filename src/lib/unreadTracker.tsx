@@ -146,9 +146,10 @@ export async function markItemAsRead(
         const existingViewed = Array.isArray(ws.viewedBy) ? ws.viewedBy : []
         const combined = Array.from(new Set([...existingViewed, ...toAdd]))
         if (combined.length !== existingViewed.length) {
+          // No tocamos updatedAt: marcar como leído no debe ganar a cambios reales
+          // (p. ej. un borrado hecho por otro usuario) en la resolución de conflictos.
           await (db.workspaces as any).update(itemId, {
             viewedBy: combined,
-            updatedAt: Date.now(),
             syncStatus: 'pending'
           })
         }

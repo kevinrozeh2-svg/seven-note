@@ -269,10 +269,37 @@ class SyncEngine {
         const pendingWorkspaces = await db.workspaces.where('syncStatus').equals('pending').toArray()
         // Capa 2: Si el usuario es un trabajador, solo sube cambios de lo que él mismo creó
         const isUserAdminCurrent = isUserAdmin(currentMember)
-        const allowedPending = pendingWorkspaces.filter((w) => {
+        const ownedPending = pendingWorkspaces.filter((w) => {
           if (isUserAdminCurrent) return true
           return isWorkspaceOwner(w, currentMember, authUserId)
         })
+
+        // Evitar sobrescribir en la nube una versión más reciente (p. ej. una nota ya enviada
+        // a la papelera desde otro dispositivo) con una copia local desactualizada.
+        const remoteVersions = new Map<string, number>()
+        for (let i = 0; i < ownedPending.length; i += 100) {
+          const ids = ownedPending.slice(i, i + 100).map((w) => w.id)
+          const { data: remoteRows } = await supabase
+            .from('seven_workspaces')
+            .select('id, updated_at')
+            .in('id', ids)
+          for (const r of remoteRows || []) remoteVersions.set(r.id, Number(r.updated_at) || 0)
+        }
+        const staleIds: string[] = []
+        const allowedPending = ownedPending.filter((w) => {
+          const remoteUpdated = remoteVersions.get(w.id)
+          if (remoteUpdated !== undefined && remoteUpdated > (w.updatedAt || 0)) {
+            staleIds.push(w.id)
+            return false
+          }
+          return true
+        })
+        if (staleIds.length > 0) {
+          // La versión remota es más nueva: el pull la aplicará localmente
+          await db.workspaces.bulkUpdate(
+            staleIds.map((id) => ({ key: id, changes: { syncStatus: 'synced' as const } }))
+          )
+        }
 
         if (allowedPending.length > 0) {
           const payload = allowedPending.map((w: WorkspaceItem) => ({
@@ -329,9 +356,16 @@ class SyncEngine {
 
           const { error: wsError } = await supabase.from('seven_workspaces').upsert(payload, { onConflict: 'id' })
           if (!wsError) {
-            await db.workspaces.bulkUpdate(
-              allowedPending.map((w) => ({ key: w.id, changes: { syncStatus: 'synced' as const } }))
-            )
+            // Solo marcar como sincronizadas las notas que no cambiaron durante el envío
+            // (si se borraron mientras se sincronizaba, siguen pendientes y se reenvían).
+            await db.transaction('rw', db.workspaces, async () => {
+              for (const w of allowedPending) {
+                const current = await db.workspaces.get(w.id)
+                if (current && current.updatedAt === w.updatedAt && current.isDeleted === w.isDeleted) {
+                  await db.workspaces.update(w.id, { syncStatus: 'synced' })
+                }
+              }
+            })
           } else {
             console.warn('Warning syncing workspaces:', wsError.message)
           }
@@ -570,17 +604,13 @@ class SyncEngine {
           }
 
           const local = await db.workspaces.get(rw.id)
-          // Si en Supabase ya fue eliminado, aseguramos que en local tampoco exista
-          if (rw.is_deleted) {
-            if (local) {
-              await db.workspaces.delete(rw.id).catch(() => {})
-              await db.canvasNodes.where('workspaceId').equals(rw.id).delete().catch(() => {})
-              await db.canvasEdges.where('workspaceId').equals(rw.id).delete().catch(() => {})
-            }
+          const remoteUpdated = Number(rw.updated_at) || 0
+          // Cambios locales pendientes más recientes tienen prioridad (no resucitar notas borradas)
+          if (local && local.syncStatus === 'pending' && (local.updatedAt || 0) >= remoteUpdated) {
             continue
           }
 
-          if (!local || rw.updated_at > local.updatedAt) {
+          if (!local || remoteUpdated > (local.updatedAt || 0)) {
             const meta = rw.metadata || {}
             await db.workspaces.put({
               id: rw.id,
@@ -593,9 +623,10 @@ class SyncEngine {
               viewMode: rw.view_mode,
               docContent: rw.doc_content,
               createdAt: rw.created_at,
-              updatedAt: rw.updated_at,
+              updatedAt: remoteUpdated,
               isFavorite: rw.is_favorite,
-              isDeleted: rw.is_deleted,
+              // is_deleted en la nube = está en la papelera (el borrado definitivo elimina la fila)
+              isDeleted: Boolean(rw.is_deleted),
               syncStatus: 'synced',
               isPrivate: Boolean(rw.is_private),
               ownerMember: rw.owner_member || 'kevin',
