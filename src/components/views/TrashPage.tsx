@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { AppleEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
 import { deleteImageFromStorage, extractStorageUrlsFromHtml } from '../../lib/imageOptimizer'
 import { getSupabaseClient } from '../../lib/supabase'
-import { getCurrentMember, isWorkspaceVisible, canUserDeleteWorkspace, isUserAdmin } from '../../lib/teamAuth'
+import { getCurrentMember, isWorkspaceVisible, canUserDeleteWorkspace } from '../../lib/teamAuth'
 
 interface TrashPageProps {
   onSelectWorkspace: (id: string) => void
@@ -105,13 +105,10 @@ export const TrashPage: React.FC<TrashPageProps> = () => {
   }
 
   const handleEmptyTrash = async () => {
-    const member = getCurrentMember()
-    if (!isUserAdmin(member)) {
-      toast.error('Solo los administradores pueden vaciar la papelera de reciclaje completa.')
-      return
-    }
-    if (!confirm('¿Vaciar toda la papelera permanentemente? Se liberará el espacio de fotos en Supabase.')) return
+    if (deletedWorkspaces.length === 0) return
+    if (!confirm('¿Vaciar toda la papelera permanentemente? Se eliminará todo sin dejar rastro en Supabase.')) return
     try {
+      const ids = deletedWorkspaces.map((w) => w.id)
       const supabase = getSupabaseClient()
       for (const ws of deletedWorkspaces) {
         // Limpiar fotos asociadas en storage
@@ -127,25 +124,37 @@ export const TrashPage: React.FC<TrashPageProps> = () => {
             deleteImageFromStorage(u).catch(() => {})
           }
         }
-
-        // Eliminar de Supabase Postgres
-        if (supabase) {
-          await Promise.allSettled([
-            supabase.from('seven_canvas_nodes').delete().eq('workspace_id', ws.id),
-            supabase.from('seven_canvas_edges').delete().eq('workspace_id', ws.id),
-            supabase.from('seven_workspaces').delete().eq('id', ws.id)
-          ])
-        }
-
-        // Eliminar de IndexedDB local
-        await db.workspaces.delete(ws.id)
-        await db.canvasNodes.where('workspaceId').equals(ws.id).delete()
-        await db.canvasEdges.where('workspaceId').equals(ws.id).delete()
       }
-      toast.info('Papelera vaciada y espacio liberado')
+
+      // Eliminar definitivamente de Supabase Postgres
+      if (supabase) {
+        const [, , wsRes] = await Promise.all([
+          supabase.from('seven_canvas_nodes').delete().in('workspace_id', ids),
+          supabase.from('seven_canvas_edges').delete().in('workspace_id', ids),
+          supabase.from('seven_workspaces').delete().in('id', ids)
+        ])
+        // Limpiar también cualquier otro registro marcado como is_deleted en la nube
+        await supabase.from('seven_workspaces').delete().eq('is_deleted', true)
+        if (wsRes.error) {
+          console.warn('Error eliminando de Supabase:', wsRes.error.message)
+        }
+      }
+
+      // Eliminar de IndexedDB local
+      await db.workspaces.bulkDelete(ids)
+      await Promise.all(
+        ids.map((id) =>
+          Promise.all([
+            db.canvasNodes.where('workspaceId').equals(id).delete(),
+            db.canvasEdges.where('workspaceId').equals(id).delete()
+          ])
+        )
+      )
+      toast.info('Papelera vaciada y eliminada de Supabase')
       loadDeleted()
     } catch (err) {
       console.error('Error al vaciar papelera', err)
+      toast.error('No se pudo vaciar la papelera')
     }
   }
 

@@ -86,8 +86,10 @@ export function TrashModal({ isOpen, onClose }: TrashModalProps) {
   }
 
   const handleEmptyTrash = async () => {
-    if (!confirm('¿Vaciar toda la papelera permanentemente?')) return
+    if (deletedWorkspaces.length === 0) return
+    if (!confirm('¿Vaciar toda la papelera permanentemente? Se eliminará todo sin dejar rastro en Supabase.')) return
     try {
+      const ids = deletedWorkspaces.map((w) => w.id)
       const supabase = getSupabaseClient()
       for (const ws of deletedWorkspaces) {
         const nodes = await db.canvasNodes.where('workspaceId').equals(ws.id).toArray()
@@ -102,19 +104,29 @@ export function TrashModal({ isOpen, onClose }: TrashModalProps) {
             deleteImageFromStorage(u).catch(() => {})
           }
         }
-
-        if (supabase) {
-          await Promise.allSettled([
-            supabase.from('seven_canvas_nodes').delete().eq('workspace_id', ws.id),
-            supabase.from('seven_canvas_edges').delete().eq('workspace_id', ws.id),
-            supabase.from('seven_workspaces').delete().eq('id', ws.id)
-          ])
-        }
-
-        await db.workspaces.delete(ws.id)
-        await db.canvasNodes.where('workspaceId').equals(ws.id).delete()
-        await db.canvasEdges.where('workspaceId').equals(ws.id).delete()
       }
+
+      if (supabase) {
+        const [, , wsRes] = await Promise.all([
+          supabase.from('seven_canvas_nodes').delete().in('workspace_id', ids),
+          supabase.from('seven_canvas_edges').delete().in('workspace_id', ids),
+          supabase.from('seven_workspaces').delete().in('id', ids)
+        ])
+        await supabase.from('seven_workspaces').delete().eq('is_deleted', true)
+        if (wsRes.error) {
+          console.warn('Error eliminando de Supabase:', wsRes.error.message)
+        }
+      }
+
+      await db.workspaces.bulkDelete(ids)
+      await Promise.all(
+        ids.map((id) =>
+          Promise.all([
+            db.canvasNodes.where('workspaceId').equals(id).delete(),
+            db.canvasEdges.where('workspaceId').equals(id).delete()
+          ])
+        )
+      )
       loadDeleted()
     } catch (err) {
       console.error('Error emptying trash', err)
