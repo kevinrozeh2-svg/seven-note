@@ -387,6 +387,90 @@ export async function cleanupLegacyTemplatePresets() {
 // Key to track whether initial demo data was seeded once, preventing resurrecting deleted spaces
 const DEMO_SEEDED_KEY = 'seven_note_demo_seeded_v1'
 
+const WELCOME_GUIDE_KEY = 'seven_note_welcome_guide_v1'
+
+// Renames "Demo Workspace" to "Bienvenido" and adds a how-to note + board (once)
+async function ensureWelcomeGuide() {
+  if (typeof localStorage !== 'undefined' && localStorage.getItem(WELCOME_GUIDE_KEY)) return
+  const space =
+    (await db.spaces.get(DEFAULT_SPACE_ID)) ||
+    (await db.spaces.filter((s) => s.name === 'Demo Workspace').first())
+  if (!space) return
+  const now = Date.now()
+  await db.spaces.update(space.id, { name: 'Bienvenido', updatedAt: now, syncStatus: 'pending' } as never)
+
+  const guideDocId = 'guide-como-usar'
+  const guideBoardId = 'guide-tablero'
+  const html = `
+    <h1>🚀 Cómo usar Seven Note</h1>
+    <p>Seven Note es una app de <strong>notas y tableros visuales</strong>: combina documentos por bloques (estilo Notion) con lienzos infinitos (estilo Milanote). Funciona <strong>sin conexión</strong> y puede sincronizarse con Supabase.</p>
+    <h2>🗂️ Organización</h2>
+    <ul>
+      <li><strong>Espacios:</strong> grupos de trabajo (como este, «Bienvenido»). Cambia o gestiona espacios desde la barra lateral.</li>
+      <li><strong>Páginas:</strong> cada página puede ser Documento, Tablero o Vista dividida. Puedes anidar páginas y sub-tableros.</li>
+      <li><strong>Favoritos, plantillas y papelera</strong> disponibles en la barra lateral.</li>
+    </ul>
+    <h2>📝 Notas (documentos)</h2>
+    <ul>
+      <li>Escribe con formato: títulos, listas, tareas, citas y más.</li>
+      <li>Empieza desde una plantilla o importa contenido existente.</li>
+    </ul>
+    <h2>🎨 Tableros</h2>
+    <ul>
+      <li>Añade notas, listas de tareas, enlaces, imágenes y sub-tableros.</li>
+      <li>Arrastra, redimensiona y conecta tarjetas con flechas.</li>
+    </ul>
+    <h2>☁️ Datos y sincronización</h2>
+    <ul>
+      <li>Todo se guarda localmente en tu dispositivo.</li>
+      <li>Opcional: configura Supabase en Ajustes para respaldar en la nube.</li>
+      <li>Instálala como app (PWA o escritorio) y úsala donde quieras.</li>
+    </ul>
+    <p>Mira el tablero <em>«Guía visual»</em> de este espacio para un resumen rápido.</p>
+  `
+
+  const exists = await db.workspaces.get(guideDocId)
+  if (!exists) {
+    await db.workspaces.bulkPut([
+      {
+        id: guideDocId, parentId: null, spaceId: space.id, title: 'Cómo usar Seven Note', icon: '📖',
+        color: '#6366f1', viewMode: 'doc', docContent: html, createdAt: now, updatedAt: now,
+        isFavorite: true, isDeleted: false, syncStatus: 'pending'
+      },
+      {
+        id: guideBoardId, parentId: null, spaceId: space.id, title: 'Guía visual', icon: '🧭',
+        color: '#ec4899', viewMode: 'canvas', docContent: '<p></p>', createdAt: now, updatedAt: now,
+        isFavorite: false, isDeleted: false, syncStatus: 'pending'
+      }
+    ] as never)
+    const mk = (id: string, type: string, x: number, y: number, h: number, data: Record<string, unknown>) => ({
+      id, workspaceId: guideBoardId, type, positionX: x, positionY: y, width: 320, height: h, data,
+      createdAt: now, updatedAt: now, isDeleted: false, syncStatus: 'pending'
+    })
+    await db.canvasNodes.bulkPut([
+      mk('g-what', 'note', 80, 80, 200, { title: '👋 ¿De qué va?', content: 'Seven Note reúne notas y tableros visuales en un solo lugar, offline y con sincronización opcional.', color: 'yellow' }),
+      mk('g-notes', 'note', 450, 80, 200, { title: '📝 Notas', content: 'Crea páginas en modo Documento con formato, tareas y plantillas. Organízalas en espacios y sub-páginas.', color: 'blue' }),
+      mk('g-boards', 'note', 80, 330, 200, { title: '🎨 Tableros', content: 'Lienzo infinito: añade notas, enlaces e imágenes, arrástralas y conéctalas con flechas.', color: 'purple' }),
+      mk('g-steps', 'todo', 450, 330, 240, {
+        title: '✅ Primeros pasos',
+        todos: [
+          { id: '1', text: 'Crear tu propio espacio', completed: false },
+          { id: '2', text: 'Crear una página nueva', completed: false },
+          { id: '3', text: 'Añadir tarjetas y conectarlas', completed: false },
+          { id: '4', text: 'Configurar Supabase (opcional)', completed: false }
+        ],
+        color: 'emerald'
+      })
+    ] as never)
+    await db.canvasEdges.bulkPut([
+      { id: 'g-e1', workspaceId: guideBoardId, source: 'g-what', target: 'g-notes', label: 'Documentos', animated: true, color: '#6366f1', createdAt: now, updatedAt: now, isDeleted: false, syncStatus: 'pending' },
+      { id: 'g-e2', workspaceId: guideBoardId, source: 'g-what', target: 'g-boards', label: 'Visual', animated: false, color: '#ec4899', createdAt: now, updatedAt: now, isDeleted: false, syncStatus: 'pending' },
+      { id: 'g-e3', workspaceId: guideBoardId, source: 'g-boards', target: 'g-steps', label: 'Empieza', animated: false, color: '#10b981', createdAt: now, updatedAt: now, isDeleted: false, syncStatus: 'pending' }
+    ] as never)
+  }
+  if (typeof localStorage !== 'undefined') localStorage.setItem(WELCOME_GUIDE_KEY, 'true')
+}
+
 // Seed default initial data if database is empty
 let isSeeding = false
 
@@ -396,13 +480,15 @@ export async function seedInitialData() {
   try {
     await cleanupLegacyTemplatePresets()
 
+    await ensureWelcomeGuide()
+
     // If already seeded previously, do not recreate deleted demo spaces
     const alreadySeeded = typeof localStorage !== 'undefined' ? localStorage.getItem(DEMO_SEEDED_KEY) : null
     const spaceCount = await db.spaces.count()
     if (spaceCount === 0 && !alreadySeeded) {
       await db.spaces.put({
         id: DEFAULT_SPACE_ID,
-        name: 'Demo Workspace',
+        name: 'Bienvenido',
         icon: '⚡',
         color: '#1e96eb',
         createdAt: Date.now(),
