@@ -244,13 +244,20 @@ class SyncEngine {
             is_private: Boolean(s.isPrivate),
             admin_only: Boolean(s.adminOnly),
             sort_order: typeof s.sortOrder === 'number' ? s.sortOrder : s.createdAt,
+            folder_order: Array.isArray(s.folderOrder) ? s.folderOrder : null,
             owner_member: s.ownerMember || currentMember.id,
             user_id: authUserId
           }))
           let { error: spError } = await supabase.from('seven_spaces').upsert(payload, { onConflict: 'id' })
-          if (spError && (spError.message?.includes('admin_only') || spError.message?.includes('sort_order') || spError.message?.includes('schema cache'))) {
-            // Respaldo si Supabase aún no tiene las columnas admin_only / sort_order
-            const fallbackPayload = payload.map(({ admin_only: _a, sort_order: _s, ...rest }) => rest)
+          if (
+            spError &&
+            (spError.message?.includes('admin_only') ||
+              spError.message?.includes('sort_order') ||
+              spError.message?.includes('folder_order') ||
+              spError.message?.includes('schema cache'))
+          ) {
+            // Respaldo si Supabase aún no tiene las columnas admin_only / sort_order / folder_order
+            const fallbackPayload = payload.map(({ admin_only: _a, sort_order: _s, folder_order: _f, ...rest }) => rest)
             const retry = await supabase.from('seven_spaces').upsert(fallbackPayload, { onConflict: 'id' })
             spError = retry.error
           }
@@ -563,6 +570,7 @@ class SyncEngine {
               isPrivate: Boolean(rs.is_private),
               adminOnly: Boolean(rs.admin_only),
               sortOrder: typeof rs.sort_order === 'number' ? rs.sort_order : rs.created_at,
+              folderOrder: Array.isArray(rs.folder_order) ? rs.folder_order : undefined,
               ownerMember: rs.owner_member,
               userId: rs.user_id,
               syncStatus: 'synced'

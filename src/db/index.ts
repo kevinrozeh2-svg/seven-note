@@ -18,6 +18,7 @@ export interface SpaceItem {
   isPrivate?: boolean
   adminOnly?: boolean
   sortOrder?: number
+  folderOrder?: string[]
   ownerMember?: string
   ownerName?: string
   userId?: string

@@ -195,12 +195,14 @@ create table if not exists public.seven_spaces (
   is_private boolean not null default false,
   admin_only boolean not null default false,
   sort_order double precision,
+  folder_order jsonb,
   owner_member text
 );
 
 alter table public.seven_spaces add column if not exists is_private boolean not null default false;
 alter table public.seven_spaces add column if not exists admin_only boolean not null default false;
 alter table public.seven_spaces add column if not exists sort_order double precision;
+alter table public.seven_spaces add column if not exists folder_order jsonb;
 alter table public.seven_spaces add column if not exists owner_member text;
 alter table public.seven_spaces add column if not exists viewed_by text[];
 

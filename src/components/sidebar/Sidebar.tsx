@@ -469,8 +469,10 @@ export function Sidebar({
   const draggedFolderNameRef = useRef<string | null>(null)
   const hasJustDraggedRef = useRef<boolean>(false)
 
-  // Persisted folder order for current space
+  // Persisted folder order for current space (synced via db.spaces + Supabase)
+  const spaceFolderOrder = (currentSpace as SpaceItem).folderOrder
   const [folderOrder, setFolderOrder] = useState<string[]>(() => {
+    if (Array.isArray(spaceFolderOrder)) return spaceFolderOrder
     try {
       const saved = localStorage.getItem(`seven_note_folder_order_${currentSpace.id}`)
       return saved ? JSON.parse(saved) : []
@@ -480,13 +482,56 @@ export function Sidebar({
   })
 
   useEffect(() => {
+    if (Array.isArray(spaceFolderOrder)) {
+      setFolderOrder(spaceFolderOrder)
+      try {
+        localStorage.setItem(`seven_note_folder_order_${currentSpace.id}`, JSON.stringify(spaceFolderOrder))
+      } catch {}
+      return
+    }
+
     try {
       const saved = localStorage.getItem(`seven_note_folder_order_${currentSpace.id}`)
-      setFolderOrder(saved ? JSON.parse(saved) : [])
+      const parsed: string[] = saved ? JSON.parse(saved) : []
+      setFolderOrder(parsed)
+      // Migrate existing localStorage-only folder order into db.spaces so it syncs across devices
+      if (parsed.length > 0 && visibleSpaces.some((s) => s.id === currentSpace.id)) {
+        db.spaces
+          .update(currentSpace.id, {
+            folderOrder: parsed,
+            updatedAt: Date.now(),
+            syncStatus: 'pending'
+          })
+          .then(() => syncEngine.scheduleSync(500))
+          .catch(() => {})
+      }
     } catch {
       setFolderOrder([])
     }
-  }, [currentSpace.id])
+  }, [currentSpace.id, spaceFolderOrder])
+
+  const persistFolderOrder = useCallback(
+    (nextOrUpdater: string[] | ((prev: string[]) => string[])) => {
+      setFolderOrder((prev) => {
+        const next = typeof nextOrUpdater === 'function' ? nextOrUpdater(prev) : nextOrUpdater
+        try {
+          localStorage.setItem(`seven_note_folder_order_${currentSpace.id}`, JSON.stringify(next))
+        } catch (err) {
+          console.warn('Error saving folder order', err)
+        }
+        db.spaces
+          .update(currentSpace.id, {
+            folderOrder: next,
+            updatedAt: Date.now(),
+            syncStatus: 'pending'
+          })
+          .then(() => syncEngine.scheduleSync(500))
+          .catch((err) => console.warn('Error syncing folder order', err))
+        return next
+      })
+    },
+    [currentSpace.id]
+  )
 
 
   // Create new page inside current workspace (can be private for activeMember or team document)
@@ -1038,8 +1083,8 @@ export function Sidebar({
       syncEngine.scheduleSync(500)
     }
 
-    // Update folderOrder in state and localStorage
-    setFolderOrder((prev) => {
+    // Update folderOrder in state, localStorage, and synced space
+    persistFolderOrder((prev) => {
       const next = prev.map((f) => {
         if (f === oldPath) return newPath
         if (f.startsWith(oldPath + '/')) {
@@ -1049,11 +1094,6 @@ export function Sidebar({
       })
       if (!next.includes(newPath)) {
         next.push(newPath)
-      }
-      try {
-        localStorage.setItem(`seven_note_folder_order_${currentSpace.id}`, JSON.stringify(next))
-      } catch (err) {
-        console.warn('Error saving folder order', err)
       }
       return next
     })
@@ -1272,17 +1312,13 @@ export function Sidebar({
         foldersPool
       )
 
-      setFolderOrder(updatedFolderOrder)
+      persistFolderOrder(updatedFolderOrder)
       setDocSortMode('custom')
 
       try {
-        localStorage.setItem(
-          `seven_note_folder_order_${currentSpace.id}`,
-          JSON.stringify(updatedFolderOrder)
-        )
         localStorage.setItem('seven_note_doc_sort_mode', 'custom')
       } catch (err) {
-        console.warn('Error saving folder order', err)
+        console.warn('Error saving sort mode', err)
       }
 
       toast.success(
@@ -1454,15 +1490,7 @@ export function Sidebar({
     setIsCreatingFolder(false)
     setNewFolderName('')
 
-    setFolderOrder((prev) => {
-      const next = prev.includes(trimmed) ? prev : [...prev, trimmed]
-      try {
-        localStorage.setItem(`seven_note_folder_order_${currentSpace.id}`, JSON.stringify(next))
-      } catch (err) {
-        console.warn('Error saving folder order', err)
-      }
-      return next
-    })
+    persistFolderOrder((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed]))
 
     await handleCreateWorkspace(null, trimmed, 'doc', false)
     toast.success(`Carpeta "${trimmed}" creada`)
@@ -1481,15 +1509,7 @@ export function Sidebar({
     setCreatingSubfolderParent(null)
     setNewSubfolderName('')
 
-    setFolderOrder((prev) => {
-      const next = prev.includes(fullPath) ? prev : [...prev, fullPath]
-      try {
-        localStorage.setItem(`seven_note_folder_order_${currentSpace.id}`, JSON.stringify(next))
-      } catch (err) {
-        console.warn('Error saving folder order', err)
-      }
-      return next
-    })
+    persistFolderOrder((prev) => (prev.includes(fullPath) ? prev : [...prev, fullPath]))
 
     await handleCreateWorkspace(null, fullPath, 'doc', false)
     toast.success(`Subcarpeta "${trimmed}" creada`)
@@ -1528,17 +1548,9 @@ export function Sidebar({
         syncEngine.scheduleSync(500)
       }
 
-      setFolderOrder((prev) => {
-        const next = prev.filter(
-          (f) => f !== folderPath && !f.startsWith(folderPath + '/')
-        )
-        try {
-          localStorage.setItem(`seven_note_folder_order_${currentSpace.id}`, JSON.stringify(next))
-        } catch (err) {
-          console.warn('Error saving folder order', err)
-        }
-        return next
-      })
+      persistFolderOrder((prev) =>
+        prev.filter((f) => f !== folderPath && !f.startsWith(folderPath + '/'))
+      )
 
       setFolderOpenMap((prev) => {
         const next = { ...prev }
