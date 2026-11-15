@@ -45,6 +45,11 @@ import { Sidebar } from './components/sidebar/Sidebar'
 import { RightSidebar } from './components/sidebar/RightSidebar'
 import { CommandPalette } from './components/modals/CommandPalette'
 import { initTauriUpdater } from './lib/tauriUpdater'
+import {
+  subscribeToWebUpdate,
+  applyWebUpdate,
+  showUpdateAvailableToast
+} from './lib/pwaUpdater'
 import { FindInPage } from './components/search/FindInPage'
 import { WorkbenchTabs, type WorkbenchTab } from './components/tabs/WorkbenchTabs'
 const ExternalShareView = lazy(() => import('./components/views/ExternalShareView').then(m => ({ default: m.ExternalShareView })))
@@ -109,10 +114,21 @@ function MainApp() {
     }
   })
   const [authLoading, setAuthLoading] = useState(true)
+  const [webUpdateAvailable, setWebUpdateAvailable] = useState(false)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const [authModalMode, setAuthModalMode] = useState<AuthMode>('login')
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
   const [isUserManagementModalOpen, setIsUserManagementModalOpen] = useState(false)
+
+  useEffect(() => {
+    return subscribeToWebUpdate(setWebUpdateAvailable)
+  }, [])
+
+  useEffect(() => {
+    if (!authLoading && webUpdateAvailable) {
+      showUpdateAvailableToast()
+    }
+  }, [authLoading, webUpdateAvailable])
 
   // Sincronizar sesión activa de Supabase Auth
   useEffect(() => {
@@ -1962,8 +1978,19 @@ function MainApp() {
               </div>
             )}
 
-            {/* Right section: Modo Focus, Presentation, Propiedades, Exportar, Compartir */}
+            {/* Right section: Actualizar, Modo Focus, Presentation, Propiedades, Exportar, Compartir */}
             <div className="flex items-center gap-1 shrink-0 pointer-events-auto">
+              {webUpdateAvailable && (
+                <button
+                  onClick={() => applyWebUpdate()}
+                  className="h-6 px-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-medium flex items-center gap-1 transition cursor-pointer shadow-xs"
+                  title="Hay una nueva versión disponible. Haz clic para actualizar la página."
+                >
+                  <Sparkle size={12} weight="fill" />
+                  <span>Actualizar</span>
+                </button>
+              )}
+
               {(activeViewMode === 'doc' || activeViewMode === 'split') && (
                 <button
                   onClick={() => setRightSidebarOpen((prev) => !prev)}

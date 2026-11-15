@@ -7,28 +7,55 @@ const UPDATE_TOAST_ID = 'seven-note-pwa-update';
 
 let swRegistration: ServiceWorkerRegistration | undefined;
 let updateSWFn: ((reloadPage?: boolean) => Promise<void>) | undefined;
+let updateAvailable = false;
+const updateListeners = new Set<(available: boolean) => void>();
 
-function showUpdateAvailableToast(): void {
-  // Defer slightly on initial page load so Sonner's <Toaster /> is mounted.
-  window.setTimeout(() => {
-    toast.info('Nueva actualización disponible', {
-      id: UPDATE_TOAST_ID,
-      description: 'Hay una nueva versión de Seven Note lista. Actualiza para ver los cambios.',
-      duration: Infinity,
-      action: {
-        label: 'Actualizar ahora',
-        onClick: () => {
-          if (updateSWFn) {
-            void updateSWFn(true);
-          } else if (swRegistration?.waiting) {
-            swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
-          } else {
-            window.location.reload();
-          }
-        },
+function notifyUpdateListeners(): void {
+  updateListeners.forEach((listener) => listener(updateAvailable));
+}
+
+function markUpdateAvailable(): void {
+  if (!updateAvailable) {
+    updateAvailable = true;
+    notifyUpdateListeners();
+  }
+  showUpdateAvailableToast();
+}
+
+export function isWebUpdateAvailable(): boolean {
+  return updateAvailable;
+}
+
+export function subscribeToWebUpdate(listener: (available: boolean) => void): () => void {
+  updateListeners.add(listener);
+  listener(updateAvailable);
+  return () => {
+    updateListeners.delete(listener);
+  };
+}
+
+export function applyWebUpdate(): void {
+  if (updateSWFn) {
+    void updateSWFn(true);
+  } else if (swRegistration?.waiting) {
+    swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
+  } else {
+    window.location.reload();
+  }
+}
+
+export function showUpdateAvailableToast(): void {
+  toast.info('Nueva actualización disponible', {
+    id: UPDATE_TOAST_ID,
+    description: 'Hay una nueva versión de Seven Note lista. Actualiza para ver los cambios.',
+    duration: Infinity,
+    action: {
+      label: 'Actualizar ahora',
+      onClick: () => {
+        applyWebUpdate();
       },
-    });
-  }, 400);
+    },
+  });
 }
 
 /**
@@ -51,10 +78,7 @@ export async function checkForWebUpdates(manual = false): Promise<void> {
     await reg.update();
 
     if (reg.waiting) {
-      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-      if (manual) {
-        toast.info('Aplicando nueva versión...');
-      }
+      markUpdateAvailable();
       return;
     }
 
@@ -94,20 +118,14 @@ export function initPwaAutoUpdate(): void {
   updateSWFn = registerSW({
     immediate: true,
     onNeedRefresh() {
-      if (updateSWFn) {
-        void updateSWFn(true);
-      } else if (swRegistration?.waiting) {
-        swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
-      } else {
-        showUpdateAvailableToast();
-      }
+      markUpdateAvailable();
     },
     onRegisteredSW(_swUrl, registration) {
       if (!registration) return;
       swRegistration = registration;
 
       if (registration.waiting) {
-        registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+        markUpdateAvailable();
       }
 
       const checkForUpdates = () => {

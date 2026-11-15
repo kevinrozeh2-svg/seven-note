@@ -51,7 +51,6 @@ import {
 import { CoverPickerPopover, type CoverConfig } from './CoverPickerPopover'
 import { NoteIconPickerModal, renderNoteIcon } from './NoteIconPickerModal'
 import {
-  EdgelessIcon,
   ToggleDownIcon,
   ToggleRightIcon,
   PlusIcon,
@@ -70,7 +69,6 @@ import {
   InformationIcon,
   DividerIcon,
   CloseIcon,
-  TemplateIcon,
   ImageIcon,
   LinkIcon,
   PageIcon,
@@ -333,8 +331,6 @@ export function DocEditor({
   spaces = [],
   onSelectWorkspace,
   onTitleChange,
-  onToggleViewMode,
-  onOpenTemplatesModal,
   readOnly = false
 }: DocEditorProps) {
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved')
@@ -1561,6 +1557,32 @@ export function DocEditor({
                 <ImageIcon className="w-3.5 h-3.5" />
               </button>
             </div>
+
+            {/* Icono y Portada de página */}
+            <div className="inline-flex items-center gap-0.5 p-0.5 rounded-full bg-white/80 dark:bg-[#1a1b1e]/80 backdrop-blur-md border border-black/[0.08] dark:border-white/[0.12] shadow-sm shrink-0">
+              <button
+                onClick={() => setIsIconModalOpen(true)}
+                className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${
+                  workspace.icon
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-300 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
+                }`}
+                title={workspace.icon ? 'Cambiar icono' : 'Añadir icono'}
+              >
+                <Smile className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => (workspace.hasCover ? setIsCoverPickerOpen(true) : handleAddDefaultCover())}
+                className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${
+                  workspace.hasCover
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-300 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
+                }`}
+                title={workspace.hasCover ? 'Cambiar portada' : 'Añadir portada'}
+              >
+                <Palette className="w-3.5 h-3.5" />
+              </button>
+            </div>
             <input
               type="file"
               ref={editorImageInputRef}
@@ -2538,32 +2560,6 @@ export function DocEditor({
             </div>
           )}
         </div>
-
-        {/* Action Pills Row ("Iniciar", "Plantilla", "Sin bordes") */}
-        {!readOnly && (
-          <div className="flex items-center gap-2 mb-6 flex-wrap select-none text-xs">
-          <span className="text-[var(--affine-text-secondary-color)] font-medium mr-1">Iniciar</span>
-
-          {/* Pill: Plantilla */}
-          <button
-            onClick={onOpenTemplatesModal}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--affine-background-secondary-color)] hover:bg-[var(--affine-hover-color)] border border-[var(--affine-border-color)] text-[var(--affine-text-primary-color)] transition shadow-xs cursor-pointer active:scale-95"
-          >
-            <span>Plantilla</span>
-            <TemplateIcon className="w-3.5 h-3.5 text-amber-500" />
-          </button>
-
-          {/* Pill 3: Sin bordes (Canvas / Edgeless mode) */}
-          <button
-            onClick={onToggleViewMode}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--affine-background-secondary-color)] hover:bg-[var(--affine-hover-color)] border border-[var(--affine-border-color)] text-[var(--affine-text-primary-color)] transition shadow-xs group cursor-pointer active:scale-95"
-            title="Alternar entre modo Página y Modo Sin bordes (Lienzo infinito)"
-          >
-            <span>Sin bordes</span>
-            <EdgelessIcon className="w-3.5 h-3.5 text-indigo-500 group-hover:scale-110 transition-transform" />
-          </button>
-          </div>
-        )}
 
         {/* Interactive Notion Database Component Widget */}
         {databaseData?.enabled && (
