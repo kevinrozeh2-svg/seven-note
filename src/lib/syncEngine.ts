@@ -188,7 +188,11 @@ class SyncEngine {
   }
 
   private handleRealtimeEvent = () => {
-    if (!this.isOnline || this.isSyncing) return
+    if (!this.isOnline) return
+    if (this.isSyncing) {
+      this.syncQueued = true
+      return
+    }
     if (Date.now() - this.lastPushCompletedAt < 1500) return
     this.scheduleSync(800)
   }
@@ -746,7 +750,7 @@ class SyncEngine {
       }
 
       // Pull Workspaces
-      const { data: remoteWorkspaces, error: wsPullErr } = await supabase
+      const { data: remoteWorkspacesData, error: wsPullErr } = await supabase
         .from('seven_workspaces')
         .select('*')
         .gt('updated_at', lastSync)
@@ -754,32 +758,84 @@ class SyncEngine {
       if (wsPullErr) {
         console.warn('Error pulling workspaces:', wsPullErr.message)
         hasPullErrors = true
-      } else if (remoteWorkspaces && remoteWorkspaces.length > 0) {
-        const localWsRows = await db.workspaces.bulkGet(remoteWorkspaces.map((rw: any) => rw.id))
-        const localWsMap = new Map(
-          localWsRows.filter((w): w is WorkspaceItem => Boolean(w)).map((w) => [w.id, w])
-        )
-        const wsToPut: WorkspaceItem[] = []
+      } else {
+        const allLocalWs = await db.workspaces.toArray()
+        const localWsMap = new Map(allLocalWs.map((w) => [w.id, w]))
+        const remoteWorkspaces: any[] = [...(remoteWorkspacesData || [])]
+        const fetchedWsIds = new Set(remoteWorkspaces.map((rw: any) => rw.id))
+        let allRemoteWsIds: Set<string> | null =
+          lastSync === 0 ? new Set(remoteWorkspaces.map((rw: any) => rw.id)) : null
 
-        for (const rw of remoteWorkspaces) {
+        const isWorkspaceAccessible = (rw: any): boolean => {
           if (rw.space_id && restrictedAdminSpaceIds.has(rw.space_id) && !isCurrentAdmin) {
-            continue
+            return false
           }
-          // Si la nota remota es privada y NO pertenece al miembro actual, NO la guardamos localmente
-          // ¡Ni siquiera el administrador puede recibir o guardar notas privadas de otros usuarios, y viceversa!
-          const isOwner =
+          if (!rw.is_private) return true
+          return (
             rw.owner_member === currentMember.id ||
             rw.owner_member === currentMember.name?.toLowerCase() ||
-            (currentMember.email && rw.owner_member?.toLowerCase() === currentMember.email.toLowerCase()) ||
+            (Boolean(currentMember.email) && rw.owner_member?.toLowerCase() === currentMember.email?.toLowerCase()) ||
             rw.user_id === currentMember.id ||
-            (authUserId && rw.user_id === authUserId) ||
+            (Boolean(authUserId) && rw.user_id === authUserId) ||
             TEAM_MEMBERS.some(
               (tm) =>
                 (tm.id === rw.owner_member || tm.name.toLowerCase() === rw.owner_member?.toLowerCase()) &&
-                (tm.id === currentMember.id || (currentMember.email && tm.email?.toLowerCase() === currentMember.email.toLowerCase()))
+                (tm.id === currentMember.id ||
+                  (Boolean(currentMember.email) && tm.email?.toLowerCase() === currentMember.email?.toLowerCase()))
             )
+          )
+        }
 
-          if (rw.is_private && !isOwner) {
+        // En sync incremental, verificar índice ligero para detectar documentos nuevos o actualizados
+        // que hayan quedado con un updated_at anterior a lastSync (p. ej. creados offline o por desfase de reloj).
+        if (lastSync > 0) {
+          const { data: remoteWsIndex, error: wsIndexErr } = await supabase
+            .from('seven_workspaces')
+            .select('id, updated_at, is_deleted, is_private, owner_member, user_id, space_id')
+
+          if (!wsIndexErr && remoteWsIndex) {
+            allRemoteWsIds = new Set(remoteWsIndex.map((r: any) => r.id))
+            const missingOrNewerIds: string[] = []
+
+            for (const r of remoteWsIndex) {
+              if (fetchedWsIds.has(r.id) || !isWorkspaceAccessible(r)) continue
+              const local = localWsMap.get(r.id)
+              if (!local) {
+                missingOrNewerIds.push(r.id)
+                continue
+              }
+              if (local.syncStatus !== 'pending') {
+                const remoteUpdated = this.clampTimestamp(Number(r.updated_at) || 0, nowServer)
+                if (remoteUpdated > (local.updatedAt || 0) || Boolean(r.is_deleted) !== Boolean(local.isDeleted)) {
+                  missingOrNewerIds.push(r.id)
+                }
+              }
+            }
+
+            for (let i = 0; i < missingOrNewerIds.length; i += 100) {
+              const batchIds = missingOrNewerIds.slice(i, i + 100)
+              const { data: missingRows, error: missingErr } = await supabase
+                .from('seven_workspaces')
+                .select('*')
+                .in('id', batchIds)
+              if (!missingErr && missingRows) {
+                for (const mr of missingRows) {
+                  if (!fetchedWsIds.has(mr.id)) {
+                    fetchedWsIds.add(mr.id)
+                    remoteWorkspaces.push(mr)
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        const wsToPut: WorkspaceItem[] = []
+
+        for (const rw of remoteWorkspaces) {
+          // Si la nota remota es privada y NO pertenece al miembro actual, NO la guardamos localmente
+          // ¡Ni siquiera el administrador puede recibir o guardar notas privadas de otros usuarios, y viceversa!
+          if (!isWorkspaceAccessible(rw)) {
             continue
           }
 
@@ -846,12 +902,10 @@ class SyncEngine {
           await db.workspaces.bulkPut(wsToPut)
         }
 
-        // En pull completo, eliminar notas locales ya sincronizadas que fueron borradas definitivamente en Supabase
-        if (lastSync === 0) {
-          const remoteWsIds = new Set(remoteWorkspaces.map((rw: any) => rw.id))
-          const allLocalWs = await db.workspaces.toArray()
+        // Eliminar notas locales ya sincronizadas que fueron borradas definitivamente en Supabase
+        if (allRemoteWsIds) {
           const wsToDelete = allLocalWs
-            .filter((lw) => lw.syncStatus === 'synced' && !remoteWsIds.has(lw.id))
+            .filter((lw) => lw.syncStatus === 'synced' && !allRemoteWsIds!.has(lw.id))
             .map((lw) => lw.id)
           if (wsToDelete.length > 0) {
             await db.workspaces.bulkDelete(wsToDelete).catch(() => {})

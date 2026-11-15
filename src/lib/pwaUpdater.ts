@@ -51,7 +51,10 @@ export async function checkForWebUpdates(manual = false): Promise<void> {
     await reg.update();
 
     if (reg.waiting) {
-      showUpdateAvailableToast();
+      reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      if (manual) {
+        toast.info('Aplicando nueva versión...');
+      }
       return;
     }
 
@@ -91,14 +94,20 @@ export function initPwaAutoUpdate(): void {
   updateSWFn = registerSW({
     immediate: true,
     onNeedRefresh() {
-      showUpdateAvailableToast();
+      if (updateSWFn) {
+        void updateSWFn(true);
+      } else if (swRegistration?.waiting) {
+        swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
+      } else {
+        showUpdateAvailableToast();
+      }
     },
     onRegisteredSW(_swUrl, registration) {
       if (!registration) return;
       swRegistration = registration;
 
       if (registration.waiting) {
-        showUpdateAvailableToast();
+        registration.waiting.postMessage({ type: 'SKIP_WAITING' });
       }
 
       const checkForUpdates = () => {
