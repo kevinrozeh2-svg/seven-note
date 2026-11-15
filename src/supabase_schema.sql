@@ -449,28 +449,23 @@ create policy "Eliminacion de seven_spaces" on public.seven_spaces
 -- SISTEMA DE 3 CAPAS:
 -- 1. Capa 1 (Admins: Kevin, Maikol, Marcos): Administran todo lo público, editan todo lo público. Contenido privado de cada cual está protegido.
 -- 2. Capa 2 (Trabajadores): Acceso a leer todas las notas y tableros. SOLO pueden editar lo que ellos mismos creen. Sus cosas privadas no las ve nadie más.
--- 3. Capa 3 (Usuarios externos): Solo acceden vía enlace compartido. Sin inicio de sesión. Estrictamente SOLO LECTURA.
+-- 3. Capa 3 (Usuarios externos): Solo acceden vía RPC validado por (workspace_id + share_token) de solo lectura, sin exposición masiva en la tabla.
 
 drop policy if exists "Lectura de workspaces" on public.seven_workspaces;
 drop policy if exists "Acceso total a seven_workspaces" on public.seven_workspaces;
 create policy "Lectura de workspaces" on public.seven_workspaces
-  for select using (
-    -- Capa 3: Visitante externo mediante enlace compartido activo
-    is_public_shared = true
-    -- Capa 1 y Capa 2: Usuarios autenticados del equipo
-    or (
-      auth.role() = 'authenticated'
-      and public.is_user_active(auth.uid())
-      and (
-        is_private = false
-        or user_id = auth.uid()
-      )
-      and not exists (
-        select 1 from public.seven_spaces sp
-        where sp.id = space_id
-          and coalesce(sp.admin_only, false) = true
-          and not public.is_admin(auth.uid())
-      )
+  for select to authenticated
+  using (
+    public.is_user_active(auth.uid())
+    and (
+      is_private = false
+      or user_id = auth.uid()
+    )
+    and not exists (
+      select 1 from public.seven_spaces sp
+      where sp.id = space_id
+        and coalesce(sp.admin_only, false) = true
+        and not public.is_admin(auth.uid())
     )
   );
 
@@ -517,7 +512,7 @@ create policy "Eliminacion de workspaces" on public.seven_workspaces
 
 -- E) CANVAS NODES & EDGES (Tarjetas y conexiones del lienzo)
 -- Siguen estrictamente las reglas de la nota/workspace padre:
--- - Capa 3: Lectura pública si la nota está compartida. Edición prohibida.
+-- - Capa 3: Acceso externo mediante RPC validado por token (`get_shared_workspace_bundle`), sin exposición masiva en las tablas.
 -- - Capa 1: Admins pueden editar nodos/edges si el tablero es público o propio.
 -- - Capa 2: Trabajadores SOLO pueden editar nodos/edges si ellos son los creadores del tablero.
 
@@ -525,18 +520,13 @@ drop policy if exists "Acceso total a seven_canvas_nodes" on public.seven_canvas
 drop policy if exists "Acceso seguro a seven_canvas_nodes" on public.seven_canvas_nodes;
 drop policy if exists "Lectura de seven_canvas_nodes" on public.seven_canvas_nodes;
 create policy "Lectura de seven_canvas_nodes" on public.seven_canvas_nodes
-  for select using (
-    exists (
+  for select to authenticated
+  using (
+    public.is_user_active(auth.uid())
+    and exists (
       select 1 from public.seven_workspaces w
       where w.id = seven_canvas_nodes.workspace_id
-      and (
-        w.is_public_shared = true
-        or (
-          auth.role() = 'authenticated'
-          and public.is_user_active(auth.uid())
-          and (w.is_private = false or w.user_id = auth.uid())
-        )
-      )
+      and (w.is_private = false or w.user_id = auth.uid())
     )
   );
 
@@ -600,18 +590,13 @@ drop policy if exists "Acceso total a seven_canvas_edges" on public.seven_canvas
 drop policy if exists "Acceso seguro a seven_canvas_edges" on public.seven_canvas_edges;
 drop policy if exists "Lectura de seven_canvas_edges" on public.seven_canvas_edges;
 create policy "Lectura de seven_canvas_edges" on public.seven_canvas_edges
-  for select using (
-    exists (
+  for select to authenticated
+  using (
+    public.is_user_active(auth.uid())
+    and exists (
       select 1 from public.seven_workspaces w
       where w.id = seven_canvas_edges.workspace_id
-      and (
-        w.is_public_shared = true
-        or (
-          auth.role() = 'authenticated'
-          and public.is_user_active(auth.uid())
-          and (w.is_private = false or w.user_id = auth.uid())
-        )
-      )
+      and (w.is_private = false or w.user_id = auth.uid())
     )
   );
 
@@ -722,3 +707,55 @@ begin
 exception
   when others then null;
 end $$;
+
+-- ========================================================
+-- 12. RPC PÚBLICO VALIDADO POR TOKEN PARA ENLACES EXTERNOS
+-- ========================================================
+create or replace function public.get_shared_workspace_bundle(
+  p_workspace_id text,
+  p_token text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_workspace public.seven_workspaces%rowtype;
+  v_nodes jsonb;
+  v_edges jsonb;
+begin
+  select *
+  into v_workspace
+  from public.seven_workspaces w
+  where w.id = p_workspace_id
+    and w.share_token = p_token
+    and w.is_public_shared = true
+    and w.is_deleted = false
+  limit 1;
+
+  if not found then
+    return null;
+  end if;
+
+  select coalesce(jsonb_agg(to_jsonb(n)), '[]'::jsonb)
+  into v_nodes
+  from public.seven_canvas_nodes n
+  where n.workspace_id = v_workspace.id
+    and coalesce(n.is_deleted, false) = false;
+
+  select coalesce(jsonb_agg(to_jsonb(e)), '[]'::jsonb)
+  into v_edges
+  from public.seven_canvas_edges e
+  where e.workspace_id = v_workspace.id
+    and coalesce(e.is_deleted, false) = false;
+
+  return jsonb_build_object(
+    'workspace', to_jsonb(v_workspace),
+    'nodes', v_nodes,
+    'edges', v_edges
+  );
+end;
+$$;
+
+grant execute on function public.get_shared_workspace_bundle(text, text) to anon, authenticated;

@@ -25,6 +25,7 @@ import { isItemUnread, NewBadge, useUnreadTrigger } from '../../lib/unreadTracke
 import { getCurrentMember } from '../../lib/teamAuth'
 import { useAppStore } from '../../store/useAppStore'
 import { AppleEmoji } from '../ui/AppleEmoji'
+import { Graph, Books, FileText } from '@phosphor-icons/react'
 
 interface CommandPaletteProps {
   isOpen: boolean
@@ -36,6 +37,12 @@ interface CommandPaletteProps {
   onToggleViewMode?: () => void
   darkMode?: boolean
   onToggleDarkMode?: () => void
+  onOpenSettings?: () => void
+  onOpenShortcuts?: () => void
+  onOpenImport?: () => void
+  onOpenAllDocs?: () => void
+  onOpenKnowledgeGraph?: () => void
+  onOpenTemplates?: () => void
 }
 
 export function CommandPalette({
@@ -47,7 +54,13 @@ export function CommandPalette({
   onCreateWorkspace,
   onToggleViewMode,
   darkMode: propDarkMode,
-  onToggleDarkMode
+  onToggleDarkMode,
+  onOpenSettings,
+  onOpenShortcuts,
+  onOpenImport,
+  onOpenAllDocs,
+  onOpenKnowledgeGraph,
+  onOpenTemplates
 }: CommandPaletteProps) {
   const [isGlobalEmojiOpen, setIsGlobalEmojiOpen] = useState(false)
   useUnreadTrigger()
@@ -211,7 +224,11 @@ export function CommandPalette({
 
                   <Command.Item
                     onSelect={() => {
-                      setSettingsOpen(true)
+                      if (onOpenSettings) {
+                        onOpenSettings()
+                      } else {
+                        setSettingsOpen(true)
+                      }
                       onClose()
                     }}
                     className="w-full flex items-center justify-between px-3 py-2 rounded-2xl text-left cursor-pointer transition text-xs text-[var(--app-text-primary)] data-[selected=true]:bg-black/[0.05] dark:data-[selected=true]:bg-white/[0.08] active:scale-[0.99]"
@@ -224,7 +241,11 @@ export function CommandPalette({
 
                   <Command.Item
                     onSelect={() => {
-                      setShortcutsOpen(true)
+                      if (onOpenShortcuts) {
+                        onOpenShortcuts()
+                      } else {
+                        setShortcutsOpen(true)
+                      }
                       onClose()
                     }}
                     className="w-full flex items-center justify-between px-3 py-2 rounded-2xl text-left cursor-pointer transition text-xs text-[var(--app-text-primary)] data-[selected=true]:bg-black/[0.05] dark:data-[selected=true]:bg-white/[0.08] active:scale-[0.99]"
@@ -240,7 +261,11 @@ export function CommandPalette({
 
                   <Command.Item
                     onSelect={() => {
-                      setImportOpen(true)
+                      if (onOpenImport) {
+                        onOpenImport()
+                      } else {
+                        setImportOpen(true)
+                      }
                       onClose()
                     }}
                     className="w-full flex items-center justify-between px-3 py-2 rounded-2xl text-left cursor-pointer transition text-xs text-[var(--app-text-primary)] data-[selected=true]:bg-black/[0.05] dark:data-[selected=true]:bg-white/[0.08] active:scale-[0.99]"
@@ -248,6 +273,57 @@ export function CommandPalette({
                     <div className="flex items-center gap-2.5">
                       <ImportIcon className="w-4 h-4 text-neutral-400" />
                       <span className="font-medium">Importar Markdown / JSON</span>
+                    </div>
+                  </Command.Item>
+
+                  <Command.Item
+                    onSelect={() => {
+                      if (onOpenAllDocs) {
+                        onOpenAllDocs()
+                      } else {
+                        window.dispatchEvent(new CustomEvent('seven-note-navigate-workspace', { detail: { viewType: 'all-docs', title: 'Todos los documentos' } }))
+                      }
+                      onClose()
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-2xl text-left cursor-pointer transition text-xs text-[var(--app-text-primary)] data-[selected=true]:bg-black/[0.05] dark:data-[selected=true]:bg-white/[0.08] active:scale-[0.99]"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <FileText size={16} className="text-blue-500" />
+                      <span className="font-medium">Todos los documentos</span>
+                    </div>
+                  </Command.Item>
+
+                  <Command.Item
+                    onSelect={() => {
+                      if (onOpenKnowledgeGraph) {
+                        onOpenKnowledgeGraph()
+                      } else {
+                        window.dispatchEvent(new CustomEvent('seven-note-navigate-workspace', { detail: { viewType: 'knowledge-graph', title: 'Vista gráfica' } }))
+                      }
+                      onClose()
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-2xl text-left cursor-pointer transition text-xs text-[var(--app-text-primary)] data-[selected=true]:bg-black/[0.05] dark:data-[selected=true]:bg-white/[0.08] active:scale-[0.99]"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Graph size={16} className="text-purple-500" />
+                      <span className="font-medium">Grafo Global (Knowledge Graph)</span>
+                    </div>
+                  </Command.Item>
+
+                  <Command.Item
+                    onSelect={() => {
+                      if (onOpenTemplates) {
+                        onOpenTemplates()
+                      } else {
+                        window.dispatchEvent(new CustomEvent('seven-note-navigate-workspace', { detail: { viewType: 'templates', title: 'Plantillas' } }))
+                      }
+                      onClose()
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2 rounded-2xl text-left cursor-pointer transition text-xs text-[var(--app-text-primary)] data-[selected=true]:bg-black/[0.05] dark:data-[selected=true]:bg-white/[0.08] active:scale-[0.99]"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Books size={16} className="text-amber-500" />
+                      <span className="font-medium">Galería de Plantillas</span>
                     </div>
                   </Command.Item>
 

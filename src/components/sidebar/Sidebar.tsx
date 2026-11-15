@@ -125,19 +125,18 @@ function DocumentItemIcon({
       return <Lock size={size} weight="duotone" className={className} />
     }
 
-    // Sidebar: always use the unified file-style icon by type
+    // Sidebar: always use the unified file-style icon by type when default
     const s = size + 3
     const CANVAS_ICONS = ['🎨', '🖼️', '🖼', 'canvas', 'palette', 'board', 'whiteboard']
+    const NOTE_ICONS = ['📝', '📄', '📃', '🗒️', '🗒', '📋', '🧾', 'doc', 'file-text', 'note', 'page']
+    if (icon && isEmoji(icon) && !NOTE_ICONS.includes(icon) && !CANVAS_ICONS.includes(icon)) {
+      return <AppleEmoji emoji={icon} size={size} className="shrink-0" />
+    }
     if (viewMode === 'canvas' || (icon && CANVAS_ICONS.includes(icon))) {
       return <PastelFileIcon kind="canvas" size={s} />
     }
     if (viewMode === 'split') return <PastelFileIcon kind="split" size={s} />
-    if (s > 0) return <PastelFileIcon kind="doc" size={s} />
-    const NOTE_ICONS = ['📝', '📄', '📃', '🗒️', '🗒', '📋', '🧾', 'doc', 'file-text', 'note', 'page']
     if (!icon || NOTE_ICONS.includes(icon) || CANVAS_ICONS.includes(icon)) {
-      if (icon && CANVAS_ICONS.includes(icon)) return <PastelFileIcon kind="canvas" size={s} />
-      if (viewMode === 'canvas') return <PastelFileIcon kind="canvas" size={s} />
-      if (viewMode === 'split') return <PastelFileIcon kind="split" size={s} />
       return <PastelFileIcon kind="doc" size={s} />
     }
 

@@ -1,14 +1,17 @@
+import { type RealtimeChannel } from '@supabase/supabase-js'
 import {
   db,
   type WorkspaceItem,
   type CanvasNodeItem,
   type CanvasEdgeItem,
+  type OfflineAsset,
   type SpaceItem,
   type CollectionItem,
   type TagItem
 } from '../db'
 import { getSupabaseClient, getStoredSupabaseConfig, getAuthUser } from './supabase'
 import { getCurrentMember, TEAM_MEMBERS, isUserAdmin, isWorkspaceOwner } from './teamAuth'
+import { computeImageHash, uploadToSupabaseStorage } from './imageOptimizer'
 
 export type NetworkStatus = 'online' | 'offline'
 export type SyncEngineState = 'idle' | 'syncing' | 'synced' | 'error' | 'offline' | 'unconfigured'
@@ -39,6 +42,9 @@ class SyncEngine {
   private syncIntervalSec: number = 30 // Por defecto cada 30 segundos
   private isSyncing = false
   private syncQueued = false
+  private realtimeChannel: RealtimeChannel | null = null
+  private realtimeClientRef: any = null
+  private lastPushCompletedAt = 0
 
   constructor() {
     // Restaurar lastSyncTime persistido
@@ -142,6 +148,52 @@ class SyncEngine {
     this.listeners.forEach((fn) => fn(status))
   }
 
+  private handleRealtimeEvent = () => {
+    if (!this.isOnline || this.isSyncing) return
+    if (Date.now() - this.lastPushCompletedAt < 1500) return
+    this.scheduleSync(800)
+  }
+
+  public async initRealtimeSubscription() {
+    if (!this.isOnline) return
+    const config = getStoredSupabaseConfig()
+    if (!config.enabled || !config.url || !config.anonKey) return
+
+    const supabase = getSupabaseClient()
+    if (!supabase) return
+
+    const authUser = await getAuthUser()
+    if (!authUser) return
+
+    if (this.realtimeChannel && this.realtimeClientRef === supabase) {
+      return
+    }
+    this.stopRealtimeSubscription()
+
+    this.realtimeClientRef = supabase
+    this.realtimeChannel = supabase
+      .channel('seven-note-sync')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'seven_workspaces' }, this.handleRealtimeEvent)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'seven_canvas_nodes' }, this.handleRealtimeEvent)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'seven_canvas_edges' }, this.handleRealtimeEvent)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'seven_spaces' }, this.handleRealtimeEvent)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'seven_collections' }, this.handleRealtimeEvent)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'seven_tags' }, this.handleRealtimeEvent)
+      .subscribe()
+  }
+
+  public stopRealtimeSubscription() {
+    if (this.realtimeChannel && this.realtimeClientRef) {
+      try {
+        this.realtimeClientRef.removeChannel(this.realtimeChannel)
+      } catch {
+        // ignore channel cleanup failures
+      }
+    }
+    this.realtimeChannel = null
+    this.realtimeClientRef = null
+  }
+
   public async updatePendingCount() {
     try {
       const [
@@ -150,14 +202,16 @@ class SyncEngine {
         pendingEdges,
         pendingSpaces,
         pendingCollections,
-        pendingTags
+        pendingTags,
+        pendingAssets
       ] = await Promise.all([
         db.workspaces.where('syncStatus').equals('pending').count(),
         db.canvasNodes.where('syncStatus').equals('pending').count(),
         db.canvasEdges.where('syncStatus').equals('pending').count(),
         db.spaces.where('syncStatus').equals('pending').count(),
         db.collections.where('syncStatus').equals('pending').count(),
-        db.tags.where('syncStatus').equals('pending').count()
+        db.tags.where('syncStatus').equals('pending').count(),
+        db.offlineAssets.where('syncStatus').equals('pending').count()
       ])
 
       this.pendingCount =
@@ -166,7 +220,8 @@ class SyncEngine {
         pendingEdges +
         pendingSpaces +
         pendingCollections +
-        pendingTags
+        pendingTags +
+        pendingAssets
 
       this.notify()
     } catch (e) {
@@ -226,6 +281,8 @@ class SyncEngine {
         return { success: true, message: 'Esperando sesión de usuario' }
       }
 
+      void this.initRealtimeSubscription()
+
       // Solo empujar cambios locales si hay sesión autenticada (las políticas RLS requieren usuario autenticado)
       if (authUserId) {
         // ==========================================
@@ -262,6 +319,7 @@ class SyncEngine {
             spError = retry.error
           }
           if (!spError) {
+            this.lastPushCompletedAt = Date.now()
             await db.spaces.bulkUpdate(
               pendingSpaces.map((s) => ({ key: s.id, changes: { syncStatus: 'synced' as const } }))
             )
@@ -363,6 +421,7 @@ class SyncEngine {
 
           const { error: wsError } = await supabase.from('seven_workspaces').upsert(payload, { onConflict: 'id' })
           if (!wsError) {
+            this.lastPushCompletedAt = Date.now()
             // Solo marcar como sincronizadas las notas que no cambiaron durante el envío
             // (si se borraron mientras se sincronizaba, siguen pendientes y se reenvían).
             await db.transaction('rw', db.workspaces, async () => {
@@ -375,6 +434,50 @@ class SyncEngine {
             })
           } else {
             console.warn('Warning syncing workspaces:', wsError.message)
+          }
+        }
+
+        // ==========================================
+        // 2B. PUSH: OFFLINE ASSETS (IMAGES / ATTACHMENTS)
+        // ==========================================
+        const pendingAssets = await db.offlineAssets.where('syncStatus').equals('pending').toArray()
+        if (pendingAssets.length > 0) {
+          for (const asset of pendingAssets as OfflineAsset[]) {
+            try {
+              const hash = await computeImageHash(asset.dataBlob)
+              const ext =
+                asset.mimeType === 'image/webp'
+                  ? 'webp'
+                  : asset.mimeType === 'image/jpeg'
+                    ? 'jpg'
+                    : asset.mimeType === 'image/png'
+                      ? 'png'
+                      : asset.name.split('.').pop()?.toLowerCase() || 'bin'
+              const folder = asset.mimeType.startsWith('image/') ? 'images' : 'files'
+              const path = `${folder}/${hash.slice(0, 20)}.${ext}`
+              const remoteUrl = await uploadToSupabaseStorage(asset.dataBlob, path)
+              if (remoteUrl) {
+                await db.offlineAssets.update(asset.id, { remoteUrl, syncStatus: 'synced' })
+                const wsNodes = await db.canvasNodes.where('workspaceId').equals(asset.workspaceId).toArray()
+                const matchingNodes = wsNodes.filter((n) => n.data?.assetId === asset.id)
+                if (matchingNodes.length > 0) {
+                  const now = Date.now()
+                  await db.canvasNodes.bulkUpdate(
+                    matchingNodes.map((n) => ({
+                      key: n.id,
+                      changes: {
+                        data: { ...(n.data || {}), url: remoteUrl, src: remoteUrl, isRemote: true },
+                        updatedAt: now,
+                        syncStatus: 'pending' as const
+                      }
+                    }))
+                  )
+                }
+                this.lastPushCompletedAt = Date.now()
+              }
+            } catch (assetErr) {
+              console.warn('Warning uploading offline asset:', asset.id, assetErr)
+            }
           }
         }
 
@@ -400,6 +503,7 @@ class SyncEngine {
 
           const { error: nodeError } = await supabase.from('seven_canvas_nodes').upsert(payload, { onConflict: 'id' })
           if (!nodeError) {
+            this.lastPushCompletedAt = Date.now()
             await db.canvasNodes.bulkUpdate(
               pendingNodes.map((n) => ({ key: n.id, changes: { syncStatus: 'synced' as const } }))
             )
@@ -433,6 +537,7 @@ class SyncEngine {
 
           const { error: edgeError } = await supabase.from('seven_canvas_edges').upsert(payload, { onConflict: 'id' })
           if (!edgeError) {
+            this.lastPushCompletedAt = Date.now()
             await db.canvasEdges.bulkUpdate(
               pendingEdges.map((e) => ({ key: e.id, changes: { syncStatus: 'synced' as const } }))
             )
@@ -460,6 +565,7 @@ class SyncEngine {
           }))
           const { error: colError } = await supabase.from('seven_collections').upsert(payload, { onConflict: 'id' })
           if (!colError) {
+            this.lastPushCompletedAt = Date.now()
             await db.collections.bulkUpdate(
               pendingCollections.map((c) => ({ key: c.id, changes: { syncStatus: 'synced' as const } }))
             )
@@ -484,6 +590,7 @@ class SyncEngine {
           }))
           const { error: tagError } = await supabase.from('seven_tags').upsert(payload, { onConflict: 'id' })
           if (!tagError) {
+            this.lastPushCompletedAt = Date.now()
             await db.tags.bulkUpdate(
               pendingTags.map((t) => ({ key: t.id, changes: { syncStatus: 'synced' as const } }))
             )
@@ -598,6 +705,12 @@ class SyncEngine {
         console.warn('Error pulling workspaces:', wsPullErr.message)
         hasPullErrors = true
       } else if (remoteWorkspaces && remoteWorkspaces.length > 0) {
+        const localWsRows = await db.workspaces.bulkGet(remoteWorkspaces.map((rw: any) => rw.id))
+        const localWsMap = new Map(
+          localWsRows.filter((w): w is WorkspaceItem => Boolean(w)).map((w) => [w.id, w])
+        )
+        const wsToPut: WorkspaceItem[] = []
+
         for (const rw of remoteWorkspaces) {
           if (rw.space_id && restrictedAdminSpaceIds.has(rw.space_id) && !isCurrentAdmin) {
             continue
@@ -620,7 +733,7 @@ class SyncEngine {
             continue
           }
 
-          const local = await db.workspaces.get(rw.id)
+          const local = localWsMap.get(rw.id)
           const remoteUpdated = Number(rw.updated_at) || 0
           // Cambios locales pendientes más recientes tienen prioridad (no resucitar notas borradas)
           if (local && local.syncStatus === 'pending' && (local.updatedAt || 0) >= remoteUpdated) {
@@ -629,7 +742,7 @@ class SyncEngine {
 
           if (!local || remoteUpdated > (local.updatedAt || 0)) {
             const meta = rw.metadata || {}
-            await db.workspaces.put({
+            wsToPut.push({
               id: rw.id,
               parentId: rw.parent_id,
               spaceId: rw.space_id || 'default-workspace',
@@ -683,14 +796,19 @@ class SyncEngine {
           }
         }
 
+        if (wsToPut.length > 0) {
+          await db.workspaces.bulkPut(wsToPut)
+        }
+
         // En pull completo, eliminar notas locales ya sincronizadas que fueron borradas definitivamente en Supabase
         if (lastSync === 0) {
           const remoteWsIds = new Set(remoteWorkspaces.map((rw: any) => rw.id))
           const allLocalWs = await db.workspaces.toArray()
-          for (const lw of allLocalWs) {
-            if (lw.syncStatus === 'synced' && !remoteWsIds.has(lw.id)) {
-              await db.workspaces.delete(lw.id).catch(() => {})
-            }
+          const wsToDelete = allLocalWs
+            .filter((lw) => lw.syncStatus === 'synced' && !remoteWsIds.has(lw.id))
+            .map((lw) => lw.id)
+          if (wsToDelete.length > 0) {
+            await db.workspaces.bulkDelete(wsToDelete).catch(() => {})
           }
         }
       }
@@ -705,14 +823,21 @@ class SyncEngine {
         console.warn('Error pulling canvas nodes:', nodesPullErr.message)
         hasPullErrors = true
       } else if (remoteNodes && remoteNodes.length > 0) {
+        const localNodeRows = await db.canvasNodes.bulkGet(remoteNodes.map((rn: any) => rn.id))
+        const localNodeMap = new Map(
+          localNodeRows.filter((n): n is CanvasNodeItem => Boolean(n)).map((n) => [n.id, n])
+        )
+        const nodesToDelete: string[] = []
+        const nodesToPut: CanvasNodeItem[] = []
+
         for (const rn of remoteNodes) {
-          const local = await db.canvasNodes.get(rn.id)
+          const local = localNodeMap.get(rn.id)
           if (rn.is_deleted) {
-            if (local) await db.canvasNodes.delete(rn.id).catch(() => {})
+            if (local) nodesToDelete.push(rn.id)
             continue
           }
           if (!local || rn.updated_at > local.updatedAt) {
-            await db.canvasNodes.put({
+            nodesToPut.push({
               id: rn.id,
               workspaceId: rn.workspace_id,
               type: rn.type,
@@ -728,6 +853,13 @@ class SyncEngine {
             })
           }
         }
+
+        if (nodesToDelete.length > 0) {
+          await db.canvasNodes.bulkDelete(nodesToDelete).catch(() => {})
+        }
+        if (nodesToPut.length > 0) {
+          await db.canvasNodes.bulkPut(nodesToPut)
+        }
       }
 
       // Pull Canvas Edges
@@ -740,14 +872,21 @@ class SyncEngine {
         console.warn('Error pulling canvas edges:', edgesPullErr.message)
         hasPullErrors = true
       } else if (remoteEdges && remoteEdges.length > 0) {
+        const localEdgeRows = await db.canvasEdges.bulkGet(remoteEdges.map((re: any) => re.id))
+        const localEdgeMap = new Map(
+          localEdgeRows.filter((e): e is CanvasEdgeItem => Boolean(e)).map((e) => [e.id, e])
+        )
+        const edgesToDelete: string[] = []
+        const edgesToPut: CanvasEdgeItem[] = []
+
         for (const re of remoteEdges) {
-          const local = await db.canvasEdges.get(re.id)
+          const local = localEdgeMap.get(re.id)
           if (re.is_deleted) {
-            if (local) await db.canvasEdges.delete(re.id).catch(() => {})
+            if (local) edgesToDelete.push(re.id)
             continue
           }
           if (!local || re.updated_at > local.updatedAt) {
-            await db.canvasEdges.put({
+            edgesToPut.push({
               id: re.id,
               workspaceId: re.workspace_id,
               source: re.source,
@@ -766,6 +905,13 @@ class SyncEngine {
             })
           }
         }
+
+        if (edgesToDelete.length > 0) {
+          await db.canvasEdges.bulkDelete(edgesToDelete).catch(() => {})
+        }
+        if (edgesToPut.length > 0) {
+          await db.canvasEdges.bulkPut(edgesToPut)
+        }
       }
 
       // Pull Collections
@@ -778,14 +924,21 @@ class SyncEngine {
         console.warn('Error pulling collections:', colPullErr.message)
         hasPullErrors = true
       } else if (remoteCollections && remoteCollections.length > 0) {
+        const localColRows = await db.collections.bulkGet(remoteCollections.map((rc: any) => rc.id))
+        const localColMap = new Map(
+          localColRows.filter((c): c is CollectionItem => Boolean(c)).map((c) => [c.id, c])
+        )
+        const colsToDelete: string[] = []
+        const colsToPut: CollectionItem[] = []
+
         for (const rc of remoteCollections) {
-          const local = await db.collections.get(rc.id)
+          const local = localColMap.get(rc.id)
           if (rc.is_deleted) {
-            if (local) await db.collections.delete(rc.id).catch(() => {})
+            if (local) colsToDelete.push(rc.id)
             continue
           }
           if (!local || rc.updated_at > local.updatedAt) {
-            await db.collections.put({
+            colsToPut.push({
               id: rc.id,
               spaceId: rc.space_id,
               name: rc.name,
@@ -799,6 +952,13 @@ class SyncEngine {
             })
           }
         }
+
+        if (colsToDelete.length > 0) {
+          await db.collections.bulkDelete(colsToDelete).catch(() => {})
+        }
+        if (colsToPut.length > 0) {
+          await db.collections.bulkPut(colsToPut)
+        }
       }
 
       // Pull Tags (incluyendo actualizaciones y eliminaciones)
@@ -810,10 +970,16 @@ class SyncEngine {
         console.warn('Error pulling tags:', tagPullErr.message)
         hasPullErrors = true
       } else if (remoteTags && remoteTags.length > 0) {
+        const localTagRows = await db.tags.bulkGet(remoteTags.map((rt: any) => rt.id))
+        const localTagMap = new Map(
+          localTagRows.filter((t): t is TagItem => Boolean(t)).map((t) => [t.id, t])
+        )
+        const tagsToPut: TagItem[] = []
+
         for (const rt of remoteTags) {
-          const local = await db.tags.get(rt.id)
+          const local = localTagMap.get(rt.id)
           if (!local || local.syncStatus !== 'pending') {
-            await db.tags.put({
+            tagsToPut.push({
               id: rt.id,
               spaceId: rt.space_id,
               name: rt.name,
@@ -823,6 +989,10 @@ class SyncEngine {
               syncStatus: 'synced'
             })
           }
+        }
+
+        if (tagsToPut.length > 0) {
+          await db.tags.bulkPut(tagsToPut)
         }
       }
 

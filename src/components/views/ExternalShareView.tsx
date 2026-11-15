@@ -35,7 +35,7 @@ export const ExternalShareView: React.FC<ExternalShareViewProps> = ({ workspaceI
           return
         }
 
-        // 2. Cargar desde Supabase
+        // 2. Cargar desde Supabase (RPC seguro validado por token; respaldo a tabla si aún no se migró RPC)
         const supabase = getSupabaseClient()
         if (!supabase) {
           if (local && local.shareToken === token) {
@@ -47,16 +47,35 @@ export const ExternalShareView: React.FC<ExternalShareViewProps> = ({ workspaceI
           throw new Error('No se pudo verificar la nota compartida con el servidor.')
         }
 
-        const { data, error: supaErr } = await supabase
-          .from('seven_workspaces')
-          .select('*')
-          .eq('id', workspaceId)
-          .eq('share_token', token)
-          .eq('is_public_shared', true)
-          .single()
+        let data: any = null
+        let bundleNodes: any[] | null = null
+        let bundleEdges: any[] | null = null
 
-        if (supaErr || !data) {
-          throw new Error('El enlace es inválido, ha expirado o el acceso público fue revocado por el propietario.')
+        const { data: rpcBundle, error: rpcErr } = await supabase.rpc('get_shared_workspace_bundle', {
+          p_workspace_id: workspaceId,
+          p_token: token
+        })
+
+        if (!rpcErr) {
+          if (!rpcBundle?.workspace) {
+            throw new Error('El enlace es inválido, ha expirado o el acceso público fue revocado por el propietario.')
+          }
+          data = rpcBundle.workspace
+          bundleNodes = Array.isArray(rpcBundle.nodes) ? rpcBundle.nodes : []
+          bundleEdges = Array.isArray(rpcBundle.edges) ? rpcBundle.edges : []
+        } else {
+          const { data: tableData, error: supaErr } = await supabase
+            .from('seven_workspaces')
+            .select('*')
+            .eq('id', workspaceId)
+            .eq('share_token', token)
+            .eq('is_public_shared', true)
+            .single()
+
+          if (supaErr || !tableData) {
+            throw new Error('El enlace es inválido, ha expirado o el acceso público fue revocado por el propietario.')
+          }
+          data = tableData
         }
 
         const meta = data.metadata || {}
@@ -90,13 +109,17 @@ export const ExternalShareView: React.FC<ExternalShareViewProps> = ({ workspaceI
 
         // También descargar los canvas nodes y edges si es modo canvas
         if (loaded.viewMode === 'canvas') {
-          const { data: nodes } = await supabase
-            .from('seven_canvas_nodes')
-            .select('*')
-            .eq('workspace_id', loaded.id)
-          if (nodes && nodes.length > 0) {
-            for (const n of nodes) {
-              await db.canvasNodes.put({
+          let nodes = bundleNodes
+          if (!nodes) {
+            const { data: queriedNodes } = await supabase
+              .from('seven_canvas_nodes')
+              .select('*')
+              .eq('workspace_id', loaded.id)
+            nodes = queriedNodes || []
+          }
+          if (nodes.length > 0) {
+            await db.canvasNodes.bulkPut(
+              nodes.map((n: any) => ({
                 id: n.id,
                 workspaceId: n.workspace_id,
                 type: n.type,
@@ -108,18 +131,22 @@ export const ExternalShareView: React.FC<ExternalShareViewProps> = ({ workspaceI
                 createdAt: n.created_at,
                 updatedAt: n.updated_at,
                 isDeleted: n.is_deleted,
-                syncStatus: 'synced'
-              })
-            }
+                syncStatus: 'synced' as const
+              }))
+            )
           }
 
-          const { data: edges } = await supabase
-            .from('seven_canvas_edges')
-            .select('*')
-            .eq('workspace_id', loaded.id)
-          if (edges && edges.length > 0) {
-            for (const e of edges) {
-              await db.canvasEdges.put({
+          let edges = bundleEdges
+          if (!edges) {
+            const { data: queriedEdges } = await supabase
+              .from('seven_canvas_edges')
+              .select('*')
+              .eq('workspace_id', loaded.id)
+            edges = queriedEdges || []
+          }
+          if (edges.length > 0) {
+            await db.canvasEdges.bulkPut(
+              edges.map((e: any) => ({
                 id: e.id,
                 workspaceId: e.workspace_id,
                 source: e.source,
@@ -134,9 +161,9 @@ export const ExternalShareView: React.FC<ExternalShareViewProps> = ({ workspaceI
                 createdAt: e.created_at,
                 updatedAt: e.updated_at,
                 isDeleted: e.is_deleted,
-                syncStatus: 'synced'
-              })
-            }
+                syncStatus: 'synced' as const
+              }))
+            )
           }
         }
 
@@ -261,7 +288,7 @@ export const ExternalShareView: React.FC<ExternalShareViewProps> = ({ workspaceI
             <CanvasBoard
               workspaceId={workspace.id}
               currentWorkspace={workspace}
-              darkMode={false}
+              darkMode={typeof window !== 'undefined' && localStorage.getItem('seven_note_theme') !== 'light'}
               readOnly={true}
             />
           )}

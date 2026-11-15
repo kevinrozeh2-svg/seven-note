@@ -101,6 +101,13 @@ function MainApp() {
   // Miembro activo del equipo
   const [currentMember, setCurrentMemberState] = useState<TeamMember>(() => getCurrentMember())
   const [authUser, setAuthUser] = useState<any>(null)
+  const [localOfflineBypass, setLocalOfflineBypass] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('seven_note_local_mode') === 'true'
+    } catch {
+      return false
+    }
+  })
   const [authLoading, setAuthLoading] = useState(true)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
   const [authModalMode, setAuthModalMode] = useState<AuthMode>('login')
@@ -119,11 +126,14 @@ function MainApp() {
     // 1. Comprobar usuario ya autenticado
     getAuthUser().then(async (user) => {
       if (user) {
+        localStorage.removeItem('seven_note_local_mode')
+        setLocalOfflineBypass(false)
         setAuthUser(user)
         const profile = await fetchUserProfile(user.id)
         const mapped = mapSupabaseUserToMember(user, profile)
         setCurrentMember(mapped)
         setCurrentMemberState(mapped)
+        syncEngine.initRealtimeSubscription()
         syncEngine.triggerSync()
       }
       setAuthLoading(false)
@@ -141,6 +151,8 @@ function MainApp() {
       const user = session?.user || null
       setAuthUser(user)
       if (user) {
+        localStorage.removeItem('seven_note_local_mode')
+        setLocalOfflineBypass(false)
         const profile = await fetchUserProfile(user.id)
         const mapped = mapSupabaseUserToMember(user, profile)
         setCurrentMember(mapped)
@@ -148,7 +160,10 @@ function MainApp() {
         if (event === 'SIGNED_IN') {
           syncEngine.resetLastSyncTime()
         }
+        syncEngine.initRealtimeSubscription()
         syncEngine.triggerSync()
+      } else {
+        syncEngine.stopRealtimeSubscription()
       }
       setAuthLoading(false)
     })
@@ -161,6 +176,7 @@ function MainApp() {
     return () => {
       unsubAuth()
       unsubMember()
+      syncEngine.stopRealtimeSubscription()
     }
   }, [])
 
@@ -173,12 +189,15 @@ function MainApp() {
   const handleSignOut = async () => {
     await signOutUser()
     await clearLocalUserData()
+    syncEngine.stopRealtimeSubscription()
     syncEngine.resetLastSyncTime()
+    localStorage.removeItem('seven_note_local_mode')
     localStorage.removeItem('seven_note_workbench_tabs')
     localStorage.removeItem('seven_note_workbench_active_tab')
     localStorage.removeItem('seven_note_active_space_id')
     localStorage.removeItem('seven_note_current_member')
     localStorage.removeItem('seven_note_current_profile')
+    setLocalOfflineBypass(false)
     setAuthUser(null)
     toast.info('Sesión cerrada correctamente')
   }
@@ -716,6 +735,9 @@ function MainApp() {
       if (e.key === '?' || ((e.ctrlKey || e.metaKey) && e.key === '/')) {
         e.preventDefault()
         setIsShortcutsOpen((prev) => !prev)
+      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === '\\' || e.key === '|' || e.code === 'Backslash')) {
+        e.preventDefault()
+        setRightSidebarOpen((prev) => !prev)
       } else if ((e.ctrlKey || e.metaKey) && e.key === '\\') {
         e.preventDefault()
         setSidebarOpen((prev) => !prev)
@@ -1214,6 +1236,72 @@ function MainApp() {
   const activeTab = tabs.find((t) => t.id === activeTabId)
   const activeViewMode: ViewMode = currentWorkspace?.viewMode || 'doc'
 
+  const pendingHashNoteIdRef = useRef<string | null>(
+    typeof window !== 'undefined' && window.location.hash.startsWith('#note=')
+      ? decodeURIComponent(window.location.hash.slice('#note='.length).split('&')[0])
+      : null
+  )
+
+  useEffect(() => {
+    if (!(authUser || localOfflineBypass)) return
+    const pendingId = pendingHashNoteIdRef.current
+    if (!pendingId) return
+
+    if (workspaces.length > 0) {
+      const target = workspaces.find(
+        (w) => w.id === pendingId && !w.isDeleted && isWorkspaceVisible(w, currentMember, authUser?.id)
+      )
+      if (target) {
+        pendingHashNoteIdRef.current = null
+        selectWorkspaceWithTab(target.id)
+        return
+      }
+    }
+
+    const timer = window.setTimeout(() => {
+      pendingHashNoteIdRef.current = null
+    }, 3500)
+    return () => window.clearTimeout(timer)
+  }, [authUser, localOfflineBypass, workspaces, currentMember])
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !(authUser || localOfflineBypass)) return
+    const hash = window.location.hash || ''
+    if (hash.includes('type=recovery') || hash.includes('access_token=') || hash.includes('error=')) {
+      return
+    }
+    const isSpecialView = Boolean(activeTab?.viewType && activeTab.viewType !== 'doc')
+    if (!pendingHashNoteIdRef.current && !isSpecialView && currentWorkspace?.id) {
+      const targetHash = `#note=${encodeURIComponent(currentWorkspace.id)}`
+      if (window.location.hash !== targetHash) {
+        window.history.replaceState(null, '', targetHash)
+      }
+    }
+  }, [authUser, localOfflineBypass, currentWorkspace?.id, activeTab?.viewType])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const handleHashChange = () => {
+      const hash = window.location.hash || ''
+      if (!hash.startsWith('#note=')) return
+      const noteId = decodeURIComponent(hash.slice('#note='.length).split('&')[0])
+      if (!noteId || noteId === currentWorkspace?.id) return
+      if (!(authUser || localOfflineBypass)) {
+        pendingHashNoteIdRef.current = noteId
+        return
+      }
+      const target = workspaces.find(
+        (w) => w.id === noteId && !w.isDeleted && isWorkspaceVisible(w, currentMember, authUser?.id)
+      )
+      if (target) {
+        pendingHashNoteIdRef.current = null
+        selectWorkspaceWithTab(target.id)
+      }
+    }
+    window.addEventListener('hashchange', handleHashChange)
+    return () => window.removeEventListener('hashchange', handleHashChange)
+  }, [authUser, localOfflineBypass, workspaces, currentMember, currentWorkspace?.id])
+
   // Pantalla de carga mientras se verifica la sesión
   if (authLoading) {
     return (
@@ -1228,8 +1316,8 @@ function MainApp() {
     )
   }
 
-  // Auth Gate: Bloqueo total de la web si no hay sesión iniciada
-  if (!authUser) {
+  // Auth Gate: Bloqueo si no hay sesión iniciada ni modo local offline activo
+  if (!authUser && !localOfflineBypass) {
     return (
       <div className="relative flex h-screen w-screen items-center justify-center bg-[#f8f9fa] dark:bg-[#121214] text-neutral-900 dark:text-neutral-100 font-sans select-none overflow-hidden">
         <Toaster position="top-right" richColors closeButton />
@@ -1238,7 +1326,14 @@ function MainApp() {
           canDismiss={false}
           initialMode={authModalMode}
           onClose={() => {}}
+          onContinueLocal={() => {
+            localStorage.setItem('seven_note_local_mode', 'true')
+            setLocalOfflineBypass(true)
+            toast.info('Trabajando en modo local (Offline)')
+          }}
           onAuthSuccess={(member) => {
+            localStorage.removeItem('seven_note_local_mode')
+            setLocalOfflineBypass(false)
             setCurrentMemberState(member)
             syncEngine.resetLastSyncTime()
             syncEngine.triggerSync()
@@ -1574,6 +1669,19 @@ function MainApp() {
                       <span>{activeViewMode === 'split' ? 'Cerrar vista dividida' : 'Vista dividida'}</span>
                     </button>
 
+                    {(activeViewMode === 'doc' || activeViewMode === 'split') && (
+                      <button
+                        onClick={() => {
+                          setRightSidebarOpen((prev) => !prev)
+                          setActiveDropdown(null)
+                        }}
+                        className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
+                      >
+                        <SidebarSimple size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
+                        <span>{rightSidebarOpen ? 'Ocultar Propiedades y Esquema' : 'Propiedades y Esquema (TOC)'}</span>
+                      </button>
+                    )}
+
                     {/* Toggle Ancho completo (Notion Full Width Style) */}
                     <button
                       onClick={async () => {
@@ -1672,7 +1780,11 @@ function MainApp() {
 
                     <button
                       onClick={() => {
-                        navigator.clipboard.writeText(window.location.href)
+                        const targetId = currentWorkspace?.id || currentWorkspaceId
+                        const noteUrl = targetId
+                          ? `${window.location.origin}/#note=${encodeURIComponent(targetId)}`
+                          : window.location.href
+                        navigator.clipboard.writeText(noteUrl)
                         setCopiedLink(true)
                         toast.success('Enlace copiado al portapapeles')
                         setTimeout(() => setCopiedLink(false), 2000)
@@ -1850,12 +1962,26 @@ function MainApp() {
               </div>
             )}
 
-            {/* Right section: Modo Focus, Presentation, Exportar, Compartir */}
+            {/* Right section: Modo Focus, Presentation, Propiedades, Exportar, Compartir */}
             <div className="flex items-center gap-1 shrink-0 pointer-events-auto">
+              {(activeViewMode === 'doc' || activeViewMode === 'split') && (
+                <button
+                  onClick={() => setRightSidebarOpen((prev) => !prev)}
+                  className={`w-6 h-6 rounded flex items-center justify-center transition cursor-pointer ${
+                    rightSidebarOpen
+                      ? 'bg-[var(--app-hover)] text-[var(--app-text-primary)]'
+                      : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
+                  }`}
+                  title="Propiedades y Esquema (Ctrl+Shift+\)"
+                >
+                  <SidebarSimple size={14} weight={rightSidebarOpen ? 'fill' : 'regular'} />
+                </button>
+              )}
+
               {/* Focus mode toggle */}
               <button
                 onClick={() => setFocusMode(true)}
-                className="w-6 h-6 rounded flex items-center justify-center text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5 transition cursor-pointer"
+                className="w-6 h-6 rounded flex items-center justify-center text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition cursor-pointer"
                 title="Modo Concentración Zen (Ctrl+Shift+F)"
               >
                 <ArrowsOutLineHorizontal size={14} />
@@ -2103,7 +2229,7 @@ function MainApp() {
               ) : (
                 /* Split View */
                 <div key={`split-${currentWorkspace.id}`} className="flex-1 flex h-full overflow-hidden sn-view-enter">
-                  <div className="w-1/2 h-full overflow-hidden border-r border-[#242428]">
+                  <div className="w-1/2 h-full overflow-hidden border-r border-[var(--app-border)]">
                     <DocEditor
                       workspace={currentWorkspace}
                       allWorkspaces={publicWorkspaces}
@@ -2154,7 +2280,7 @@ function MainApp() {
 
       {/* 3. Right Sidebar (Propiedades, Outline, Historial) */}
       <AnimatePresence initial={false}>
-        {rightSidebarOpen && !isPresentationMode && activeViewMode === 'doc' && (
+        {rightSidebarOpen && !isPresentationMode && !focusMode && (activeViewMode === 'doc' || activeViewMode === 'split') && (
           <motion.div
             key="right-sidebar"
             initial={{ opacity: 0, x: 16 }}
@@ -2212,6 +2338,12 @@ function MainApp() {
           toast.success('Página creada')
         }}
         onToggleViewMode={() => setViewMode(activeViewMode === 'canvas' ? 'doc' : 'canvas')}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenShortcuts={() => setIsShortcutsOpen(true)}
+        onOpenImport={() => setIsImportOpen(true)}
+        onOpenAllDocs={() => openSpecialViewTab('all-docs', 'Todos los documentos')}
+        onOpenKnowledgeGraph={() => openSpecialViewTab('knowledge-graph', 'Grafo de Conocimiento')}
+        onOpenTemplates={() => setIsTemplatesOpen(true)}
       />
 
       <Suspense fallback={null}>

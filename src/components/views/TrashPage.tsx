@@ -163,16 +163,16 @@ export const TrashPage: React.FC<TrashPageProps> = () => {
   )
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#18181b] text-neutral-200 select-none overflow-hidden">
+    <div className="flex-1 flex flex-col h-full bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] select-none overflow-hidden">
       {/* Header */}
-      <header className="h-auto min-h-14 py-2 px-4 sm:px-8 border-b border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between shrink-0 bg-[#18181b] gap-2.5">
+      <header className="h-auto min-h-14 py-2 px-4 sm:px-8 border-b border-[var(--app-border)] flex flex-col sm:flex-row sm:items-center justify-between shrink-0 bg-[var(--app-bg-primary)] gap-2.5">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-400 flex items-center justify-center shrink-0">
+          <div className="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-500 dark:text-rose-400 flex items-center justify-center shrink-0">
             <Trash2 className="w-4 h-4" />
           </div>
           <div>
-            <h2 className="text-sm font-semibold text-white">Papelera de reciclaje</h2>
-            <p className="text-[11px] text-neutral-400 hidden sm:block">
+            <h2 className="text-sm font-semibold text-[var(--app-text-primary)]">Papelera de reciclaje</h2>
+            <p className="text-[11px] text-[var(--app-text-muted)] hidden sm:block">
               {deletedWorkspaces.length} {deletedWorkspaces.length === 1 ? 'documento' : 'documentos'} en la papelera
             </p>
           </div>
@@ -186,13 +186,13 @@ export const TrashPage: React.FC<TrashPageProps> = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Buscar en papelera..."
-              className="flex-1 sm:w-44 px-2.5 py-1 text-xs bg-neutral-900 border border-neutral-700 rounded-md text-neutral-200 outline-none"
+              className="flex-1 sm:w-44 px-2.5 py-1 text-xs bg-[var(--app-bg-secondary)] border border-[var(--app-border)] rounded-md text-[var(--app-text-primary)] placeholder:text-[var(--app-text-muted)] outline-none focus:border-blue-500/50"
             />
           )}
           {deletedWorkspaces.length > 0 && (
             <button
               onClick={handleEmptyTrash}
-              className="px-3 py-1.5 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-medium border border-rose-500/20 transition flex items-center gap-1.5 shrink-0 cursor-pointer"
+              className="px-3 py-1.5 rounded-md bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-medium border border-rose-500/20 transition flex items-center gap-1.5 shrink-0 cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Vaciar papelera</span>
@@ -206,34 +206,34 @@ export const TrashPage: React.FC<TrashPageProps> = () => {
       <div className="flex-1 overflow-y-auto px-3 sm:px-6 md:px-10 py-4 sm:py-6 max-w-5xl w-full mx-auto space-y-4 custom-scrollbar">
         {deletedWorkspaces.length === 0 ? (
           <div className="py-24 text-center">
-            <div className="w-12 h-12 rounded-full bg-neutral-800/80 mx-auto flex items-center justify-center text-neutral-500 mb-3">
+            <div className="w-12 h-12 rounded-full bg-[var(--app-bg-secondary)] border border-[var(--app-border)] mx-auto flex items-center justify-center text-[var(--app-text-muted)] mb-3">
               <Trash2 className="w-5 h-5" />
             </div>
-            <p className="text-sm font-medium text-neutral-400">La papelera está vacía</p>
-            <p className="text-xs text-neutral-500 mt-1">Los documentos que elimines aparecerán aquí</p>
+            <p className="text-sm font-medium text-[var(--app-text-secondary)]">La papelera está vacía</p>
+            <p className="text-xs text-[var(--app-text-muted)] mt-1">Los documentos que elimines aparecerán aquí</p>
           </div>
         ) : (
           <div className="space-y-2">
             {filtered.map((doc) => (
               <div
                 key={doc.id}
-                className="flex items-center justify-between p-3.5 rounded-lg bg-neutral-900/50 border border-neutral-800 hover:border-neutral-700 transition"
+                className="flex items-center justify-between p-3.5 rounded-lg bg-[var(--app-bg-secondary)] border border-[var(--app-border)] hover:bg-[var(--app-hover)] transition"
               >
                 <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="w-9 h-9 rounded-md bg-neutral-800 flex items-center justify-center shrink-0 text-neutral-400">
+                  <div className="w-9 h-9 rounded-md bg-[var(--app-bg-primary)] border border-[var(--app-border)] flex items-center justify-center shrink-0 text-[var(--app-text-muted)]">
                     {doc.icon ? (
                       <AppleEmoji emoji={doc.icon} size={18} />
                     ) : doc.viewMode === 'canvas' ? (
-                      <Layout className="w-4 h-4 text-indigo-400" />
+                      <Layout className="w-4 h-4 text-indigo-500 dark:text-indigo-400" />
                     ) : (
-                      <FileText className="w-4 h-4 text-blue-400" />
+                      <FileText className="w-4 h-4 text-blue-500 dark:text-blue-400" />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h4 className="text-sm font-medium text-neutral-200 truncate">
+                    <h4 className="text-sm font-medium text-[var(--app-text-primary)] truncate">
                       {renderWithAppleEmoji(doc.title || 'Sin título')}
                     </h4>
-                    <p className="text-xs text-neutral-500 mt-0.5 font-mono">
+                    <p className="text-xs text-[var(--app-text-muted)] mt-0.5 font-mono">
                       Eliminado {formatRelativeTime(doc.updatedAt)}
                     </p>
                   </div>
@@ -242,14 +242,14 @@ export const TrashPage: React.FC<TrashPageProps> = () => {
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     onClick={() => handleRestore(doc.id)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-medium transition"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] border border-[var(--app-border)] text-[var(--app-text-primary)] text-xs font-medium transition cursor-pointer"
                   >
-                    <RotateCcw className="w-3.5 h-3.5 text-emerald-400" />
+                    <RotateCcw className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                     <span>Restaurar</span>
                   </button>
                   <button
                     onClick={() => handlePermanentDelete(doc.id)}
-                    className="p-1.5 rounded-md hover:bg-rose-500/20 text-neutral-400 hover:text-rose-400 transition"
+                    className="p-1.5 rounded-md hover:bg-rose-500/20 text-[var(--app-text-muted)] hover:text-rose-500 dark:hover:text-rose-400 transition cursor-pointer"
                     title="Eliminar definitivamente"
                   >
                     <Trash2 className="w-4 h-4" />

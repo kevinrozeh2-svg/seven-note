@@ -7,13 +7,19 @@ import {
   WebIcon,
   PageIcon,
   CodeIcon,
-  PrinterIcon,
-  AdminIcon
+  PrinterIcon
 } from '@blocksuite/icons/rc'
 import { Lock, Unlock } from 'lucide-react'
 import { db, type WorkspaceItem } from '../../db'
 import { syncEngine } from '../../lib/syncEngine'
 import { getCurrentMember } from '../../lib/teamAuth'
+import {
+  htmlToMarkdown,
+  exportDocumentAsMarkdown,
+  exportDocumentAsHtml,
+  exportDocumentAsJson,
+  printDocument
+} from '../../lib/exportUtils'
 import { toast } from 'sonner'
 import { AppleEmoji } from '../ui/AppleEmoji'
 
@@ -27,7 +33,6 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
   const [copiedLink, setCopiedLink] = useState(false)
   const [copiedMd, setCopiedMd] = useState(false)
   const [isPublic, setIsPublic] = useState(false)
-  const [permission, setPermission] = useState<'view' | 'edit'>('view')
   const [shareToken, setShareToken] = useState('')
   const [isPrivate, setIsPrivate] = useState(false)
 
@@ -36,7 +41,6 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
   useEffect(() => {
     if (workspace && isOpen) {
       setIsPublic(Boolean(workspace.isPublicShared))
-      setPermission(workspace.sharePermission || 'view')
       setShareToken(workspace.shareToken || crypto.randomUUID())
       setIsPrivate(Boolean(workspace.isPrivate))
     }
@@ -64,7 +68,7 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
     await db.workspaces.update(workspace.id, {
       isPublicShared: nextPublic,
       shareToken: token,
-      sharePermission: permission,
+      sharePermission: 'view',
       updatedAt: Date.now(),
       syncStatus: 'pending'
     })
@@ -72,21 +76,10 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
     toast.success(nextPublic ? 'Enlace público externo activado' : 'Enlace público externo desactivado')
   }
 
-  const handleChangePermission = async (newPerm: 'view' | 'edit') => {
-    setPermission(newPerm)
-    await db.workspaces.update(workspace.id, {
-      sharePermission: newPerm,
-      updatedAt: Date.now(),
-      syncStatus: 'pending'
-    })
-    syncEngine.scheduleSync(500)
-    toast.success(`Permiso cambiado a: ${newPerm === 'view' ? 'Solo lectura' : 'Permitir edición'}`)
-  }
-
   const handleTogglePrivate = async () => {
     const nextPrivate = !isPrivate
     setIsPrivate(nextPrivate)
-    const targetOwner = nextPrivate ? (workspace.ownerMember || currentMember.id) : (workspace.ownerMember || currentMember.id)
+    const targetOwner = workspace.ownerMember || currentMember.id
 
     await db.workspaces.update(workspace.id, {
       isPrivate: nextPrivate,
@@ -99,149 +92,19 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
     toast.success(nextPrivate ? 'Nota cambiada a MODO PRIVADO' : 'Nota compartida con todo el equipo')
   }
 
-  // Convert HTML content into high-fidelity markdown
-  const getMarkdownContent = () => {
-    let md = workspace.docContent || ''
-
-    // 1. Code blocks with language
-    md = md.replace(/<pre><code(?:\s+class="language-([a-zA-Z0-9_-]+)")?>([\s\S]*?)<\/code><\/pre>/gi, (_, lang, code) => {
-      const cleanCode = code
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&amp;/g, '&')
-      return `\n\`\`\`${lang || ''}\n${cleanCode.trim()}\n\`\`\`\n\n`
-    })
-
-    // 2. Callout containers
-    md = md.replace(/<div\s+class="callout(?:\s+callout-([a-zA-Z]+))?"[^>]*>([\s\S]*?)<\/div>/gi, (_, type, content) => {
-      const cleanContent = content.replace(/<[^>]*>/g, '').trim()
-      const alertType = type ? type.toUpperCase() : 'NOTE'
-      return `\n> [!${alertType}]\n> ${cleanContent.replace(/\n/g, '\n> ')}\n\n`
-    })
-
-    // 3. Details / Toggle blocks
-    md = md.replace(/<details[^>]*>\s*<summary[^>]*>([\s\S]*?)<\/summary>([\s\S]*?)<\/details>/gi, (_, summary, body) => {
-      const cleanSum = summary.replace(/<[^>]*>/g, '').trim()
-      const cleanBody = body.replace(/<[^>]*>/g, '').trim()
-      return `\n<details>\n<summary>${cleanSum}</summary>\n\n${cleanBody}\n</details>\n\n`
-    })
-
-    // 4. Blockquotes
-    md = md.replace(/<blockquote[^>]*>([\s\S]*?)<\/blockquote>/gi, (_, quote) => {
-      const cleanQuote = quote.replace(/<[^>]*>/g, '').trim()
-      return `\n> ${cleanQuote.replace(/\n/g, '\n> ')}\n\n`
-    })
-
-    // 5. Task list items (checked vs unchecked)
-    md = md.replace(/<li[^>]*data-type="taskItem"[^>]*data-checked="true"[^>]*>([\s\S]*?)<\/li>/gi, '- [x] $1\n')
-    md = md.replace(/<li[^>]*data-type="taskItem"[^>]*data-checked="false"[^>]*>([\s\S]*?)<\/li>/gi, '- [ ] $1\n')
-    md = md.replace(/<li[^>]*data-checked="true"[^>]*>([\s\S]*?)<\/li>/gi, '- [x] $1\n')
-    md = md.replace(/<li[^>]*data-checked="false"[^>]*>([\s\S]*?)<\/li>/gi, '- [ ] $1\n')
-
-    // 6. Regular list items
-    md = md.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, '- $1\n')
-
-    // 7. Headings & paragraphs & formatting
-    md = md
-      .replace(/<h1>([\s\S]*?)<\/h1>/gi, '\n# $1\n\n')
-      .replace(/<h2>([\s\S]*?)<\/h2>/gi, '\n## $1\n\n')
-      .replace(/<h3>([\s\S]*?)<\/h3>/gi, '\n### $1\n\n')
-      .replace(/<p>([\s\S]*?)<\/p>/gi, '$1\n\n')
-      .replace(/<strong>([\s\S]*?)<\/strong>/gi, '**$1**')
-      .replace(/<em>([\s\S]*?)<\/em>/gi, '*$1*')
-      .replace(/<code>([\s\S]*?)<\/code>/gi, '`$1`')
-      .replace(/<hr\s*\/?>/gi, '\n---\n\n')
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<[^>]*>/g, '')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&amp;/g, '&')
-      .trim()
-
-    // Title deduplication
-    const titleHeader = `# ${workspace.title}`
-    if (md.startsWith(titleHeader)) {
-      return md
-    }
-    return `${titleHeader}\n\n${md}`
-  }
-
-  const exportMarkdown = () => {
-    const md = getMarkdownContent()
-    const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${workspace.title.replace(/\s+/g, '_').toLowerCase() || 'nota'}.md`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
   const handleCopyMarkdown = async () => {
-    const md = getMarkdownContent()
+    const bodyMd = htmlToMarkdown(workspace.docContent || '')
+    const titleHeader = `# ${workspace.title}`
+    const md = bodyMd.startsWith(titleHeader) ? bodyMd : `${titleHeader}\n\n${bodyMd}`
     await navigator.clipboard.writeText(md)
     setCopiedMd(true)
     setTimeout(() => setCopiedMd(false), 2000)
   }
 
-  const exportHTML = () => {
-    const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>${workspace.title}</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; max-width: 760px; margin: 40px auto; padding: 0 20px; color: #222; }
-    h1 { border-bottom: 1px solid #eee; padding-bottom: 8px; }
-    ul[data-type="taskList"] { list-style: none; padding-left: 0; }
-    ul[data-type="taskList"] li { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-    blockquote { border-left: 3px solid #1e96eb; padding-left: 12px; color: #555; }
-    .callout { padding: 12px; border-radius: 8px; background: #f3f4f6; margin: 16px 0; }
-  </style>
-</head>
-<body>
-  <h1>${workspace.icon ? `${workspace.icon} ` : ''}${workspace.title}</h1>
-  ${workspace.docContent}
-</body>
-</html>`
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${workspace.title.replace(/\s+/g, '_').toLowerCase() || 'nota'}.html`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const handlePrintPDF = () => {
-    window.print()
-  }
-
   const exportJSONSnapshot = async () => {
     const nodes = await db.canvasNodes.where('workspaceId').equals(workspace.id).toArray()
     const edges = await db.canvasEdges.where('workspaceId').equals(workspace.id).toArray()
-
-    const snapshot = {
-      type: 'seven-note-snapshot',
-      version: '1.0',
-      exportedAt: new Date().toISOString(),
-      workspace,
-      canvas: {
-        nodes,
-        edges
-      }
-    }
-
-    const blob = new Blob([JSON.stringify(snapshot, null, 2)], {
-      type: 'application/json;charset=utf-8'
-    })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${workspace.title.replace(/\s+/g, '_').toLowerCase() || 'nota'}_snapshot.json`
-    a.click()
-    URL.revokeObjectURL(url)
+    exportDocumentAsJson(workspace, nodes, edges)
   }
 
   return (
@@ -386,18 +249,12 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
 
             {isPublic && (
               <div className="flex items-center justify-between p-2.5 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)] animate-in fade-in">
-                <div className="flex items-center gap-2 text-[var(--app-text-secondary)]">
-                  <AdminIcon style={{ width: 14, height: 14 }} />
-                  <span>Nivel de permisos para el visitante externo:</span>
-                </div>
-                <select
-                  value={permission}
-                  onChange={(e) => handleChangePermission(e.target.value as any)}
-                  className="rounded-md px-2.5 py-1 text-xs focus:outline-none border border-[var(--app-border)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] cursor-pointer font-medium"
-                >
-                  <option value="view">👁️ Solo lectura</option>
-                  <option value="edit">✏️ Permitir edición</option>
-                </select>
+                <span className="text-[11px] text-[var(--app-text-secondary)]">
+                  Acceso para visitantes externos sin cuenta
+                </span>
+                <span className="px-2 py-0.5 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)] text-[11px] font-medium text-[var(--app-text-primary)]">
+                  Solo lectura
+                </span>
               </div>
             )}
           </div>
@@ -409,8 +266,8 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
             </label>
             <div className="grid grid-cols-2 gap-2">
               <button
-                onClick={exportMarkdown}
-                className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] font-medium transition"
+                onClick={() => exportDocumentAsMarkdown(workspace)}
+                className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] font-medium transition cursor-pointer"
               >
                 <CodeIcon style={{ width: 14, height: 14 }} />
                 <span>Markdown (.md)</span>
@@ -418,7 +275,7 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
 
               <button
                 onClick={handleCopyMarkdown}
-                className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] font-medium transition"
+                className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] font-medium transition cursor-pointer"
               >
                 {copiedMd ? (
                   <DoneIcon style={{ width: 14, height: 14, color: '#10b981' }} />
@@ -429,16 +286,16 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
               </button>
 
               <button
-                onClick={exportHTML}
-                className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] font-medium transition"
+                onClick={() => exportDocumentAsHtml(workspace)}
+                className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] font-medium transition cursor-pointer"
               >
                 <PageIcon style={{ width: 14, height: 14 }} />
                 <span>Página (.html)</span>
               </button>
 
               <button
-                onClick={handlePrintPDF}
-                className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] font-medium transition"
+                onClick={printDocument}
+                className="flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] font-medium transition cursor-pointer"
               >
                 <PrinterIcon style={{ width: 14, height: 14 }} />
                 <span>Imprimir / PDF</span>
