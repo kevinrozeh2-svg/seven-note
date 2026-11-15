@@ -759,3 +759,58 @@ end;
 $$;
 
 grant execute on function public.get_shared_workspace_bundle(text, text) to anon, authenticated;
+
+-- ========================================================
+-- 13. RELOJ DEL SERVIDOR Y PROTECCIÓN CONTRA MARCAS DE TIEMPO FUTURAS
+-- ========================================================
+create or replace function public.get_server_time_ms()
+returns bigint
+language sql
+stable
+as $$
+  select (extract(epoch from now()) * 1000)::bigint;
+$$;
+
+grant execute on function public.get_server_time_ms() to anon, authenticated;
+
+create or replace function public.clamp_future_timestamps()
+returns trigger
+language plpgsql
+as $$
+declare
+  now_ms bigint := (extract(epoch from now()) * 1000)::bigint;
+begin
+  if new.updated_at is null or new.updated_at > now_ms then
+    new.updated_at := now_ms;
+  end if;
+  if new.created_at is not null and new.created_at > now_ms then
+    new.created_at := now_ms;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_clamp_timestamps_spaces on public.seven_spaces;
+create trigger trg_clamp_timestamps_spaces
+  before insert or update on public.seven_spaces
+  for each row execute function public.clamp_future_timestamps();
+
+drop trigger if exists trg_clamp_timestamps_workspaces on public.seven_workspaces;
+create trigger trg_clamp_timestamps_workspaces
+  before insert or update on public.seven_workspaces
+  for each row execute function public.clamp_future_timestamps();
+
+drop trigger if exists trg_clamp_timestamps_canvas_nodes on public.seven_canvas_nodes;
+create trigger trg_clamp_timestamps_canvas_nodes
+  before insert or update on public.seven_canvas_nodes
+  for each row execute function public.clamp_future_timestamps();
+
+drop trigger if exists trg_clamp_timestamps_canvas_edges on public.seven_canvas_edges;
+create trigger trg_clamp_timestamps_canvas_edges
+  before insert or update on public.seven_canvas_edges
+  for each row execute function public.clamp_future_timestamps();
+
+drop trigger if exists trg_clamp_timestamps_collections on public.seven_collections;
+create trigger trg_clamp_timestamps_collections
+  before insert or update on public.seven_collections
+  for each row execute function public.clamp_future_timestamps();

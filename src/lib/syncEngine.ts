@@ -45,6 +45,45 @@ class SyncEngine {
   private realtimeChannel: RealtimeChannel | null = null
   private realtimeClientRef: any = null
   private lastPushCompletedAt = 0
+  private serverClockOffset = 0
+  private lastClockSyncAt = 0
+
+  private getServerNow(): number {
+    return Date.now() + this.serverClockOffset
+  }
+
+  private async calibrateServerClock(supabase: any): Promise<void> {
+    if (Date.now() - this.lastClockSyncAt < 5 * 60_000) return
+    try {
+      const { data, error } = await supabase.rpc('get_server_time_ms')
+      if (!error && typeof data === 'number' && Number.isFinite(data)) {
+        this.serverClockOffset = data - Date.now()
+        this.lastClockSyncAt = Date.now()
+      }
+    } catch {
+      // Silencioso si el RPC aún no existe en la base de datos
+    }
+  }
+
+  private clampTimestamp(ts: number | undefined | null, nowServer: number): number {
+    if (!ts || !Number.isFinite(ts)) return nowServer
+    return Math.min(ts, nowServer)
+  }
+
+  private shouldApplyRemote(
+    local: { updatedAt?: number; syncStatus?: string } | undefined,
+    remoteUpdated: number,
+    nowServer: number
+  ): boolean {
+    if (!local) return true
+    if (local.syncStatus === 'pending' && (local.updatedAt || 0) >= remoteUpdated) {
+      return false
+    }
+    if (local.syncStatus === 'synced' && (local.updatedAt || 0) > nowServer + 5000) {
+      return true
+    }
+    return remoteUpdated > (local.updatedAt || 0)
+  }
 
   constructor() {
     // Restaurar lastSyncTime persistido
@@ -282,6 +321,8 @@ class SyncEngine {
       }
 
       void this.initRealtimeSubscription()
+      await this.calibrateServerClock(supabase)
+      const nowServer = this.getServerNow()
 
       // Solo empujar cambios locales si hay sesión autenticada (las políticas RLS requieren usuario autenticado)
       if (authUserId) {
@@ -295,8 +336,8 @@ class SyncEngine {
             name: s.name,
             icon: s.icon,
             color: s.color,
-            created_at: s.createdAt,
-            updated_at: s.updatedAt,
+            created_at: this.clampTimestamp(s.createdAt, nowServer),
+            updated_at: this.clampTimestamp(s.updatedAt, nowServer),
             is_deleted: Boolean(s.isDeleted),
             is_private: Boolean(s.isPrivate),
             admin_only: Boolean(s.adminOnly),
@@ -353,7 +394,13 @@ class SyncEngine {
         const staleIds: string[] = []
         const allowedPending = ownedPending.filter((w) => {
           const remoteUpdated = remoteVersions.get(w.id)
-          if (remoteUpdated !== undefined && remoteUpdated > (w.updatedAt || 0)) {
+          // Si la marca remota está en el futuro (> nowServer + 5s) por desfase de reloj de otro dispositivo,
+          // no debe bloquear ni descartar cambios locales válidos.
+          const effectiveRemoteUpdated =
+            remoteUpdated !== undefined && remoteUpdated > nowServer + 5000
+              ? nowServer
+              : remoteUpdated
+          if (effectiveRemoteUpdated !== undefined && effectiveRemoteUpdated > (w.updatedAt || 0)) {
             staleIds.push(w.id)
             return false
           }
@@ -377,8 +424,8 @@ class SyncEngine {
             color: w.color,
             view_mode: w.viewMode,
             doc_content: w.docContent,
-            created_at: w.createdAt,
-            updated_at: w.updatedAt,
+            created_at: this.clampTimestamp(w.createdAt, nowServer),
+            updated_at: this.clampTimestamp(w.updatedAt, nowServer),
             is_favorite: w.isFavorite,
             is_deleted: w.isDeleted,
             is_private: Boolean(w.isPrivate),
@@ -496,8 +543,8 @@ class SyncEngine {
             width: n.width,
             height: n.height,
             data: n.data,
-            created_at: n.createdAt,
-            updated_at: n.updatedAt,
+            created_at: this.clampTimestamp(n.createdAt, nowServer),
+            updated_at: this.clampTimestamp(n.updatedAt, nowServer),
             is_deleted: n.isDeleted
           }))
 
@@ -530,8 +577,8 @@ class SyncEngine {
             color: e.color,
             edge_type: e.edgeType || 'default',
             marker_end_type: e.markerEndType || 'arrow',
-            created_at: e.createdAt,
-            updated_at: e.updatedAt,
+            created_at: this.clampTimestamp(e.createdAt, nowServer),
+            updated_at: this.clampTimestamp(e.updatedAt, nowServer),
             is_deleted: e.isDeleted
           }))
 
@@ -559,8 +606,8 @@ class SyncEngine {
             icon: c.icon,
             color: c.color,
             doc_ids: c.docIds,
-            created_at: c.createdAt,
-            updated_at: c.updatedAt,
+            created_at: this.clampTimestamp(c.createdAt, nowServer),
+            updated_at: this.clampTimestamp(c.updatedAt, nowServer),
             is_deleted: Boolean(c.isDeleted)
           }))
           const { error: colError } = await supabase.from('seven_collections').upsert(payload, { onConflict: 'id' })
@@ -612,7 +659,9 @@ class SyncEngine {
       // para asegurar que dispositivos móviles o navegadores nuevos obtengan todo el contenido.
       const isInitialDevicePull = localWsCount === 0 || localSpacesCount <= 1
       // Ventana de seguridad de 2 minutos para evitar pérdida de cambios por desfase de reloj entre dispositivos
-      const lastSync = isInitialDevicePull ? 0 : Math.max(0, (this.lastSyncTime || 0) - 120_000)
+      // y limitar cualquier lastSyncTime previo que hubiera quedado en el futuro.
+      const effectiveLastSyncTime = Math.min(this.lastSyncTime || 0, nowServer)
+      const lastSync = isInitialDevicePull ? 0 : Math.max(0, effectiveLastSyncTime - 120_000)
 
       let hasPullErrors = false
       const restrictedAdminSpaceIds = new Set<string>()
@@ -665,14 +714,15 @@ class SyncEngine {
             continue
           }
 
-          if (!local || rs.updated_at > local.updatedAt) {
+          const remoteSpaceUpdated = this.clampTimestamp(Number(rs.updated_at) || 0, nowServer)
+          if (this.shouldApplyRemote(local, remoteSpaceUpdated, nowServer)) {
             await db.spaces.put({
               id: rs.id,
               name: rs.name,
               icon: rs.icon,
               color: rs.color,
-              createdAt: rs.created_at,
-              updatedAt: rs.updated_at,
+              createdAt: this.clampTimestamp(rs.created_at, nowServer),
+              updatedAt: remoteSpaceUpdated,
               isDeleted: false,
               isPrivate: Boolean(rs.is_private),
               adminOnly: Boolean(rs.admin_only),
@@ -734,13 +784,9 @@ class SyncEngine {
           }
 
           const local = localWsMap.get(rw.id)
-          const remoteUpdated = Number(rw.updated_at) || 0
-          // Cambios locales pendientes más recientes tienen prioridad (no resucitar notas borradas)
-          if (local && local.syncStatus === 'pending' && (local.updatedAt || 0) >= remoteUpdated) {
-            continue
-          }
+          const remoteUpdated = this.clampTimestamp(Number(rw.updated_at) || 0, nowServer)
 
-          if (!local || remoteUpdated > (local.updatedAt || 0)) {
+          if (this.shouldApplyRemote(local, remoteUpdated, nowServer)) {
             const meta = rw.metadata || {}
             wsToPut.push({
               id: rw.id,
@@ -752,7 +798,7 @@ class SyncEngine {
               color: rw.color,
               viewMode: rw.view_mode,
               docContent: rw.doc_content,
-              createdAt: rw.created_at,
+              createdAt: this.clampTimestamp(rw.created_at, nowServer),
               updatedAt: remoteUpdated,
               isFavorite: rw.is_favorite,
               // is_deleted en la nube = está en la papelera (el borrado definitivo elimina la fila)
@@ -836,7 +882,8 @@ class SyncEngine {
             if (local) nodesToDelete.push(rn.id)
             continue
           }
-          if (!local || rn.updated_at > local.updatedAt) {
+          const remoteNodeUpdated = this.clampTimestamp(Number(rn.updated_at) || 0, nowServer)
+          if (this.shouldApplyRemote(local, remoteNodeUpdated, nowServer)) {
             nodesToPut.push({
               id: rn.id,
               workspaceId: rn.workspace_id,
@@ -846,8 +893,8 @@ class SyncEngine {
               width: rn.width,
               height: rn.height,
               data: rn.data,
-              createdAt: rn.created_at,
-              updatedAt: rn.updated_at,
+              createdAt: this.clampTimestamp(rn.created_at, nowServer),
+              updatedAt: remoteNodeUpdated,
               isDeleted: rn.is_deleted,
               syncStatus: 'synced'
             })
@@ -885,7 +932,8 @@ class SyncEngine {
             if (local) edgesToDelete.push(re.id)
             continue
           }
-          if (!local || re.updated_at > local.updatedAt) {
+          const remoteEdgeUpdated = this.clampTimestamp(Number(re.updated_at) || 0, nowServer)
+          if (this.shouldApplyRemote(local, remoteEdgeUpdated, nowServer)) {
             edgesToPut.push({
               id: re.id,
               workspaceId: re.workspace_id,
@@ -898,8 +946,8 @@ class SyncEngine {
               color: re.color,
               edgeType: re.edge_type,
               markerEndType: re.marker_end_type,
-              createdAt: re.created_at,
-              updatedAt: re.updated_at,
+              createdAt: this.clampTimestamp(re.created_at, nowServer),
+              updatedAt: remoteEdgeUpdated,
               isDeleted: re.is_deleted,
               syncStatus: 'synced'
             })
@@ -937,7 +985,8 @@ class SyncEngine {
             if (local) colsToDelete.push(rc.id)
             continue
           }
-          if (!local || rc.updated_at > local.updatedAt) {
+          const remoteColUpdated = this.clampTimestamp(Number(rc.updated_at) || 0, nowServer)
+          if (this.shouldApplyRemote(local, remoteColUpdated, nowServer)) {
             colsToPut.push({
               id: rc.id,
               spaceId: rc.space_id,
@@ -945,8 +994,8 @@ class SyncEngine {
               icon: rc.icon,
               color: rc.color,
               docIds: Array.isArray(rc.doc_ids) ? rc.doc_ids : [],
-              createdAt: rc.created_at,
-              updatedAt: rc.updated_at,
+              createdAt: this.clampTimestamp(rc.created_at, nowServer),
+              updatedAt: remoteColUpdated,
               isDeleted: rc.is_deleted,
               syncStatus: 'synced'
             })
@@ -998,7 +1047,7 @@ class SyncEngine {
 
       // Actualizar timestamp de última sincronización solo si no hubo errores de red/descarga
       if (!hasPullErrors) {
-        this.lastSyncTime = Date.now()
+        this.lastSyncTime = this.getServerNow()
         localStorage.setItem(LAST_SYNC_KEY, this.lastSyncTime.toString())
         this.state = 'synced'
       } else {

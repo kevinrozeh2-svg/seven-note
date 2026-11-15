@@ -645,6 +645,10 @@ export function Sidebar({
       title: `${doc.title || 'Sin título'} (Copia)`,
       createdAt: now,
       updatedAt: now,
+      isDeleted: false,
+      isPublicShared: false,
+      shareToken: undefined,
+      sharePermission: undefined,
       syncStatus: 'pending',
       ownerMember: activeMember.id,
       ownerName: activeMember.name,
@@ -653,6 +657,7 @@ export function Sidebar({
       isNewItem: true
     }
     await db.workspaces.add(dupWs)
+    syncEngine.scheduleSync(500)
     onSelectWorkspace(newId, doc.spaceId || currentSpace.id, dupWs)
     toast.success('Copia de la nota creada')
   }
