@@ -21,6 +21,7 @@ import { db } from '../../db'
 import schemaSql from '../../supabase_schema.sql?raw'
 import { toast } from 'sonner'
 import { isTauri, checkForAppUpdates } from '../../lib/tauriUpdater'
+import { checkForWebUpdates } from '../../lib/pwaUpdater'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -448,14 +449,25 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
               >
                 Buscar actualizaciones
               </button>
-            ) : !isStandalone ? (
-              <button
-                onClick={handleInstallApp}
-                className="px-3.5 py-1.5 rounded-md text-xs font-medium text-white bg-[var(--app-accent)] hover:bg-[var(--app-accent-hover)] transition-colors cursor-pointer shrink-0"
-              >
-                Instalar App
-              </button>
-            ) : null}
+            ) : (
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => checkForWebUpdates(true)}
+                  className="px-3 py-1.5 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition-colors cursor-pointer"
+                >
+                  Buscar actualizaciones
+                </button>
+                {!isStandalone && (
+                  <button
+                    onClick={handleInstallApp}
+                    className="px-3.5 py-1.5 rounded-md text-xs font-medium text-white bg-[var(--app-accent)] hover:bg-[var(--app-accent-hover)] transition-colors cursor-pointer"
+                  >
+                    Instalar App
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
