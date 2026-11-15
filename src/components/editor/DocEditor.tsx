@@ -390,12 +390,12 @@ export function DocEditor({
     workspace.databaseData || null
   )
   const [isNotionMenuOpen, setIsNotionMenuOpen] = useState(false)
-  const [isActionRowNotionMenuOpen, setIsActionRowNotionMenuOpen] = useState(false)
 
   const isFirstRender = useRef(true)
   const saveTimeoutRef = useRef<any>(null)
   const editorImageInputRef = useRef<HTMLInputElement>(null)
   const titleTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const notionButtonRef = useRef<HTMLButtonElement>(null)
 
   const adjustTitleHeight = useCallback(() => {
     const el = titleTextareaRef.current
@@ -1380,7 +1380,8 @@ export function DocEditor({
             {/* Notion Tools Dropdown (Table, Board, List, Timeline, Calendar, Gallery) */}
             <div className="relative shrink-0">
               <button
-                onClick={() => setIsNotionMenuOpen(!isNotionMenuOpen)}
+                ref={notionButtonRef}
+                onClick={() => setIsNotionMenuOpen((prev) => !prev)}
                 className="h-7 sm:h-7.5 px-2.5 sm:px-3 rounded-full bg-white/80 dark:bg-[#1a1b1e]/80 hover:bg-white dark:hover:bg-[#25262b] backdrop-blur-md text-[var(--app-text-primary)] transition shadow-sm hover:shadow flex items-center gap-1.5 font-medium border border-black/[0.08] dark:border-white/[0.12] cursor-pointer active:scale-95 shrink-0"
                 title="Herramientas de Notion (Table, Board, List, Timeline, Calendar, Gallery)"
               >
@@ -1394,7 +1395,8 @@ export function DocEditor({
                 onClose={() => setIsNotionMenuOpen(false)}
                 onSelectView={handleActivateNotionView}
                 currentView={databaseData?.activeView}
-                className="fixed top-24 left-3 sm:absolute sm:left-0 sm:top-full sm:mt-2"
+                anchorRef={notionButtonRef}
+                usePortal
               />
             </div>
 
@@ -2537,54 +2539,10 @@ export function DocEditor({
           )}
         </div>
 
-        {/* Action Pills Row ("Iniciar", "Plantilla", "Sin bordes", Notion Tools) */}
+        {/* Action Pills Row ("Iniciar", "Plantilla", "Sin bordes") */}
         {!readOnly && (
           <div className="flex items-center gap-2 mb-6 flex-wrap select-none text-xs">
           <span className="text-[var(--affine-text-secondary-color)] font-medium mr-1">Iniciar</span>
-
-          {/* Notion Tools Dropdown Pill (Exact UI from Notion screenshot) */}
-          <div className="relative">
-            <button
-              onClick={() => setIsActionRowNotionMenuOpen(!isActionRowNotionMenuOpen)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[var(--affine-background-secondary-color)] hover:bg-[var(--affine-hover-color)] border border-[var(--affine-border-color)] text-[var(--affine-text-primary-color)] transition shadow-xs group cursor-pointer active:scale-95"
-              title="Herramientas y vistas de Notion"
-            >
-              <NotionTableIcon className="w-3.5 h-3.5 text-blue-500 group-hover:scale-110 transition-transform" />
-              <span className="font-medium">Vistas Notion</span>
-              <ChevronDown className="w-3 h-3 text-[var(--affine-text-secondary-color)]" />
-            </button>
-
-            <NotionViewsDropdown
-              isOpen={isActionRowNotionMenuOpen}
-              onClose={() => setIsActionRowNotionMenuOpen(false)}
-              onSelectView={handleActivateNotionView}
-              currentView={databaseData?.activeView}
-              className="absolute left-0 top-full mt-2"
-            />
-          </div>
-
-          {/* Direct Quick Pills for each of the 6 Notion tools */}
-          {NOTION_TOOLS.map((tool) => {
-            const Icon = tool.Icon
-            const isCurrent = databaseData?.enabled && databaseData?.activeView === tool.id
-            return (
-              <button
-                key={tool.id}
-                onClick={() => handleActivateNotionView(tool.id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full transition shadow-xs cursor-pointer active:scale-95 ${
-                  isCurrent
-                    ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900 font-semibold shadow-xs'
-                    : 'bg-[var(--affine-background-secondary-color)] hover:bg-[var(--affine-hover-color)] border border-[var(--affine-border-color)] text-[var(--affine-text-primary-color)]'
-                }`}
-                title={`Activar vista ${tool.label} en este documento`}
-              >
-                <Icon className={isCurrent ? 'text-white dark:text-neutral-900' : 'text-blue-500'} size={14} />
-                <span>{tool.label}</span>
-              </button>
-            )
-          })}
-
-          <div className="w-[1px] h-4 bg-black/[0.08] dark:bg-white/[0.1] mx-0.5" />
 
           {/* Pill: Plantilla */}
           <button

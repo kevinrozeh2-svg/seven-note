@@ -1,4 +1,5 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   type NotionDatabaseViewType
 } from '../../db'
@@ -18,6 +19,8 @@ export interface NotionViewsDropdownProps {
   currentView?: NotionDatabaseViewType
   className?: string
   style?: React.CSSProperties
+  anchorRef?: React.RefObject<HTMLElement | null>
+  usePortal?: boolean
 }
 
 export const NOTION_TOOLS = [
@@ -35,14 +38,47 @@ export const NotionViewsDropdown: React.FC<NotionViewsDropdownProps> = ({
   onSelectView,
   currentView,
   className = '',
-  style
+  style,
+  anchorRef,
+  usePortal = false
 }) => {
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const [portalPos, setPortalPos] = useState<{ top: number; left: number } | null>(null)
+
+  useLayoutEffect(() => {
+    if (!isOpen || !usePortal || !anchorRef?.current) {
+      setPortalPos(null)
+      return
+    }
+    const updatePosition = () => {
+      const el = anchorRef.current
+      if (!el) return
+      const rect = el.getBoundingClientRect()
+      const maxWidth = 180
+      const left = Math.max(12, Math.min(rect.left, window.innerWidth - maxWidth - 12))
+      setPortalPos({
+        top: rect.bottom + 8,
+        left
+      })
+    }
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+    }
+  }, [isOpen, usePortal, anchorRef])
 
   useEffect(() => {
     if (!isOpen) return
     const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+      const target = e.target as Node
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(target) &&
+        !anchorRef?.current?.contains(target)
+      ) {
         onClose()
       }
     }
@@ -55,14 +91,20 @@ export const NotionViewsDropdown: React.FC<NotionViewsDropdownProps> = ({
       document.removeEventListener('mousedown', handleClickOutside)
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [isOpen, onClose])
+  }, [isOpen, onClose, anchorRef])
 
   if (!isOpen) return null
+  if (usePortal && !portalPos) return null
 
-  return (
+  const mergedStyle: React.CSSProperties | undefined =
+    usePortal && portalPos
+      ? { position: 'fixed', top: portalPos.top, left: portalPos.left, ...style }
+      : style
+
+  const content = (
     <div
       ref={dropdownRef}
-      style={style}
+      style={mergedStyle}
       className={`z-50 w-[calc(100vw-32px)] max-w-[180px] sm:min-w-[165px] bg-[#1a1b1e] text-zinc-100 border border-zinc-800/90 rounded-xl sm:rounded-2xl shadow-2xl p-1 sm:p-1.5 flex flex-col gap-0.5 animate-in fade-in zoom-in-95 duration-100 select-none max-h-[60vh] overflow-y-auto custom-scrollbar ${className}`}
       onClick={(e) => e.stopPropagation()}
     >
@@ -90,4 +132,10 @@ export const NotionViewsDropdown: React.FC<NotionViewsDropdownProps> = ({
       })}
     </div>
   )
+
+  if (usePortal && typeof document !== 'undefined') {
+    return createPortal(content, document.body)
+  }
+
+  return content
 }
