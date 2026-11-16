@@ -43,7 +43,8 @@ import {
   type SpaceItem,
   DEFAULT_SPACE_ID,
   updateSpace,
-  normalizeFolderPath
+  normalizeFolderPath,
+  getSafeTimestamp
 } from '../../db'
 import { isItemUnread, NewBadge, NewDot, useUnreadTrigger } from '../../lib/unreadTracker'
 import { type SyncEngineStatus, syncEngine } from '../../lib/syncEngine'
@@ -677,9 +678,11 @@ export function Sidebar({
     }
     if (!confirm('¿Mover esta página a la papelera?')) return
     try {
-      const now = Date.now()
+      const now = getSafeTimestamp(targetWs?.updatedAt)
       await db.workspaces.update(id, {
         isDeleted: true,
+        trashedFolder: undefined,
+        trashedWithSpaceId: undefined,
         updatedAt: now,
         syncStatus: 'pending'
       })
@@ -691,13 +694,13 @@ export function Sidebar({
           await db.workspaces.update(child.id, {
             parentId: targetWs?.parentId || null,
             folder: child.folder || targetWs?.folder || null,
-            updatedAt: now,
+            updatedAt: getSafeTimestamp(child.updatedAt),
             syncStatus: 'pending'
           })
         }
       }
 
-      syncEngine.scheduleSync(500)
+      syncEngine.scheduleSync(50)
 
       if (id === currentWorkspaceId) {
         const targetSpaceId = targetWs?.spaceId || currentSpace.id
@@ -1137,7 +1140,6 @@ export function Sidebar({
       return
     }
 
-    const now = Date.now()
     const updates = affectedDocs
       .filter((w) => canUserEditWorkspace(w, activeMember, authUser?.id))
       .map((w) => {
@@ -1151,7 +1153,7 @@ export function Sidebar({
           key: w.id,
           changes: {
             folder: updatedFolder,
-            updatedAt: now,
+            updatedAt: getSafeTimestamp(w.updatedAt),
             syncStatus: 'pending' as const
           }
         }
@@ -1159,7 +1161,7 @@ export function Sidebar({
 
     if (updates.length > 0) {
       await db.workspaces.bulkUpdate(updates)
-      syncEngine.scheduleSync(500)
+      syncEngine.scheduleSync(50)
     }
 
     // Update folderOrder in state, localStorage, and synced space
@@ -1641,42 +1643,42 @@ export function Sidebar({
     const cleanPath = normalizeFolderPath(folderPath)
     if (!cleanPath) return
     const leaf = getFolderLeafName(cleanPath)
-    if (!confirm(`¿Eliminar la carpeta "${leaf}" y mover sus notas a la raíz?`)) return
+    if (!confirm(`¿Mover la carpeta "${leaf}" y sus notas a la papelera?`)) return
 
     const spaceDocs = await db.workspaces
       .where('spaceId')
       .equals(currentSpace.id)
-      .and((w) => !w.isPrivate)
       .toArray()
 
-    const docsToUpdate = spaceDocs.filter((w) => {
+    const activeDocsInFolder = spaceDocs.filter((w) => {
+      if (w.isDeleted) return false
       const f = normalizeFolderPath(w.folder)
       return f === cleanPath || (f !== null && f.startsWith(cleanPath + '/'))
     })
 
-    const uneditableActive = docsToUpdate.filter(
-      (w) => !w.isDeleted && !canUserEditWorkspace(w, activeMember, authUser?.id)
+    const undeletableActive = activeDocsInFolder.filter(
+      (w) => !canUserDeleteWorkspace(w, activeMember, authUser?.id)
     )
-    if (uneditableActive.length > 0) {
-      toast.error('Esta carpeta contiene notas de otros miembros que no puedes modificar.')
+    if (undeletableActive.length > 0) {
+      toast.error('Esta carpeta contiene notas de otros miembros que no puedes eliminar.')
       return
     }
 
     try {
-      const editableDocs = docsToUpdate.filter((w) => canUserEditWorkspace(w, activeMember, authUser?.id))
-      if (editableDocs.length > 0) {
-        const now = Date.now()
+      if (activeDocsInFolder.length > 0) {
         await db.workspaces.bulkUpdate(
-          editableDocs.map((w) => ({
+          activeDocsInFolder.map((w) => ({
             key: w.id,
             changes: {
-              folder: null,
-              updatedAt: now,
+              isDeleted: true,
+              trashedFolder: cleanPath,
+              trashedWithSpaceId: undefined,
+              updatedAt: getSafeTimestamp(w.updatedAt),
               syncStatus: 'pending' as const
             }
           }))
         )
-        syncEngine.scheduleSync(500)
+        syncEngine.scheduleSync(50)
       }
 
       persistFolderOrder((prev) =>
@@ -1693,9 +1695,23 @@ export function Sidebar({
         return next
       })
 
-      toast.success(`Carpeta "${leaf}" eliminada`)
+      if (activeDocsInFolder.some((w) => w.id === currentWorkspaceId)) {
+        const deletedIds = new Set(activeDocsInFolder.map((w) => w.id))
+        const remaining = workspaces.filter(
+          (w) =>
+            !deletedIds.has(w.id) &&
+            !w.isDeleted &&
+            (w.spaceId || DEFAULT_SPACE_ID) === currentSpace.id &&
+            isWorkspaceVisible(w, activeMember, authUser?.id)
+        )
+        if (remaining.length > 0) {
+          onSelectWorkspace(remaining[0].id, currentSpace.id)
+        }
+      }
+
+      toast.success(`Carpeta "${leaf}" movida a la papelera`)
     } catch (err) {
-      console.error('Error deleting folder', err)
+      console.error('Error moving folder to trash', err)
     }
   }
 
@@ -2905,7 +2921,7 @@ export function Sidebar({
               onSelectEmoji={async (emoji: string) => {
                 if (emojiPickerTarget.type === 'space') {
                   await updateSpace(emojiPickerTarget.id, { icon: emoji })
-                  syncEngine.scheduleSync(500)
+                  syncEngine.scheduleSync(50)
                 } else {
                   const targetDoc = workspaces.find((w) => w.id === emojiPickerTarget.id)
                   if (targetDoc && !canUserEditWorkspace(targetDoc, activeMember, authUser?.id)) {
@@ -2915,17 +2931,17 @@ export function Sidebar({
                   }
                   await db.workspaces.update(emojiPickerTarget.id, {
                     icon: emoji,
-                    updatedAt: Date.now(),
+                    updatedAt: getSafeTimestamp(targetDoc?.updatedAt),
                     syncStatus: 'pending'
                   })
-                  syncEngine.scheduleSync(500)
+                  syncEngine.scheduleSync(50)
                 }
                 setEmojiPickerTarget(null)
               }}
               onRemoveEmoji={async () => {
                 if (emojiPickerTarget.type === 'space') {
                   await updateSpace(emojiPickerTarget.id, { icon: '' })
-                  syncEngine.scheduleSync(500)
+                  syncEngine.scheduleSync(50)
                 } else {
                   const targetDoc = workspaces.find((w) => w.id === emojiPickerTarget.id)
                   if (targetDoc && !canUserEditWorkspace(targetDoc, activeMember, authUser?.id)) {
@@ -2935,10 +2951,10 @@ export function Sidebar({
                   }
                   await db.workspaces.update(emojiPickerTarget.id, {
                     icon: '',
-                    updatedAt: Date.now(),
+                    updatedAt: getSafeTimestamp(targetDoc?.updatedAt),
                     syncStatus: 'pending'
                   })
-                  syncEngine.scheduleSync(500)
+                  syncEngine.scheduleSync(50)
                 }
                 setEmojiPickerTarget(null)
               }}

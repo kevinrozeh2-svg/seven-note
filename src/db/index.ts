@@ -83,6 +83,26 @@ export function clearAllPendingHardDeletes(): void {
   }
 }
 
+let serverClockOffsetMs = 0
+
+export function setServerClockOffset(offsetMs: number): void {
+  if (Number.isFinite(offsetMs)) {
+    serverClockOffsetMs = offsetMs
+  }
+}
+
+export function getSafeTimestamp(prevUpdatedAt?: number | null): number {
+  const localNow = Date.now()
+  const serverNow = localNow + serverClockOffsetMs
+  return Math.max(localNow, serverNow, (prevUpdatedAt || 0) + 1)
+}
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+export function isValidUuid(val?: string | null): val is string {
+  return typeof val === 'string' && UUID_REGEX.test(val.trim())
+}
+
 export function normalizeFolderPath(path?: string | null): string | null {
   if (!path) return null
   const segments = path
@@ -204,6 +224,10 @@ export interface WorkspaceItem {
   viewedBy?: string[]
   isNewItem?: boolean
   userId?: string
+
+  // Trash grouping metadata (space/folder soft delete & restore)
+  trashedWithSpaceId?: string
+  trashedFolder?: string
 
   // Cover / Header Banner (Notion Style)
   hasCover?: boolean
@@ -1056,10 +1080,60 @@ export async function createSpace(
 }
 
 export async function updateSpace(id: string, updates: Partial<SpaceItem>): Promise<void> {
+  const existing = await db.spaces.get(id)
+  const nextUpdatedAt = getSafeTimestamp(existing?.updatedAt)
   await db.spaces.update(id, {
     ...updates,
-    updatedAt: Date.now(),
+    updatedAt: nextUpdatedAt,
     syncStatus: 'pending'
+  })
+}
+
+export async function moveSpaceToTrash(id: string): Promise<void> {
+  await db.transaction('rw', db.spaces, db.workspaces, async () => {
+    const sp = await db.spaces.get(id)
+    if (!sp) return
+    await db.spaces.update(id, {
+      isDeleted: true,
+      updatedAt: getSafeTimestamp(sp.updatedAt),
+      syncStatus: 'pending'
+    })
+
+    const pages = await db.workspaces.where('spaceId').equals(id).toArray()
+    for (const page of pages) {
+      if (!page.isDeleted) {
+        await db.workspaces.update(page.id, {
+          isDeleted: true,
+          trashedWithSpaceId: id,
+          updatedAt: getSafeTimestamp(page.updatedAt),
+          syncStatus: 'pending'
+        })
+      }
+    }
+  })
+}
+
+export async function restoreSpaceFromTrash(id: string): Promise<void> {
+  await db.transaction('rw', db.spaces, db.workspaces, async () => {
+    const sp = await db.spaces.get(id)
+    if (!sp) return
+    await db.spaces.update(id, {
+      isDeleted: false,
+      updatedAt: getSafeTimestamp(sp.updatedAt),
+      syncStatus: 'pending'
+    })
+
+    const pages = await db.workspaces.where('spaceId').equals(id).toArray()
+    for (const page of pages) {
+      if (page.isDeleted && page.trashedWithSpaceId === id) {
+        await db.workspaces.update(page.id, {
+          isDeleted: false,
+          trashedWithSpaceId: undefined,
+          updatedAt: getSafeTimestamp(page.updatedAt),
+          syncStatus: 'pending'
+        })
+      }
+    }
   })
 }
 
@@ -1073,13 +1147,34 @@ export async function deleteSpace(id: string): Promise<void> {
   const colIds = cols.map((c) => c.id)
   const tagIds = tags.map((t) => t.id)
 
+  // Limpiar imágenes en Supabase Storage asociadas a los documentos y tableros del espacio
+  try {
+    const { deleteImageFromStorage, extractStorageUrlsFromHtml } = await import('../lib/imageOptimizer')
+    for (const page of pages) {
+      const nodes = await db.canvasNodes.where('workspaceId').equals(page.id).toArray()
+      for (const n of nodes) {
+        if (n.data?.imageUrl) {
+          deleteImageFromStorage(n.data.imageUrl).catch(() => {})
+        }
+      }
+      if (page.docContent) {
+        const urls = extractStorageUrlsFromHtml(page.docContent)
+        for (const u of urls) {
+          deleteImageFromStorage(u).catch(() => {})
+        }
+      }
+    }
+  } catch {
+    // ignore storage cleanup errors
+  }
+
   // Registrar tombstones locales para que un fallo offline/de red no resucite el espacio ni sus notas
   recordPendingHardDeletes('spaces', [id])
   if (pageIds.length > 0) recordPendingHardDeletes('workspaces', pageIds)
   if (colIds.length > 0) recordPendingHardDeletes('collections', colIds)
   if (tagIds.length > 0) recordPendingHardDeletes('tags', tagIds)
 
-  // 1. Si Supabase está conectado, eliminar o marcar en la nube para que no resucite
+  // 1. Si Supabase está conectado, eliminar definitivamente de la nube
   const supabase = getSupabaseClient()
   if (supabase) {
     try {
@@ -1093,7 +1188,7 @@ export async function deleteSpace(id: string): Promise<void> {
         if (wsDelRes.error) {
           const wsSoftRes = await supabase
             .from('seven_workspaces')
-            .update({ is_deleted: true, updated_at: Date.now() })
+            .update({ is_deleted: true, updated_at: getSafeTimestamp() })
             .in('id', pageIds)
           wsCleared = !wsSoftRes.error
         }
@@ -1114,7 +1209,7 @@ export async function deleteSpace(id: string): Promise<void> {
       if (spDelRes.error) {
         const spSoftRes = await supabase
           .from('seven_spaces')
-          .update({ is_deleted: true, updated_at: Date.now() })
+          .update({ is_deleted: true, updated_at: getSafeTimestamp() })
           .eq('id', id)
         spaceCleared = !spSoftRes.error
       }
@@ -1143,6 +1238,8 @@ export async function deleteSpace(id: string): Promise<void> {
     // ignore
   }
 }
+
+export const permanentlyDeleteSpace = deleteSpace
 
 // Collections helpers
 export async function createCollection(

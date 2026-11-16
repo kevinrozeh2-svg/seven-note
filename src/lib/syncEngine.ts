@@ -13,8 +13,11 @@ import {
   clearPendingHardDeletes,
   markAccountSeeded,
   normalizeFolderPath,
-  seedInitialData
+  seedInitialData,
+  setServerClockOffset,
+  isValidUuid
 } from '../db'
+import { toast } from 'sonner'
 import { getSupabaseClient, getStoredSupabaseConfig, getAuthUser } from './supabase'
 import {
   getCurrentMember,
@@ -179,9 +182,31 @@ class SyncEngine {
       if (!error && typeof data === 'number' && Number.isFinite(data)) {
         this.serverClockOffset = data - Date.now()
         this.lastClockSyncAt = Date.now()
+        setServerClockOffset(this.serverClockOffset)
+        return
       }
     } catch {
-      // Silencioso si el RPC aún no existe en la base de datos
+      // Fallback al header Date HTTP si el RPC aún no existe en la base de datos
+    }
+    try {
+      const config = getStoredSupabaseConfig()
+      if (config.url && config.anonKey) {
+        const res = await fetch(`${config.url.replace(/\/$/, '')}/rest/v1/`, {
+          method: 'HEAD',
+          headers: { apikey: config.anonKey }
+        })
+        const dateHeader = res.headers.get('date')
+        if (dateHeader) {
+          const parsed = Date.parse(dateHeader)
+          if (Number.isFinite(parsed)) {
+            this.serverClockOffset = parsed - Date.now()
+            this.lastClockSyncAt = Date.now()
+            setServerClockOffset(this.serverClockOffset)
+          }
+        }
+      }
+    } catch {
+      // Silencioso si no se pudo leer el header Date
     }
   }
 
@@ -190,14 +215,27 @@ class SyncEngine {
     return Math.min(ts, nowServer)
   }
 
+  private isRemoteStrictlyNewer(
+    remoteUpdated: number | undefined,
+    localUpdatedAt: number | undefined,
+    nowServer: number
+  ): boolean {
+    if (remoteUpdated === undefined) return false
+    // Una marca de tiempo remota en el futuro (> nowServer + 5s) es un desfase de reloj externo
+    // y nunca debe marcar como obsoleta una edición local pendiente.
+    if (remoteUpdated > nowServer + 5000) return false
+    return remoteUpdated > (localUpdatedAt || 0)
+  }
+
   private shouldApplyRemote(
     local: { updatedAt?: number; syncStatus?: string } | undefined,
     remoteUpdated: number,
     nowServer: number
   ): boolean {
     if (!local) return true
-    if (local.syncStatus === 'pending' && (local.updatedAt || 0) >= remoteUpdated) {
-      return false
+    if (local.syncStatus === 'pending') {
+      if (remoteUpdated > nowServer + 5000) return false
+      return remoteUpdated > (local.updatedAt || 0)
     }
     if (local.syncStatus === 'synced' && (local.updatedAt || 0) > nowServer + 5000) {
       return true
@@ -521,11 +559,7 @@ class SyncEngine {
           const staleSpaceIds: string[] = []
           const allowedPendingSpaces = pendingSpaces.filter((s) => {
             const remoteUpdated = remoteSpaceVersions.get(s.id)
-            const effectiveRemoteUpdated =
-              remoteUpdated !== undefined && remoteUpdated > nowServer + 5000
-                ? nowServer
-                : remoteUpdated
-            if (effectiveRemoteUpdated !== undefined && effectiveRemoteUpdated > (s.updatedAt || 0)) {
+            if (this.isRemoteStrictlyNewer(remoteUpdated, s.updatedAt, nowServer)) {
               staleSpaceIds.push(s.id)
               return false
             }
@@ -553,7 +587,7 @@ class SyncEngine {
                 admin_only: Boolean(s.adminOnly),
                 sort_order: typeof s.sortOrder === 'number' ? s.sortOrder : s.createdAt,
                 owner_member: s.ownerMember || currentMember.id,
-                user_id: s.userId || authUserId
+                user_id: isValidUuid(s.userId) ? s.userId : authUserId
               }
               if (Array.isArray(s.folderOrder)) {
                 row.folder_order = s.folderOrder
@@ -566,10 +600,14 @@ class SyncEngine {
               (spError.message?.includes('admin_only') ||
                 spError.message?.includes('sort_order') ||
                 spError.message?.includes('folder_order') ||
+                spError.message?.includes('is_private') ||
+                spError.message?.includes('owner_member') ||
                 spError.message?.includes('schema cache'))
             ) {
-              // Respaldo si Supabase aún no tiene las columnas admin_only / sort_order / folder_order
-              const fallbackPayload = payload.map(({ admin_only: _a, sort_order: _s, folder_order: _f, ...rest }) => rest)
+              // Respaldo progresivo si alguna columna opcional aún no existe en Supabase
+              const fallbackPayload = payload.map(
+                ({ admin_only: _a, sort_order: _s, folder_order: _f, ...rest }) => rest
+              )
               const retry = await supabase.from('seven_spaces').upsert(fallbackPayload, { onConflict: 'id' })
               spError = retry.error
             }
@@ -593,6 +631,11 @@ class SyncEngine {
             } else if (spError) {
               hasPushErrors = true
               console.warn('Warning syncing spaces:', spError.message)
+              if (spError.code === '42501' || spError.message?.toLowerCase().includes('row-level security')) {
+                toast.error('Sin permisos en Supabase para guardar cambios en este espacio.', {
+                  id: 'space-sync-rls-error'
+                })
+              }
             }
           }
         }
@@ -623,13 +666,7 @@ class SyncEngine {
         const staleIds: string[] = []
         const allowedPending = ownedPending.filter((w) => {
           const remoteUpdated = remoteVersions.get(w.id)
-          // Si la marca remota está en el futuro (> nowServer + 5s) por desfase de reloj de otro dispositivo,
-          // no debe bloquear ni descartar cambios locales válidos.
-          const effectiveRemoteUpdated =
-            remoteUpdated !== undefined && remoteUpdated > nowServer + 5000
-              ? nowServer
-              : remoteUpdated
-          if (effectiveRemoteUpdated !== undefined && effectiveRemoteUpdated > (w.updatedAt || 0)) {
+          if (this.isRemoteStrictlyNewer(remoteUpdated, w.updatedAt, nowServer)) {
             staleIds.push(w.id)
             return false
           }
@@ -664,7 +701,7 @@ class SyncEngine {
               is_public_shared: Boolean(w.isPublicShared),
               share_token: w.shareToken || null,
               share_permission: w.sharePermission || 'view',
-              user_id: w.userId || authUserId,
+              user_id: isValidUuid(w.userId) ? w.userId : authUserId,
               metadata: {
                 tags: w.tags || [],
                 documentMode: w.documentMode,
@@ -693,7 +730,9 @@ class SyncEngine {
                 coverBannerTitle: w.coverBannerTitle,
                 coverBannerSubtitle: w.coverBannerSubtitle,
                 coverBannerStyle: w.coverBannerStyle,
-                coverPosition: w.coverPosition
+                coverPosition: w.coverPosition,
+                trashedWithSpaceId: w.trashedWithSpaceId,
+                trashedFolder: w.trashedFolder
               }
             }
           })
@@ -788,9 +827,7 @@ class SyncEngine {
           const staleNodeIds: string[] = []
           const allowedPendingNodes = pendingNodes.filter((n) => {
             const remoteUpdated = remoteNodeVersions.get(n.id)
-            const effectiveRemote =
-              remoteUpdated !== undefined && remoteUpdated > nowServer + 5000 ? nowServer : remoteUpdated
-            if (effectiveRemote !== undefined && effectiveRemote > (n.updatedAt || 0)) {
+            if (this.isRemoteStrictlyNewer(remoteUpdated, n.updatedAt, nowServer)) {
               staleNodeIds.push(n.id)
               return false
             }
@@ -857,9 +894,7 @@ class SyncEngine {
           const staleEdgeIds: string[] = []
           const allowedPendingEdges = pendingEdges.filter((e) => {
             const remoteUpdated = remoteEdgeVersions.get(e.id)
-            const effectiveRemote =
-              remoteUpdated !== undefined && remoteUpdated > nowServer + 5000 ? nowServer : remoteUpdated
-            if (effectiveRemote !== undefined && effectiveRemote > (e.updatedAt || 0)) {
+            if (this.isRemoteStrictlyNewer(remoteUpdated, e.updatedAt, nowServer)) {
               staleEdgeIds.push(e.id)
               return false
             }
@@ -1091,18 +1126,6 @@ class SyncEngine {
           }
 
           const local = await db.spaces.get(rs.id)
-          // Si en Supabase ya fue eliminado, aseguramos que en local tampoco exista
-          if (rs.is_deleted) {
-            deletedRemoteSpaceIds.add(rs.id)
-            if (local) {
-              await db.spaces.delete(rs.id).catch(() => {})
-            }
-            try {
-              localStorage.removeItem(`seven_note_folder_order_${rs.id}`)
-            } catch {}
-            continue
-          }
-
           const remoteSpaceUpdated = this.clampTimestamp(Number(rs.updated_at) || 0, nowServer)
           if (this.shouldApplyRemote(local, remoteSpaceUpdated, nowServer)) {
             const normalizedFolderOrder = Array.isArray(rs.folder_order)
@@ -1115,7 +1138,7 @@ class SyncEngine {
               color: rs.color,
               createdAt: this.clampTimestamp(rs.created_at, nowServer),
               updatedAt: remoteSpaceUpdated,
-              isDeleted: false,
+              isDeleted: Boolean(rs.is_deleted),
               isPrivate: Boolean(rs.is_private),
               adminOnly: Boolean(rs.admin_only),
               sortOrder: typeof rs.sort_order === 'number' ? rs.sort_order : rs.created_at,
@@ -1321,7 +1344,9 @@ class SyncEngine {
               coverBannerTitle: meta.coverBannerTitle,
               coverBannerSubtitle: meta.coverBannerSubtitle,
               coverBannerStyle: meta.coverBannerStyle,
-              coverPosition: meta.coverPosition
+              coverPosition: meta.coverPosition,
+              trashedWithSpaceId: meta.trashedWithSpaceId,
+              trashedFolder: meta.trashedFolder
             })
           }
         }

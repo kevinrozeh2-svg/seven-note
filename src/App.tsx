@@ -36,7 +36,8 @@ import {
   DEFAULT_SPACE_ID,
   createSpace,
   updateSpace,
-  deleteSpace
+  moveSpaceToTrash,
+  getSafeTimestamp
 } from './db'
 import { markItemAsRead } from './lib/unreadTracker'
 import { syncEngine, type SyncEngineStatus } from './lib/syncEngine'
@@ -1094,7 +1095,7 @@ function MainApp() {
     setCurrentSpaceId(space.id)
     localStorage.setItem('seven_note_active_space_id', space.id)
     setCurrentWorkspaceId(initialPageId)
-    syncEngine.scheduleSync(500)
+    syncEngine.scheduleSync(50)
     toast.success(
       isPrivate
         ? `Espacio privado "${space.name}" creado (solo visible para ti)`
@@ -1108,32 +1109,42 @@ function MainApp() {
     id: string,
     updates: Partial<Pick<SpaceItem, 'name' | 'icon' | 'color' | 'isPrivate' | 'adminOnly'>>
   ) => {
+    const sp = spaces.find((s) => s.id === id)
+    if (sp && !canUserManageSpace(sp, currentMember, authUser?.id)) {
+      toast.error('Solo el creador o un administrador pueden editar este espacio.')
+      return
+    }
     const safeUpdates = { ...updates }
     if (!isUserAdmin(currentMember)) {
       delete safeUpdates.adminOnly
     }
     await updateSpace(id, safeUpdates)
-    syncEngine.scheduleSync(500)
+    syncEngine.scheduleSync(50)
     toast.success('Espacio actualizado')
   }
 
   const handleReorderSpaces = async (orderedSpaceIds: string[]) => {
-    const now = Date.now()
     await Promise.all(
-      orderedSpaceIds.map((id, idx) =>
-        db.spaces.update(id, {
+      orderedSpaceIds.map((id, idx) => {
+        const sp = spaces.find((s) => s.id === id)
+        return db.spaces.update(id, {
           sortOrder: (idx + 1) * 1000,
-          updatedAt: now,
+          updatedAt: getSafeTimestamp(sp?.updatedAt),
           syncStatus: 'pending'
         })
-      )
+      })
     )
-    syncEngine.scheduleSync(500)
+    syncEngine.scheduleSync(50)
   }
 
   const handleRenameSpace = async (id: string, newName: string) => {
+    const sp = spaces.find((s) => s.id === id)
+    if (sp && !canUserManageSpace(sp, currentMember, authUser?.id)) {
+      toast.error('Solo el creador o un administrador pueden renombrar este espacio.')
+      return
+    }
     await updateSpace(id, { name: newName })
-    syncEngine.scheduleSync(500)
+    syncEngine.scheduleSync(50)
   }
 
   const handleDeleteSpace = async (id: string) => {
@@ -1142,17 +1153,21 @@ function MainApp() {
       toast.error('Solo el creador o un administrador pueden eliminar este espacio.')
       return
     }
-    if (!confirm(`¿Eliminar el espacio "${sp?.name || 'Espacio'}" y todos sus documentos asociados?`)) {
-      return
-    }
-    await deleteSpace(id)
-    syncEngine.scheduleSync(500)
     const remaining = spaces.filter(
       (s) => s.id !== id && !s.isDeleted && isSpaceVisible(s, currentMember, authUser?.id)
     )
-    if (remaining.length > 0) {
-      await handleSelectSpace(remaining[0].id)
+    if (remaining.length === 0) {
+      toast.error('Debes mantener al menos un espacio activo.')
+      return
     }
+    if (!confirm(`¿Mover el espacio "${sp?.name || 'Espacio'}" y sus notas a la papelera?`)) {
+      return
+    }
+    await moveSpaceToTrash(id)
+    setTabs((prev) => prev.filter((t) => t.spaceId !== id))
+    syncEngine.scheduleSync(50)
+    await handleSelectSpace(remaining[0].id)
+    toast.success('Espacio movido a la papelera')
   }
 
   // Update view mode
@@ -2041,10 +2056,11 @@ function MainApp() {
                             setActiveDropdown(null)
                             return
                           }
-                          const now = Date.now()
                           await db.workspaces.update(currentWorkspace.id, {
                             isDeleted: true,
-                            updatedAt: now,
+                            trashedFolder: undefined,
+                            trashedWithSpaceId: undefined,
+                            updatedAt: getSafeTimestamp(currentWorkspace.updatedAt),
                             syncStatus: 'pending'
                           })
                           const children = workspaces.filter((w) => w.parentId === currentWorkspace.id && !w.isDeleted)
@@ -2053,12 +2069,12 @@ function MainApp() {
                               await db.workspaces.update(child.id, {
                                 parentId: currentWorkspace.parentId || null,
                                 folder: child.folder || currentWorkspace.folder || null,
-                                updatedAt: now,
+                                updatedAt: getSafeTimestamp(child.updatedAt),
                                 syncStatus: 'pending'
                               })
                             }
                           }
-                          syncEngine.scheduleSync(500)
+                          syncEngine.scheduleSync(50)
                         }
                         setActiveDropdown(null)
                       }}
@@ -2291,20 +2307,25 @@ function MainApp() {
                     toast.error('Solo el autor o un administrador pueden eliminar esta nota.')
                     return
                   }
-                  const now = Date.now()
-                  await db.workspaces.update(id, { isDeleted: true, updatedAt: now, syncStatus: 'pending' })
+                  await db.workspaces.update(id, {
+                    isDeleted: true,
+                    trashedFolder: undefined,
+                    trashedWithSpaceId: undefined,
+                    updatedAt: getSafeTimestamp(target?.updatedAt),
+                    syncStatus: 'pending'
+                  })
                   const children = workspaces.filter((w) => w.parentId === id && !w.isDeleted)
                   for (const child of children) {
                     if (canUserEditWorkspace(child, currentMember, authUser?.id)) {
                       await db.workspaces.update(child.id, {
                         parentId: target?.parentId || null,
                         folder: child.folder || target?.folder || null,
-                        updatedAt: now,
+                        updatedAt: getSafeTimestamp(child.updatedAt),
                         syncStatus: 'pending'
                       })
                     }
                   }
-                  syncEngine.scheduleSync(500)
+                  syncEngine.scheduleSync(50)
                 }}
               />
             ) : activeTab?.viewType === 'knowledge-graph' ? (
@@ -2359,6 +2380,7 @@ function MainApp() {
             ) : activeTab?.viewType === 'trash' ? (
               <TrashPage
                 onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
+                authUserId={authUser?.id}
               />
             ) : activeTab?.viewType === 'templates' ? (
               <TemplatesPage
