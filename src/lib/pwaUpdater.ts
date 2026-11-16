@@ -8,13 +8,22 @@ const UPDATE_TOAST_ID = 'seven-note-pwa-update';
 let swRegistration: ServiceWorkerRegistration | undefined;
 let updateSWFn: ((reloadPage?: boolean) => Promise<void>) | undefined;
 let updateAvailable = false;
+let isApplyingUpdate = false;
+let isReloading = false;
 const updateListeners = new Set<(available: boolean) => void>();
+
+function triggerReloadOnce(): void {
+  if (isReloading) return;
+  isReloading = true;
+  window.location.reload();
+}
 
 function notifyUpdateListeners(): void {
   updateListeners.forEach((listener) => listener(updateAvailable));
 }
 
 function markUpdateAvailable(): void {
+  if (isApplyingUpdate) return;
   if (!updateAvailable) {
     updateAvailable = true;
     notifyUpdateListeners();
@@ -34,14 +43,35 @@ export function subscribeToWebUpdate(listener: (available: boolean) => void): ()
   };
 }
 
-export function applyWebUpdate(): void {
-  if (updateSWFn) {
-    void updateSWFn(true);
-  } else if (swRegistration?.waiting) {
-    swRegistration.waiting.postMessage({ type: 'SKIP_WAITING' });
-  } else {
-    window.location.reload();
+export async function applyWebUpdate(): Promise<void> {
+  if (isApplyingUpdate) return;
+  isApplyingUpdate = true;
+
+  updateAvailable = false;
+  notifyUpdateListeners();
+  toast.dismiss(UPDATE_TOAST_ID);
+
+  try {
+    if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+      const reg = swRegistration || (await navigator.serviceWorker.getRegistration());
+      const waitingWorker = reg?.waiting;
+
+      if (waitingWorker) {
+        waitingWorker.postMessage({ type: 'SKIP_WAITING' });
+        void updateSWFn?.(true);
+
+        // Fallback reload in case controllerchange does not fire
+        window.setTimeout(() => {
+          triggerReloadOnce();
+        }, 1500);
+        return;
+      }
+    }
+  } catch {
+    // Fall through to reload
   }
+
+  triggerReloadOnce();
 }
 
 export function showUpdateAvailableToast(): void {
@@ -52,7 +82,7 @@ export function showUpdateAvailableToast(): void {
     action: {
       label: 'Actualizar ahora',
       onClick: () => {
-        applyWebUpdate();
+        void applyWebUpdate();
       },
     },
   });
@@ -106,13 +136,11 @@ export function initPwaAutoUpdate(): void {
   }
 
   const hadController = Boolean(navigator.serviceWorker.controller);
-  let isReloading = false;
 
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    // Only reload when replacing an already-active SW, not on first-ever install.
-    if (!hadController || isReloading) return;
-    isReloading = true;
-    window.location.reload();
+    // Only reload when replacing an already-active SW, unless the user explicitly requested the update.
+    if (!hadController && !isApplyingUpdate) return;
+    triggerReloadOnce();
   });
 
   updateSWFn = registerSW({
