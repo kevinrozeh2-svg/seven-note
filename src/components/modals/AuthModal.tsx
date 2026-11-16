@@ -38,7 +38,6 @@ interface AuthModalProps {
   initialMode?: AuthMode
   onAuthSuccess?: (member: TeamMember) => void
   canDismiss?: boolean
-  onContinueLocal?: () => void
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -46,8 +45,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onClose,
   initialMode = 'login',
   onAuthSuccess,
-  canDismiss = true,
-  onContinueLocal
+  canDismiss = true
 }) => {
   const [mode, setMode] = useState<AuthMode>(initialMode)
   const [email, setEmail] = useState('')
@@ -392,15 +390,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     </>
                   )}
                 </button>
-                {onContinueLocal && (
-                  <button
-                    type="button"
-                    onClick={onContinueLocal}
-                    className="w-full py-2 px-4 rounded-xl border border-neutral-200 dark:border-neutral-700/80 bg-transparent hover:bg-neutral-100 dark:hover:bg-neutral-800/60 text-neutral-600 dark:text-neutral-300 font-medium text-xs transition cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <span>Continuar en modo local (Offline)</span>
-                  </button>
-                )}
               </div>
             </form>
           )}

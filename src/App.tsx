@@ -106,13 +106,6 @@ function MainApp() {
   // Miembro activo del equipo
   const [currentMember, setCurrentMemberState] = useState<TeamMember>(() => getCurrentMember())
   const [authUser, setAuthUser] = useState<any>(null)
-  const [localOfflineBypass, setLocalOfflineBypass] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem('seven_note_local_mode') === 'true'
-    } catch {
-      return false
-    }
-  })
   const [authLoading, setAuthLoading] = useState(true)
   const [webUpdateAvailable, setWebUpdateAvailable] = useState(false)
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
@@ -142,8 +135,6 @@ function MainApp() {
     // 1. Comprobar usuario ya autenticado
     getAuthUser().then(async (user) => {
       if (user) {
-        localStorage.removeItem('seven_note_local_mode')
-        setLocalOfflineBypass(false)
         setAuthUser(user)
         const profile = await fetchUserProfile(user.id)
         const mapped = mapSupabaseUserToMember(user, profile)
@@ -167,8 +158,6 @@ function MainApp() {
       const user = session?.user || null
       setAuthUser(user)
       if (user) {
-        localStorage.removeItem('seven_note_local_mode')
-        setLocalOfflineBypass(false)
         const profile = await fetchUserProfile(user.id)
         const mapped = mapSupabaseUserToMember(user, profile)
         setCurrentMember(mapped)
@@ -207,13 +196,11 @@ function MainApp() {
     await clearLocalUserData()
     syncEngine.stopRealtimeSubscription()
     syncEngine.resetLastSyncTime()
-    localStorage.removeItem('seven_note_local_mode')
     localStorage.removeItem('seven_note_workbench_tabs')
     localStorage.removeItem('seven_note_workbench_active_tab')
     localStorage.removeItem('seven_note_active_space_id')
     localStorage.removeItem('seven_note_current_member')
     localStorage.removeItem('seven_note_current_profile')
-    setLocalOfflineBypass(false)
     setAuthUser(null)
     toast.info('Sesión cerrada correctamente')
   }
@@ -255,8 +242,11 @@ function MainApp() {
   }
 
   // Workspaces (Spaces) management
-  const spaces = useLiveQuery(() => db.spaces.toArray()) ?? []
-  const workspaces = useLiveQuery(() => db.workspaces.toArray()) ?? []
+  const spacesRaw = useLiveQuery(() => db.spaces.toArray())
+  const workspacesRaw = useLiveQuery(() => db.workspaces.toArray())
+  const isDbHydrating = spacesRaw === undefined || workspacesRaw === undefined
+  const spaces = spacesRaw ?? []
+  const workspaces = workspacesRaw ?? []
   const [optimisticWorkspace, setOptimisticWorkspace] = useState<WorkspaceItem | null>(null)
 
   useEffect(() => {
@@ -670,6 +660,8 @@ function MainApp() {
 
   // Sync engine status
   const [syncStatus, setSyncStatus] = useState<SyncEngineStatus>(syncEngine.getStatus())
+  const isWorkspacesLoading =
+    isDbHydrating || (Boolean(authUser) && workspaces.length === 0 && syncStatus.state === 'syncing')
 
   // Initialize DB and subscribe to sync
   useEffect(() => {
@@ -1259,7 +1251,7 @@ function MainApp() {
   )
 
   useEffect(() => {
-    if (!(authUser || localOfflineBypass)) return
+    if (!authUser) return
     const pendingId = pendingHashNoteIdRef.current
     if (!pendingId) return
 
@@ -1278,10 +1270,10 @@ function MainApp() {
       pendingHashNoteIdRef.current = null
     }, 3500)
     return () => window.clearTimeout(timer)
-  }, [authUser, localOfflineBypass, workspaces, currentMember])
+  }, [authUser, workspaces, currentMember])
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !(authUser || localOfflineBypass)) return
+    if (typeof window === 'undefined' || !authUser) return
     const hash = window.location.hash || ''
     if (hash.includes('type=recovery') || hash.includes('access_token=') || hash.includes('error=')) {
       return
@@ -1293,7 +1285,7 @@ function MainApp() {
         window.history.replaceState(null, '', targetHash)
       }
     }
-  }, [authUser, localOfflineBypass, currentWorkspace?.id, activeTab?.viewType])
+  }, [authUser, currentWorkspace?.id, activeTab?.viewType])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -1302,7 +1294,7 @@ function MainApp() {
       if (!hash.startsWith('#note=')) return
       const noteId = decodeURIComponent(hash.slice('#note='.length).split('&')[0])
       if (!noteId || noteId === currentWorkspace?.id) return
-      if (!(authUser || localOfflineBypass)) {
+      if (!authUser) {
         pendingHashNoteIdRef.current = noteId
         return
       }
@@ -1316,10 +1308,10 @@ function MainApp() {
     }
     window.addEventListener('hashchange', handleHashChange)
     return () => window.removeEventListener('hashchange', handleHashChange)
-  }, [authUser, localOfflineBypass, workspaces, currentMember, currentWorkspace?.id])
+  }, [authUser, workspaces, currentMember, currentWorkspace?.id])
 
-  // Pantalla de carga mientras se verifica la sesión
-  if (authLoading) {
+  // Pantalla de carga mientras se verifica la sesión o se hidratan los datos locales
+  if (authLoading || (authUser && isDbHydrating)) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-[#fbfbfa] dark:bg-[#121214] text-neutral-900 dark:text-neutral-100 font-sans">
         <div className="flex flex-col items-center gap-3 animate-in fade-in duration-200">
@@ -1332,8 +1324,8 @@ function MainApp() {
     )
   }
 
-  // Auth Gate: Bloqueo si no hay sesión iniciada ni modo local offline activo
-  if (!authUser && !localOfflineBypass) {
+  // Auth Gate: Bloqueo si no hay sesión iniciada
+  if (!authUser) {
     return (
       <div className="relative flex h-screen w-screen items-center justify-center bg-[#f8f9fa] dark:bg-[#121214] text-neutral-900 dark:text-neutral-100 font-sans select-none overflow-hidden">
         <Toaster position="top-right" richColors closeButton />
@@ -1342,14 +1334,7 @@ function MainApp() {
           canDismiss={false}
           initialMode={authModalMode}
           onClose={() => {}}
-          onContinueLocal={() => {
-            localStorage.setItem('seven_note_local_mode', 'true')
-            setLocalOfflineBypass(true)
-            toast.info('Trabajando en modo local (Offline)')
-          }}
           onAuthSuccess={(member) => {
-            localStorage.removeItem('seven_note_local_mode')
-            setLocalOfflineBypass(false)
             setCurrentMemberState(member)
             syncEngine.resetLastSyncTime()
             syncEngine.triggerSync()
@@ -1446,6 +1431,7 @@ function MainApp() {
                 onOpenShortcuts={() => setIsShortcutsOpen(true)}
                 onOpenKnowledgeGraph={() => openSpecialViewTab('knowledge-graph', 'Vista gráfica')}
                 syncStatus={syncStatus}
+                isLoading={isWorkspacesLoading}
                 darkMode={darkMode}
                 onToggleDarkMode={() => setDarkMode(!darkMode)}
               />
@@ -2279,6 +2265,15 @@ function MainApp() {
                   </div>
                 </div>
               )
+            ) : isWorkspacesLoading ? (
+              <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-zinc-500 text-sm gap-3 select-none">
+                <div className="w-10 h-10 rounded-2xl bg-neutral-900 dark:bg-white flex items-center justify-center text-white dark:text-neutral-900 font-black text-lg shadow-sm animate-pulse">
+                  7
+                </div>
+                <div className="font-medium text-neutral-600 dark:text-neutral-300 text-xs">
+                  Sincronizando tus notas...
+                </div>
+              </div>
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-zinc-500 text-sm gap-3 select-none">
                 <div className="w-12 h-12 rounded-2xl bg-black/[0.04] dark:bg-white/[0.06] flex items-center justify-center text-2xl shadow-xs">

@@ -97,6 +97,7 @@ export interface SidebarProps {
 
   onOpenKnowledgeGraph?: () => void
   syncStatus: SyncEngineStatus
+  isLoading?: boolean
   darkMode: boolean
   onToggleDarkMode: () => void
   activeNavigation?: string
@@ -295,6 +296,7 @@ export function Sidebar({
   onOpenShortcuts: _onOpenShortcuts,
   onOpenKnowledgeGraph: _onOpenKnowledgeGraph,
   syncStatus: _syncStatus,
+  isLoading = false,
   darkMode: _darkMode,
   onToggleDarkMode: _onToggleDarkMode,
   activeNavigation: _activeNavigation,
@@ -2381,6 +2383,22 @@ export function Sidebar({
 
       {/* 6. Scrollable Structure: Favorites, Documents, Tags */}
       <div className="flex-1 overflow-y-auto px-2 space-y-4 custom-scrollbar">
+        {isLoading ? (
+          <div className="space-y-4 py-1 px-1 animate-pulse select-none" aria-label="Cargando notas">
+            <div className="space-y-2">
+              <div className="h-3 w-24 rounded bg-black/10 dark:bg-white/10" />
+              <div className="h-7 w-full rounded-lg bg-black/[0.05] dark:bg-white/[0.05]" />
+            </div>
+            <div className="space-y-2">
+              <div className="h-3 w-32 rounded bg-black/10 dark:bg-white/10" />
+              <div className="h-7 w-full rounded-lg bg-black/[0.05] dark:bg-white/[0.05]" />
+              <div className="h-7 w-5/6 rounded-lg bg-black/[0.05] dark:bg-white/[0.05]" />
+              <div className="h-7 w-4/5 rounded-lg bg-black/[0.05] dark:bg-white/[0.05]" />
+              <div className="h-7 w-full rounded-lg bg-black/[0.05] dark:bg-white/[0.05]" />
+            </div>
+          </div>
+        ) : (
+          <>
         {/* FAVORITES */}
         <div>
           <div
@@ -2723,8 +2741,8 @@ export function Sidebar({
             </div>
           )}
         </div>
-
-
+          </>
+        )}
       </div>
 
       {/* Apple Emoji Picker Modal for Spaces and Documents (Rendered in Portal to avoid clipping) */}
