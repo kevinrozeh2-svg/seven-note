@@ -13,7 +13,10 @@ import {
   Moon,
   CloudCheck,
   CloudSlash,
-  ArrowsClockwise
+  ArrowsClockwise,
+  Bell,
+  BellSlash,
+  CalendarBlank
 } from '@phosphor-icons/react'
 import { type SyncEngineStatus } from '../../lib/syncEngine'
 import { TeamMemberSwitcher } from './TeamMemberSwitcher'
@@ -24,6 +27,8 @@ export interface ObsidianRibbonProps {
   onToggleSidebar: () => void
   onNewNote: () => void
   onOpenSearch: () => void
+  onOpenCalendar?: () => void
+  calendarSidebarActive?: boolean
   onOpenKnowledgeGraph: () => void
   onOpenAllDocs: () => void
   onOpenTemplates: () => void
@@ -31,6 +36,10 @@ export interface ObsidianRibbonProps {
   onOpenShortcuts: () => void
   onOpenTrash: () => void
   onOpenSettings: () => void
+  onToggleNotifications?: () => void
+  notificationsOpen?: boolean
+  unreadNotificationsCount?: number
+  notificationsDnd?: boolean
   activeView?: string
 
   // Status & User Profile in Ribbon footer
@@ -52,6 +61,8 @@ export function ObsidianRibbon({
   onToggleSidebar,
   onNewNote,
   onOpenSearch,
+  onOpenCalendar,
+  calendarSidebarActive: _calendarSidebarActive = false,
   onOpenKnowledgeGraph,
   onOpenAllDocs,
   onOpenTemplates,
@@ -59,6 +70,10 @@ export function ObsidianRibbon({
   onOpenShortcuts,
   onOpenTrash,
   onOpenSettings,
+  onToggleNotifications,
+  notificationsOpen = false,
+  unreadNotificationsCount = 0,
+  notificationsDnd = false,
   activeView,
   syncStatus,
   darkMode,
@@ -132,6 +147,21 @@ export function ObsidianRibbon({
 
         <div className="w-5 h-px bg-white/[0.08] my-1" />
 
+        {/* Almanaque / Google Calendar */}
+        {onOpenCalendar && (
+          <button
+            onClick={onOpenCalendar}
+            className={`w-8 h-8 rounded-md flex items-center justify-center transition cursor-pointer ${
+              activeView === 'calendar'
+                ? 'text-purple-400 bg-purple-500/15'
+                : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5'
+            }`}
+            title="Almanaque (Google Calendar)"
+          >
+            <CalendarBlank size={18} />
+          </button>
+        )}
+
         {/* Knowledge Graph View */}
         <button
           onClick={onOpenKnowledgeGraph}
@@ -190,8 +220,38 @@ export function ObsidianRibbon({
         </button>
       </div>
 
-      {/* Bottom tools: Sync status, Theme, User Avatar, Trash, Settings */}
+      {/* Bottom tools: Notifications, Sync status, Theme, User Avatar, Trash, Settings */}
       <div className="flex flex-col items-center gap-1 w-full px-1">
+        {/* Centro de Notificaciones */}
+        {onToggleNotifications && (
+          <button
+            onClick={onToggleNotifications}
+            className={`relative w-8 h-8 rounded-md flex items-center justify-center transition cursor-pointer ${
+              notificationsOpen
+                ? 'text-purple-400 bg-purple-500/15'
+                : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5'
+            }`}
+            title={
+              notificationsDnd
+                ? 'Notificaciones (No Molestar activo · Ctrl+Shift+N)'
+                : unreadNotificationsCount > 0
+                ? `Notificaciones (${unreadNotificationsCount} sin leer · Ctrl+Shift+N)`
+                : 'Notificaciones (Ctrl+Shift+N)'
+            }
+          >
+            {notificationsDnd ? (
+              <BellSlash size={17} weight={notificationsOpen ? 'fill' : 'regular'} />
+            ) : (
+              <Bell size={17} weight={notificationsOpen ? 'fill' : 'regular'} />
+            )}
+            {unreadNotificationsCount > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-1 rounded-full bg-purple-500 text-white text-[9px] font-bold flex items-center justify-center leading-none shadow-sm">
+                {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
+              </span>
+            )}
+          </button>
+        )}
+
         {/* Sync Status Icon */}
         {syncStatus && (
           <div

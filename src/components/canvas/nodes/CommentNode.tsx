@@ -2,6 +2,8 @@ import { memo, useState } from 'react'
 import { MessageSquare, CornerDownRight, Trash2 } from 'lucide-react'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
+import { notificationService, extractMentions } from '../../../lib/notificationService'
+import { getCurrentMember } from '../../../lib/teamAuth'
 import { toast } from 'sonner'
 import { areNodePropsEqual, NodeHandles, SourceNodeBadge } from './nodeUtils'
 import { renderWithAppleEmoji } from '../../ui/AppleEmoji'
@@ -42,13 +44,15 @@ export const CommentNode = memo(({ id, data, selected }: any) => {
     }
   }
 
-  const handleSendReply = (e: React.FormEvent) => {
+  const handleSendReply = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!replyText.trim()) return
+    const member = getCurrentMember()
+    const trimmed = replyText.trim()
     const newReply = {
       id: crypto.randomUUID(),
-      author: 'Tú',
-      text: replyText.trim()
+      author: member?.name || 'Tú',
+      text: trimmed
     }
     const updated = [...replies, newReply]
     setReplies(updated)
@@ -56,6 +60,29 @@ export const CommentNode = memo(({ id, data, selected }: any) => {
     setReplyText('')
     setIsReplying(false)
     toast.success('Respuesta agregada')
+
+    const mentions = extractMentions(trimmed)
+    if (mentions.length > 0) {
+      const node = await db.canvasNodes.get(id)
+      for (const target of mentions) {
+        void notificationService.notify({
+          type: 'mention',
+          severity: 'info',
+          title: `${member?.name || 'Alguien'} te mencionó en un comentario`,
+          message: trimmed.slice(0, 140),
+          workspaceId: node?.workspaceId,
+          nodeId: id,
+          actorId: member?.id,
+          actorName: member?.name,
+          recipientId: target,
+          actionLabel: 'Ir al comentario',
+          actionPayload: node?.workspaceId
+            ? { type: 'open_workspace', workspaceId: node.workspaceId, nodeId: id }
+            : undefined,
+          dedupeKey: `mention:${id}:${newReply.id}:${target}`
+        })
+      }
+    }
   }
 
   const isConnectorActive = Boolean(data?.isConnectorActive)

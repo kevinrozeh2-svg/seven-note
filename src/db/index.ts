@@ -273,6 +273,48 @@ export interface TagItem {
   syncStatus?: SyncStatus
 }
 
+export type NotificationType =
+  | 'mention'
+  | 'comment'
+  | 'assignment'
+  | 'reminder'
+  | 'workspace_update'
+  | 'sync'
+  | 'system'
+
+export type NotificationSeverity = 'info' | 'success' | 'warning' | 'error'
+
+export interface NotificationActionPayload {
+  type: 'open_workspace' | 'open_settings' | 'retry_sync' | 'apply_update' | 'custom'
+  workspaceId?: string
+  spaceId?: string
+  nodeId?: string
+}
+
+export interface NotificationItem {
+  id: string
+  type: NotificationType
+  severity: NotificationSeverity
+  title: string
+  message: string
+  workspaceId?: string
+  spaceId?: string
+  nodeId?: string
+  actorId?: string
+  actorName?: string
+  recipientId?: string // 'all' or specific member/user id
+  actionLabel?: string
+  actionPayload?: NotificationActionPayload
+  dedupeKey?: string
+  isRead: boolean
+  isArchived: boolean
+  snoozedUntil?: number
+  createdAt: number
+  updatedAt: number
+  readAt?: number
+  syncStatus?: SyncStatus
+}
+
 export class SevenNoteDatabase extends Dexie {
   workspaces!: Table<WorkspaceItem, string>
   canvasNodes!: Table<CanvasNodeItem, string>
@@ -282,6 +324,7 @@ export class SevenNoteDatabase extends Dexie {
   spaces!: Table<SpaceItem, string>
   collections!: Table<CollectionItem, string>
   tags!: Table<TagItem, string>
+  notifications!: Table<NotificationItem, string>
 
   constructor() {
     super('SevenNoteDB')
@@ -333,6 +376,9 @@ export class SevenNoteDatabase extends Dexie {
     this.version(6).stores({
       spaces: 'id, name, createdAt, updatedAt, syncStatus, isPrivate, ownerMember, userId'
     })
+    this.version(7).stores({
+      notifications: 'id, type, severity, recipientId, workspaceId, dedupeKey, isRead, isArchived, snoozedUntil, createdAt, updatedAt, syncStatus'
+    })
 
     // Auto-hook: Mark any newly created or modified items as 'pending'
     const setupAutoSyncHooks = (table: Table<any, string>) => {
@@ -356,6 +402,7 @@ export class SevenNoteDatabase extends Dexie {
     setupAutoSyncHooks(this.spaces)
     setupAutoSyncHooks(this.collections)
     setupAutoSyncHooks(this.tags)
+    setupAutoSyncHooks(this.notifications)
   }
 }
 

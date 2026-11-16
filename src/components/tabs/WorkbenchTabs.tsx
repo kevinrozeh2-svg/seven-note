@@ -17,7 +17,8 @@ import {
   ArrowRight,
   X,
   PanelLeft,
-  Network
+  Network,
+  Calendar
 } from 'lucide-react'
 import { type WorkspaceItem } from '../../db'
 import { AppleEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
@@ -26,7 +27,7 @@ export interface WorkbenchTab {
   id: string
   workspaceId: string
   pinned?: boolean
-  viewType?: 'doc' | 'all-docs' | 'knowledge-graph' | 'trash' | 'templates'
+  viewType?: 'doc' | 'all-docs' | 'knowledge-graph' | 'calendar' | 'trash' | 'templates'
   title?: string
   icon?: string
   spaceId?: string
@@ -153,6 +154,8 @@ export function WorkbenchTabs({
       return { title: 'Todos los documentos', icon: '📑', viewMode: 'doc' }
     } else if (tab.viewType === 'knowledge-graph') {
       return { title: 'Vista gráfica', icon: '', viewMode: 'doc' }
+    } else if (tab.viewType === 'calendar') {
+      return { title: 'Almanaque', icon: '', viewMode: 'doc' }
     } else if (tab.viewType === 'trash') {
       return { title: 'Papelera', icon: '🗑️', viewMode: 'doc' }
     } else if (tab.viewType === 'templates') {
@@ -311,6 +314,8 @@ export function WorkbenchTabs({
               >
                 {tab.viewType === 'knowledge-graph' ? (
                   <Network className="w-3.5 h-3.5 text-neutral-300" />
+                ) : tab.viewType === 'calendar' ? (
+                  <Calendar className="w-3.5 h-3.5 text-blue-400" />
                 ) : meta.icon ? (
                   <span className="text-sm shrink-0 flex items-center justify-center">
                     <AppleEmoji emoji={meta.icon} size={15} />
@@ -366,6 +371,8 @@ export function WorkbenchTabs({
               <span className="shrink-0 text-xs flex items-center justify-center">
                 {tab.viewType === 'knowledge-graph' ? (
                   <Network className="w-3.5 h-3.5 text-neutral-400 group-hover:text-neutral-200" />
+                ) : tab.viewType === 'calendar' ? (
+                  <Calendar className="w-3.5 h-3.5 text-blue-400" />
                 ) : meta.icon ? (
                   <AppleEmoji emoji={meta.icon} size={14} className="shrink-0" />
                 ) : meta.viewMode === 'canvas' ? (

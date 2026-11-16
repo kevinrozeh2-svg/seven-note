@@ -496,7 +496,9 @@ export function Sidebar({
       const parsed: string[] = saved ? JSON.parse(saved) : []
       setFolderOrder(parsed)
       // Migrate existing localStorage-only folder order into db.spaces so it syncs across devices
-      if (parsed.length > 0 && visibleSpaces.some((s) => s.id === currentSpace.id)) {
+      // Only run once initial workspace/space hydration & sync has completed so stale localStorage
+      // never marks a space as pending before pulling remote updates.
+      if (!isWorkspacesLoading && parsed.length > 0 && visibleSpaces.some((s) => s.id === currentSpace.id)) {
         db.spaces
           .update(currentSpace.id, {
             folderOrder: parsed,
@@ -509,7 +511,7 @@ export function Sidebar({
     } catch {
       setFolderOrder([])
     }
-  }, [currentSpace.id, spaceFolderOrder])
+  }, [currentSpace.id, spaceFolderOrder, isWorkspacesLoading])
 
   const persistFolderOrder = useCallback(
     (nextOrUpdater: string[] | ((prev: string[]) => string[])) => {
@@ -786,13 +788,6 @@ export function Sidebar({
         rawList.add(w.folder.trim())
       }
     })
-    if (folderOrder && Array.isArray(folderOrder)) {
-      folderOrder.forEach((f) => {
-        if (f && f.trim()) {
-          rawList.add(f.trim())
-        }
-      })
-    }
     const fullSet = new Set<string>()
     rawList.forEach((path) => {
       const parts = path.split('/')
@@ -803,7 +798,7 @@ export function Sidebar({
       }
     })
     return Array.from(fullSet)
-  }, [teamDocs, folderOrder])
+  }, [teamDocs])
 
   const sortFolders = useCallback(
     (folders: string[]) => {

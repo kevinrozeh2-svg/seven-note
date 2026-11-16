@@ -7,11 +7,13 @@ import {
   type OfflineAsset,
   type SpaceItem,
   type CollectionItem,
-  type TagItem
+  type TagItem,
+  type NotificationItem
 } from '../db'
 import { getSupabaseClient, getStoredSupabaseConfig, getAuthUser } from './supabase'
 import { getCurrentMember, TEAM_MEMBERS, isUserAdmin, isWorkspaceOwner } from './teamAuth'
 import { computeImageHash, uploadToSupabaseStorage } from './imageOptimizer'
+import { notificationService } from './notificationService'
 
 export type NetworkStatus = 'online' | 'offline'
 export type SyncEngineState = 'idle' | 'syncing' | 'synced' | 'error' | 'offline' | 'unconfigured'
@@ -222,6 +224,7 @@ class SyncEngine {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'seven_spaces' }, this.handleRealtimeEvent)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'seven_collections' }, this.handleRealtimeEvent)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'seven_tags' }, this.handleRealtimeEvent)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'seven_notifications' }, this.handleRealtimeEvent)
       .subscribe()
   }
 
@@ -246,7 +249,8 @@ class SyncEngine {
         pendingSpaces,
         pendingCollections,
         pendingTags,
-        pendingAssets
+        pendingAssets,
+        pendingNotifications
       ] = await Promise.all([
         db.workspaces.where('syncStatus').equals('pending').count(),
         db.canvasNodes.where('syncStatus').equals('pending').count(),
@@ -254,7 +258,8 @@ class SyncEngine {
         db.spaces.where('syncStatus').equals('pending').count(),
         db.collections.where('syncStatus').equals('pending').count(),
         db.tags.where('syncStatus').equals('pending').count(),
-        db.offlineAssets.where('syncStatus').equals('pending').count()
+        db.offlineAssets.where('syncStatus').equals('pending').count(),
+        db.notifications.where('syncStatus').equals('pending').count()
       ])
 
       this.pendingCount =
@@ -264,7 +269,8 @@ class SyncEngine {
         pendingSpaces +
         pendingCollections +
         pendingTags +
-        pendingAssets
+        pendingAssets +
+        pendingNotifications
 
       this.notify()
     } catch (e) {
@@ -335,41 +341,72 @@ class SyncEngine {
         // ==========================================
         const pendingSpaces = await db.spaces.where('syncStatus').equals('pending').toArray()
         if (pendingSpaces.length > 0) {
-          const payload = pendingSpaces.map((s: SpaceItem) => ({
-            id: s.id,
-            name: s.name,
-            icon: s.icon,
-            color: s.color,
-            created_at: this.clampTimestamp(s.createdAt, nowServer),
-            updated_at: this.clampTimestamp(s.updatedAt, nowServer),
-            is_deleted: Boolean(s.isDeleted),
-            is_private: Boolean(s.isPrivate),
-            admin_only: Boolean(s.adminOnly),
-            sort_order: typeof s.sortOrder === 'number' ? s.sortOrder : s.createdAt,
-            folder_order: Array.isArray(s.folderOrder) ? s.folderOrder : null,
-            owner_member: s.ownerMember || currentMember.id,
-            user_id: authUserId
-          }))
-          let { error: spError } = await supabase.from('seven_spaces').upsert(payload, { onConflict: 'id' })
-          if (
-            spError &&
-            (spError.message?.includes('admin_only') ||
-              spError.message?.includes('sort_order') ||
-              spError.message?.includes('folder_order') ||
-              spError.message?.includes('schema cache'))
-          ) {
-            // Respaldo si Supabase aún no tiene las columnas admin_only / sort_order / folder_order
-            const fallbackPayload = payload.map(({ admin_only: _a, sort_order: _s, folder_order: _f, ...rest }) => rest)
-            const retry = await supabase.from('seven_spaces').upsert(fallbackPayload, { onConflict: 'id' })
-            spError = retry.error
-          }
-          if (!spError) {
-            this.lastPushCompletedAt = Date.now()
+          // Evitar sobrescribir en la nube una versión más reciente del espacio con una copia local desactualizada
+          const remoteSpaceVersions = new Map<string, number>()
+          const spaceIds = pendingSpaces.map((s) => s.id)
+          const { data: remoteSpaceRows } = await supabase
+            .from('seven_spaces')
+            .select('id, updated_at')
+            .in('id', spaceIds)
+          for (const r of remoteSpaceRows || []) remoteSpaceVersions.set(r.id, Number(r.updated_at) || 0)
+
+          const staleSpaceIds: string[] = []
+          const allowedPendingSpaces = pendingSpaces.filter((s) => {
+            const remoteUpdated = remoteSpaceVersions.get(s.id)
+            const effectiveRemoteUpdated =
+              remoteUpdated !== undefined && remoteUpdated > nowServer + 5000
+                ? nowServer
+                : remoteUpdated
+            if (effectiveRemoteUpdated !== undefined && effectiveRemoteUpdated > (s.updatedAt || 0)) {
+              staleSpaceIds.push(s.id)
+              return false
+            }
+            return true
+          })
+
+          if (staleSpaceIds.length > 0) {
             await db.spaces.bulkUpdate(
-              pendingSpaces.map((s) => ({ key: s.id, changes: { syncStatus: 'synced' as const } }))
+              staleSpaceIds.map((id) => ({ key: id, changes: { syncStatus: 'synced' as const } }))
             )
-          } else {
-            console.warn('Warning syncing spaces:', spError.message)
+          }
+
+          if (allowedPendingSpaces.length > 0) {
+            const payload = allowedPendingSpaces.map((s: SpaceItem) => ({
+              id: s.id,
+              name: s.name,
+              icon: s.icon,
+              color: s.color,
+              created_at: this.clampTimestamp(s.createdAt, nowServer),
+              updated_at: this.clampTimestamp(s.updatedAt, nowServer),
+              is_deleted: Boolean(s.isDeleted),
+              is_private: Boolean(s.isPrivate),
+              admin_only: Boolean(s.adminOnly),
+              sort_order: typeof s.sortOrder === 'number' ? s.sortOrder : s.createdAt,
+              folder_order: Array.isArray(s.folderOrder) ? s.folderOrder : null,
+              owner_member: s.ownerMember || currentMember.id,
+              user_id: authUserId
+            }))
+            let { error: spError } = await supabase.from('seven_spaces').upsert(payload, { onConflict: 'id' })
+            if (
+              spError &&
+              (spError.message?.includes('admin_only') ||
+                spError.message?.includes('sort_order') ||
+                spError.message?.includes('folder_order') ||
+                spError.message?.includes('schema cache'))
+            ) {
+              // Respaldo si Supabase aún no tiene las columnas admin_only / sort_order / folder_order
+              const fallbackPayload = payload.map(({ admin_only: _a, sort_order: _s, folder_order: _f, ...rest }) => rest)
+              const retry = await supabase.from('seven_spaces').upsert(fallbackPayload, { onConflict: 'id' })
+              spError = retry.error
+            }
+            if (!spError) {
+              this.lastPushCompletedAt = Date.now()
+              await db.spaces.bulkUpdate(
+                allowedPendingSpaces.map((s) => ({ key: s.id, changes: { syncStatus: 'synced' as const } }))
+              )
+            } else {
+              console.warn('Warning syncing spaces:', spError.message)
+            }
           }
         }
 
@@ -649,6 +686,44 @@ class SyncEngine {
             console.warn('Warning syncing tags:', tagError.message)
           }
         }
+
+        // ==========================================
+        // 6B. PUSH: NOTIFICATIONS (Opcional si tabla existe)
+        // ==========================================
+        const pendingNotifs = await db.notifications.where('syncStatus').equals('pending').toArray()
+        if (pendingNotifs.length > 0) {
+          const payload = pendingNotifs.map((n: NotificationItem) => ({
+            id: n.id,
+            type: n.type,
+            severity: n.severity,
+            title: n.title,
+            message: n.message,
+            workspace_id: n.workspaceId || null,
+            space_id: n.spaceId || null,
+            node_id: n.nodeId || null,
+            actor_id: n.actorId || authUserId || currentMember.id,
+            actor_name: n.actorName || currentMember.name,
+            recipient_id: n.recipientId || 'all',
+            action_label: n.actionLabel || null,
+            action_payload: n.actionPayload || null,
+            dedupe_key: n.dedupeKey || null,
+            is_read: Boolean(n.isRead),
+            is_archived: Boolean(n.isArchived),
+            snoozed_until: n.snoozedUntil || null,
+            created_at: this.clampTimestamp(n.createdAt, nowServer),
+            updated_at: this.clampTimestamp(n.updatedAt, nowServer),
+            read_at: n.readAt || null
+          }))
+          const { error: notifError } = await supabase
+            .from('seven_notifications')
+            .upsert(payload, { onConflict: 'id' })
+          if (!notifError) {
+            this.lastPushCompletedAt = Date.now()
+            await db.notifications.bulkUpdate(
+              pendingNotifs.map((n) => ({ key: n.id, changes: { syncStatus: 'synced' as const } }))
+            )
+          }
+        }
       }
 
       // ==========================================
@@ -900,6 +975,36 @@ class SyncEngine {
 
         if (wsToPut.length > 0) {
           await db.workspaces.bulkPut(wsToPut)
+
+          // Emit collaborative notifications only on incremental syncs for brand-new notes from other members
+          if (lastSync > 0) {
+            for (const ws of wsToPut) {
+              const prev = localWsMap.get(ws.id)
+              const actor = (ws.createdBy || ws.ownerMember || '').toLowerCase()
+              const isSelf =
+                actor === currentMember.id.toLowerCase() ||
+                actor === currentMember.name.toLowerCase() ||
+                (Boolean(currentMember.email) && actor === currentMember.email?.toLowerCase()) ||
+                (Boolean(authUserId) && ws.userId === authUserId)
+
+              if (!prev && !ws.isDeleted && !isSelf) {
+                void notificationService.notify({
+                  type: 'workspace_update',
+                  severity: 'info',
+                  title: 'Nueva nota compartida',
+                  message: `${ws.ownerName || ws.createdBy || 'Un miembro'} creó "${ws.title || 'Sin título'}"`,
+                  workspaceId: ws.id,
+                  spaceId: ws.spaceId,
+                  actorId: ws.ownerMember || ws.userId,
+                  actorName: ws.ownerName || ws.createdBy,
+                  actionLabel: 'Abrir nota',
+                  actionPayload: { type: 'open_workspace', workspaceId: ws.id },
+                  dedupeKey: `new-ws:${ws.id}`,
+                  dedupeWindowMs: 24 * 60 * 60 * 1000
+                })
+              }
+            }
+          }
         }
 
         // Eliminar notas locales ya sincronizadas que fueron borradas definitivamente en Supabase
@@ -960,6 +1065,32 @@ class SyncEngine {
         }
         if (nodesToPut.length > 0) {
           await db.canvasNodes.bulkPut(nodesToPut)
+
+          if (lastSync > 0) {
+            for (const node of nodesToPut) {
+              if (node.type === 'comment' && !localNodeMap.has(node.id) && !node.isDeleted) {
+                const author = String(node.data?.commentAuthor || 'Un compañero')
+                const isSelf =
+                  author.toLowerCase() === currentMember.name.toLowerCase() ||
+                  author.toLowerCase() === currentMember.id.toLowerCase()
+                if (!isSelf) {
+                  void notificationService.notify({
+                    type: 'comment',
+                    severity: 'info',
+                    title: `Nuevo comentario de ${author}`,
+                    message: String(node.data?.commentText || 'Comentó en un tablero').slice(0, 120),
+                    workspaceId: node.workspaceId,
+                    nodeId: node.id,
+                    actorName: author,
+                    actionLabel: 'Ver tablero',
+                    actionPayload: { type: 'open_workspace', workspaceId: node.workspaceId, nodeId: node.id },
+                    dedupeKey: `comment-node:${node.id}`,
+                    dedupeWindowMs: 24 * 60 * 60 * 1000
+                  })
+                }
+              }
+            }
+          }
         }
       }
 
@@ -1099,6 +1230,59 @@ class SyncEngine {
         }
       }
 
+      // Pull Notifications (Opcional si la tabla existe en Supabase)
+      try {
+        const { data: remoteNotifs, error: notifPullErr } = await supabase
+          .from('seven_notifications')
+          .select('*')
+          .gt('updated_at', lastSync)
+
+        if (!notifPullErr && remoteNotifs && remoteNotifs.length > 0) {
+          const localNotifRows = await db.notifications.bulkGet(remoteNotifs.map((rn: any) => rn.id))
+          const localNotifMap = new Map(
+            localNotifRows.filter((n): n is NotificationItem => Boolean(n)).map((n) => [n.id, n])
+          )
+          const notifsToPut: NotificationItem[] = []
+
+          for (const rn of remoteNotifs) {
+            const local = localNotifMap.get(rn.id)
+            const remoteUpdated = this.clampTimestamp(Number(rn.updated_at) || 0, nowServer)
+            if (this.shouldApplyRemote(local, remoteUpdated, nowServer)) {
+              notifsToPut.push({
+                id: rn.id,
+                type: rn.type,
+                severity: rn.severity,
+                title: rn.title,
+                message: rn.message,
+                workspaceId: rn.workspace_id || undefined,
+                spaceId: rn.space_id || undefined,
+                nodeId: rn.node_id || undefined,
+                actorId: rn.actor_id || undefined,
+                actorName: rn.actor_name || undefined,
+                recipientId: rn.recipient_id || 'all',
+                actionLabel: rn.action_label || undefined,
+                actionPayload: rn.action_payload || undefined,
+                dedupeKey: rn.dedupe_key || undefined,
+                isRead: Boolean(rn.is_read),
+                isArchived: Boolean(rn.is_archived),
+                snoozedUntil: rn.snoozed_until ? Number(rn.snoozed_until) : undefined,
+                createdAt: this.clampTimestamp(Number(rn.created_at) || Date.now(), nowServer),
+                updatedAt: remoteUpdated,
+                readAt: rn.read_at ? Number(rn.read_at) : undefined,
+                syncStatus: 'synced'
+              })
+            }
+          }
+
+          if (notifsToPut.length > 0) {
+            await db.notifications.bulkPut(notifsToPut)
+            window.dispatchEvent(new CustomEvent('seven_note_notification_changed'))
+          }
+        }
+      } catch {
+        // Ignorar silenciosamente si seven_notifications aún no está creada en Supabase
+      }
+
       // Actualizar timestamp de última sincronización solo si no hubo errores de red/descarga
       if (!hasPullErrors) {
         this.lastSyncTime = this.getServerNow()
@@ -1116,6 +1300,16 @@ class SyncEngine {
       this.state = 'error'
       this.errorMessage = err?.message || 'Error desconocido al sincronizar'
       this.notify()
+      void notificationService.notify({
+        type: 'sync',
+        severity: 'error',
+        title: 'Error de sincronización',
+        message: this.errorMessage || 'No se pudo sincronizar con Supabase',
+        actionLabel: 'Reintentar',
+        actionPayload: { type: 'retry_sync' },
+        dedupeKey: 'sync-error',
+        dedupeWindowMs: 10 * 60 * 1000
+      })
       return { success: false, message: this.errorMessage || 'Error' }
     } finally {
       this.isSyncing = false

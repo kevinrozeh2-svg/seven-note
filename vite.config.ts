@@ -1,11 +1,85 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
+function icalProxyPlugin(): Plugin {
+  return {
+    name: 'seven-note-ical-proxy',
+    configureServer(server) {
+      server.middlewares.use('/api/ical-proxy', async (req, res) => {
+        try {
+          const reqUrl = new URL(req.url || '', 'http://localhost')
+          const target = reqUrl.searchParams.get('url')
+          if (!target) {
+            res.statusCode = 400
+            res.end('Missing url parameter')
+            return
+          }
+          const parsed = new URL(target)
+          if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+            res.statusCode = 400
+            res.end('Invalid protocol')
+            return
+          }
+          const upstream = await fetch(parsed.toString(), {
+            headers: { 'User-Agent': 'SevenNote-Calendar/1.0' }
+          })
+          res.statusCode = upstream.status
+          res.setHeader('Content-Type', 'text/calendar; charset=utf-8')
+          res.setHeader('Cache-Control', 'no-store')
+          const body = await upstream.text()
+          res.end(body)
+        } catch (err: unknown) {
+          res.statusCode = 502
+          res.end(err instanceof Error ? err.message : 'Proxy fetch failed')
+        }
+      })
+
+      server.middlewares.use('/api/calendar-webhook', async (req, res) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405
+          res.end('Method Not Allowed')
+          return
+        }
+        try {
+          const chunks: Buffer[] = []
+          for await (const chunk of req) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+          }
+          const rawBody = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as {
+            webhookUrl?: string
+            payload?: unknown
+          }
+          const webhookUrl = String(rawBody.webhookUrl || '').trim()
+          if (!webhookUrl.startsWith('https://')) {
+            res.statusCode = 400
+            res.end('Invalid webhookUrl')
+            return
+          }
+          const upstream = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(rawBody.payload ?? {}),
+            redirect: 'follow'
+          })
+          const text = await upstream.text()
+          res.statusCode = upstream.status
+          res.setHeader('Content-Type', 'application/json; charset=utf-8')
+          res.end(text)
+        } catch (err: unknown) {
+          res.statusCode = 502
+          res.end(JSON.stringify({ ok: false, error: err instanceof Error ? err.message : 'Webhook failed' }))
+        }
+      })
+    }
+  }
+}
+
 export default defineConfig({
   base: process.env.GITHUB_PAGES === 'true' ? '/seven-note/' : '/',
   plugins: [
+    icalProxyPlugin(),
     react(),
     tailwindcss(),
     VitePWA({
@@ -19,7 +93,8 @@ export default defineConfig({
         'icons.svg',
         'noise.avif',
         'pwa-192x192.png',
-        'pwa-512x512.png'
+        'pwa-512x512.png',
+        'sw-push.js'
       ],
       manifest: {
         name: 'Seven Note - Offline Notion & Milanote Hybrid',
@@ -46,6 +121,7 @@ export default defineConfig({
         ]
       },
       workbox: {
+        importScripts: ['sw-push.js'],
         cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,avif,webp}'],
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,

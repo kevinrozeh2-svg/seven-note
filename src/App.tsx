@@ -53,6 +53,7 @@ import {
 import { FindInPage } from './components/search/FindInPage'
 import { WorkbenchTabs, type WorkbenchTab } from './components/tabs/WorkbenchTabs'
 const ExternalShareView = lazy(() => import('./components/views/ExternalShareView').then(m => ({ default: m.ExternalShareView })))
+const CalendarPage = lazy(() => import('./components/views/CalendarPage').then(m => ({ default: m.CalendarPage })))
 import { type AppTemplate } from './lib/templates'
 import {
   getCurrentMember,
@@ -76,6 +77,13 @@ import {
   printDocument
 } from './lib/exportUtils'
 import { Toaster, toast } from 'sonner'
+import { NotificationCenter } from './components/notifications/NotificationCenter'
+import {
+  notificationService,
+  NOTIFICATION_ACTION_EVENT,
+  type NotificationPreferences
+} from './lib/notificationService'
+import { useAppStore } from './store/useAppStore'
 
 // Lazy-loaded heavy components for instant initial load (code-splitting)
 const DocEditor = lazy(() => import('./components/editor/DocEditor').then(m => ({ default: m.DocEditor })))
@@ -112,6 +120,43 @@ function MainApp() {
   const [authModalMode, setAuthModalMode] = useState<AuthMode>('login')
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false)
   const [isUserManagementModalOpen, setIsUserManagementModalOpen] = useState(false)
+  const isNotificationCenterOpen = useAppStore((s) => s.isNotificationCenterOpen)
+  const setNotificationCenterOpen = useAppStore((s) => s.setNotificationCenterOpen)
+  const toggleNotificationCenter = useAppStore((s) => s.toggleNotificationCenter)
+  const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences>(() =>
+    notificationService.getPreferences()
+  )
+
+  useEffect(() => {
+    return notificationService.subscribeToPreferences(setNotifPrefs)
+  }, [])
+
+  const unreadNotificationsCount =
+    useLiveQuery(async () => {
+      const now = Date.now()
+      const memberId = currentMember?.id?.toLowerCase()
+      return db.notifications
+        .filter((n) => {
+          if (n.isArchived || n.isRead) return false
+          if (n.snoozedUntil && n.snoozedUntil > now) return false
+          if (
+            n.recipientId &&
+            n.recipientId !== 'all' &&
+            memberId &&
+            n.recipientId.toLowerCase() !== memberId
+          ) {
+            return false
+          }
+          return true
+        })
+        .count()
+    }, [currentMember?.id]) || 0
+
+  useEffect(() => {
+    if (!authUser) return
+    notificationService.startSchedulers()
+    return () => notificationService.stopSchedulers()
+  }, [authUser])
 
   useEffect(() => {
     return subscribeToWebUpdate(setWebUpdateAvailable)
@@ -453,8 +498,42 @@ function MainApp() {
     })
   }
 
+  useEffect(() => {
+    const handleNotificationAction = (e: Event) => {
+      const detail = (e as CustomEvent<{ payload?: { type?: string; workspaceId?: string; spaceId?: string } }>).detail
+      const payload = detail?.payload
+      if (!payload) return
+      if (payload.type === 'open_workspace' && payload.workspaceId) {
+        void selectWorkspaceWithTab(payload.workspaceId, payload.spaceId)
+      } else if (payload.type === 'open_settings') {
+        setIsSettingsOpen(true)
+      } else if (payload.type === 'retry_sync') {
+        void syncEngine.triggerSync()
+      } else if (payload.type === 'apply_update') {
+        void applyWebUpdate()
+      }
+    }
+    window.addEventListener(NOTIFICATION_ACTION_EVENT, handleNotificationAction)
+
+    const handleSwMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'SEVEN_NOTE_PUSH_NAVIGATE' && event.data?.workspaceId) {
+        void selectWorkspaceWithTab(event.data.workspaceId)
+      }
+    }
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', handleSwMessage)
+    }
+
+    return () => {
+      window.removeEventListener(NOTIFICATION_ACTION_EVENT, handleNotificationAction)
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', handleSwMessage)
+      }
+    }
+  }, [currentSpaceId, effectiveWorkspaces, currentMember, authUser?.id])
+
   const openSpecialViewTab = (
-    viewType: 'all-docs' | 'knowledge-graph' | 'trash' | 'templates',
+    viewType: 'all-docs' | 'knowledge-graph' | 'calendar' | 'trash' | 'templates',
     title: string
   ) => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
@@ -731,6 +810,12 @@ function MainApp() {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
         setIsSearchOpen((prev) => !prev)
+        return
+      }
+
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'n') {
+        e.preventDefault()
+        toggleNotificationCenter()
         return
       }
 
@@ -1354,6 +1439,8 @@ function MainApp() {
           onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
           onNewNote={handleNewTab}
           onOpenSearch={() => setIsSearchOpen(true)}
+          onOpenCalendar={() => openSpecialViewTab('calendar', 'Almanaque')}
+          calendarSidebarActive={activeTab?.viewType === 'calendar'}
           onOpenKnowledgeGraph={() => openSpecialViewTab('knowledge-graph', 'Vista gráfica')}
           onOpenAllDocs={() => openSpecialViewTab('all-docs', 'Todos los documentos')}
           onOpenTemplates={() => openSpecialViewTab('templates', 'Plantillas')}
@@ -1361,6 +1448,10 @@ function MainApp() {
           onOpenShortcuts={() => setIsShortcutsOpen(true)}
           onOpenTrash={() => openSpecialViewTab('trash', 'Papelera')}
           onOpenSettings={() => setIsSettingsOpen(true)}
+          onToggleNotifications={toggleNotificationCenter}
+          notificationsOpen={isNotificationCenterOpen}
+          unreadNotificationsCount={unreadNotificationsCount}
+          notificationsDnd={notifPrefs.dndEnabled || notificationService.isInQuietHours()}
           activeView={activeTab?.viewType || activeViewMode}
           syncStatus={syncStatus}
           darkMode={darkMode}
@@ -1380,7 +1471,7 @@ function MainApp() {
 
       {/* 1. Left Sidebar Navigation */}
       <AnimatePresence initial={false}>
-        {sidebarOpen && !isPresentationMode && !focusMode && (
+        {sidebarOpen && !isPresentationMode && !focusMode && activeTab?.viewType !== 'calendar' && (
           <>
             {/* Mobile backdrop overlay */}
             <motion.div
@@ -2194,6 +2285,8 @@ function MainApp() {
                   }
                 }}
               />
+            ) : activeTab?.viewType === 'calendar' ? (
+              <CalendarPage />
             ) : activeTab?.viewType === 'trash' ? (
               <TrashPage
                 onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
@@ -2473,7 +2566,15 @@ function MainApp() {
         )}
       </Suspense>
 
-      {/* 6. Pro Sonner Notification Toaster */}
+      {/* 6. Notification Center Drawer */}
+      <NotificationCenter
+        isOpen={isNotificationCenterOpen}
+        onClose={() => setNotificationCenterOpen(false)}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        currentMemberId={currentMember?.id}
+      />
+
+      {/* 7. Pro Sonner Notification Toaster */}
       <Toaster richColors position="bottom-right" closeButton theme={darkMode ? 'dark' : 'light'} />
     </div>
     </MotionConfig>

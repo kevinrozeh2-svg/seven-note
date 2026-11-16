@@ -53,6 +53,10 @@ interface AppState {
 
   isCreateWorkspaceOpen: boolean
   setCreateWorkspaceOpen: (open: boolean) => void
+
+  isNotificationCenterOpen: boolean
+  setNotificationCenterOpen: (open: boolean) => void
+  toggleNotificationCenter: () => void
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -131,5 +135,9 @@ export const useAppStore = create<AppState>((set) => ({
   setShortcutsOpen: (open) => set({ isShortcutsOpen: open }),
 
   isCreateWorkspaceOpen: false,
-  setCreateWorkspaceOpen: (open) => set({ isCreateWorkspaceOpen: open })
+  setCreateWorkspaceOpen: (open) => set({ isCreateWorkspaceOpen: open }),
+
+  isNotificationCenterOpen: false,
+  setNotificationCenterOpen: (open) => set({ isNotificationCenterOpen: open }),
+  toggleNotificationCenter: () => set((state) => ({ isNotificationCenterOpen: !state.isNotificationCenterOpen }))
 }))

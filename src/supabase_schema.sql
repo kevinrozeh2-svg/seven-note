@@ -814,3 +814,110 @@ drop trigger if exists trg_clamp_timestamps_collections on public.seven_collecti
 create trigger trg_clamp_timestamps_collections
   before insert or update on public.seven_collections
   for each row execute function public.clamp_future_timestamps();
+
+-- ========================================================
+-- 14. SISTEMA DE NOTIFICACIONES PERSISTENTES (seven_notifications)
+-- ========================================================
+create table if not exists public.seven_notifications (
+  id text primary key,
+  type text not null default 'system',
+  severity text not null default 'info',
+  title text not null,
+  message text not null default '',
+  workspace_id text,
+  space_id text,
+  node_id text,
+  actor_id text,
+  actor_name text,
+  recipient_id text not null default 'all',
+  action_label text,
+  action_payload jsonb,
+  dedupe_key text,
+  is_read boolean not null default false,
+  is_archived boolean not null default false,
+  snoozed_until bigint,
+  created_at bigint not null default (extract(epoch from now()) * 1000)::bigint,
+  updated_at bigint not null default (extract(epoch from now()) * 1000)::bigint,
+  read_at bigint
+);
+
+create index if not exists idx_seven_notifications_recipient on public.seven_notifications (recipient_id, is_archived, created_at desc);
+create index if not exists idx_seven_notifications_updated on public.seven_notifications (updated_at);
+
+alter table public.seven_notifications enable row level security;
+
+drop policy if exists "Authenticated users can read relevant notifications" on public.seven_notifications;
+create policy "Authenticated users can read relevant notifications"
+  on public.seven_notifications for select
+  to authenticated
+  using (
+    public.is_user_active(auth.uid())
+    and (
+      recipient_id = 'all'
+      or recipient_id = auth.uid()::text
+      or lower(recipient_id) = lower(coalesce((select email from public.user_profiles where id = auth.uid()), ''))
+      or actor_id = auth.uid()::text
+    )
+  );
+
+drop policy if exists "Active members can insert notifications" on public.seven_notifications;
+create policy "Active members can insert notifications"
+  on public.seven_notifications for insert
+  to authenticated
+  with check (public.is_user_active(auth.uid()));
+
+drop policy if exists "Users can update their notifications" on public.seven_notifications;
+create policy "Users can update their notifications"
+  on public.seven_notifications for update
+  to authenticated
+  using (
+    public.is_user_active(auth.uid())
+    and (
+      recipient_id = 'all'
+      or recipient_id = auth.uid()::text
+      or lower(recipient_id) = lower(coalesce((select email from public.user_profiles where id = auth.uid()), ''))
+    )
+  );
+
+drop trigger if exists trg_clamp_timestamps_notifications on public.seven_notifications;
+create trigger trg_clamp_timestamps_notifications
+  before insert or update on public.seven_notifications
+  for each row execute function public.clamp_future_timestamps();
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'seven_notifications'
+  ) then
+    alter publication supabase_realtime add table public.seven_notifications;
+  end if;
+exception when others then
+  null;
+end $$;
+
+-- ========================================================
+-- 15. SUSCRIPCIONES WEB PUSH EN SEGUNDO PLANO (seven_push_subscriptions)
+-- ========================================================
+create table if not exists public.seven_push_subscriptions (
+  id text primary key,
+  user_id uuid references auth.users(id) on delete cascade,
+  member_id text,
+  endpoint text not null unique,
+  p256dh text not null,
+  auth text not null,
+  user_agent text,
+  created_at bigint not null default (extract(epoch from now()) * 1000)::bigint,
+  updated_at bigint not null default (extract(epoch from now()) * 1000)::bigint
+);
+
+create index if not exists idx_seven_push_user on public.seven_push_subscriptions (user_id);
+
+alter table public.seven_push_subscriptions enable row level security;
+
+drop policy if exists "Users manage their own push subscriptions" on public.seven_push_subscriptions;
+create policy "Users manage their own push subscriptions"
+  on public.seven_push_subscriptions for all
+  to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());

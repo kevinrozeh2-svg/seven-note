@@ -22,6 +22,14 @@ import schemaSql from '../../supabase_schema.sql?raw'
 import { toast } from 'sonner'
 import { isTauri, checkForAppUpdates } from '../../lib/tauriUpdater'
 import { checkForWebUpdates } from '../../lib/pwaUpdater'
+import { notificationService, type NotificationPreferences } from '../../lib/notificationService'
+import {
+  getWebPushStatus,
+  subscribeToWebPush,
+  unsubscribeFromWebPush,
+  saveVapidPublicKey,
+  type WebPushStatus
+} from '../../lib/webPush'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -42,6 +50,28 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
   const [manualSyncing, setManualSyncing] = useState(false)
   const [installPrompt, setInstallPrompt] = useState<any>(null)
   const [isStandalone, setIsStandalone] = useState(false)
+  const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences>(() =>
+    notificationService.getPreferences()
+  )
+  const [desktopPerm, setDesktopPerm] = useState<NotificationPermission | 'unsupported'>(() =>
+    notificationService.getDesktopPermission()
+  )
+  const [webPushStatus, setWebPushStatus] = useState<WebPushStatus | null>(null)
+  const [vapidInput, setVapidInput] = useState('')
+  const [pushLoading, setPushLoading] = useState(false)
+
+  useEffect(() => {
+    return notificationService.subscribeToPreferences(setNotifPrefs)
+  }, [])
+
+  useEffect(() => {
+    if (isOpen) {
+      void getWebPushStatus().then((st) => {
+        setWebPushStatus(st)
+        setVapidInput(st.vapidKey)
+      })
+    }
+  }, [isOpen])
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -256,6 +286,231 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
               <span className="font-mono bg-[var(--app-bg-primary)] px-2 py-0.5 rounded border border-[var(--app-border)] text-[var(--app-text-secondary)]">
                 Ctrl + / Ctrl - / Ctrl 0
               </span>
+            </div>
+          </div>
+
+          {/* Notifications Section */}
+          <div className="space-y-3 p-3.5 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)]">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h3 className="text-xs font-semibold text-[var(--app-text-primary)]">
+                  Notificaciones y Alertas
+                </h3>
+                <p className="text-[11px] mt-0.5 text-[var(--app-text-muted)]">
+                  Controla avisos en la app, notificaciones nativas, sonido y horario silencioso.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void notificationService.sendTestNotification()}
+                className="px-2.5 py-1 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[11px] font-medium text-[var(--app-text-primary)] transition cursor-pointer shrink-0"
+              >
+                Probar alerta
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {[
+                {
+                  key: 'toastsEnabled' as const,
+                  label: 'Avisos flotantes (Toasts)',
+                  value: notifPrefs.toastsEnabled
+                },
+                {
+                  key: 'soundEnabled' as const,
+                  label: 'Sonido sutil de alerta',
+                  value: notifPrefs.soundEnabled
+                },
+                {
+                  key: 'dndEnabled' as const,
+                  label: 'Modo No Molestar',
+                  value: notifPrefs.dndEnabled
+                },
+                {
+                  key: 'quietHoursEnabled' as const,
+                  label: 'Horario silencioso automático',
+                  value: notifPrefs.quietHoursEnabled
+                }
+              ].map((item) => (
+                <label
+                  key={item.key}
+                  className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)] cursor-pointer"
+                >
+                  <span className="text-[11px] font-medium text-[var(--app-text-primary)]">
+                    {item.label}
+                  </span>
+                  <input
+                    type="checkbox"
+                    checked={item.value}
+                    onChange={(e) =>
+                      notificationService.updatePreferences({ [item.key]: e.target.checked })
+                    }
+                    className="accent-purple-500 cursor-pointer"
+                  />
+                </label>
+              ))}
+            </div>
+
+            {notifPrefs.quietHoursEnabled && (
+              <div className="flex items-center justify-between gap-3 px-2.5 py-2 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)]">
+                <span className="text-[11px] text-[var(--app-text-secondary)]">
+                  Rango silencioso
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="time"
+                    value={notifPrefs.quietHoursStart}
+                    onChange={(e) =>
+                      notificationService.updatePreferences({ quietHoursStart: e.target.value })
+                    }
+                    className="px-1.5 py-0.5 text-[11px] rounded border border-[var(--app-border)] bg-[var(--app-bg-secondary)] text-[var(--app-text-primary)]"
+                  />
+                  <span className="text-[var(--app-text-muted)]">a</span>
+                  <input
+                    type="time"
+                    value={notifPrefs.quietHoursEnd}
+                    onChange={(e) =>
+                      notificationService.updatePreferences({ quietHoursEnd: e.target.value })
+                    }
+                    className="px-1.5 py-0.5 text-[11px] rounded border border-[var(--app-border)] bg-[var(--app-bg-secondary)] text-[var(--app-text-primary)]"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Desktop Permission */}
+            <div className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)]">
+              <div>
+                <div className="text-[11px] font-medium text-[var(--app-text-primary)]">
+                  Notificaciones de escritorio / sistema
+                </div>
+                <div className="text-[10px] text-[var(--app-text-muted)]">
+                  Estado:{' '}
+                  {desktopPerm === 'granted'
+                    ? 'Permitido'
+                    : desktopPerm === 'denied'
+                    ? 'Bloqueado por el navegador'
+                    : desktopPerm === 'unsupported'
+                    ? 'No soportado en este entorno'
+                    : 'Pendiente de permiso'}
+                </div>
+              </div>
+              {desktopPerm === 'granted' ? (
+                <input
+                  type="checkbox"
+                  checked={notifPrefs.desktopEnabled}
+                  onChange={(e) =>
+                    notificationService.updatePreferences({ desktopEnabled: e.target.checked })
+                  }
+                  className="accent-purple-500 cursor-pointer"
+                />
+              ) : desktopPerm === 'default' ? (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const res = await notificationService.requestDesktopPermission()
+                    setDesktopPerm(res)
+                  }}
+                  className="px-2.5 py-1 rounded text-[11px] font-medium bg-purple-500/15 text-purple-400 hover:bg-purple-500/25 border border-purple-500/30 transition cursor-pointer"
+                >
+                  Activar
+                </button>
+              ) : null}
+            </div>
+
+            {/* Background Web Push (even when browser is closed) */}
+            {webPushStatus?.supported && (
+              <div className="space-y-2 px-2.5 py-2.5 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)]">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-[11px] font-medium text-[var(--app-text-primary)]">
+                      Push en segundo plano (web cerrada)
+                    </div>
+                    <div className="text-[10px] text-[var(--app-text-muted)]">
+                      {webPushStatus.subscribed
+                        ? 'Suscrito en este dispositivo'
+                        : 'Recibe alertas aunque cierres el navegador'}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={pushLoading}
+                    onClick={async () => {
+                      setPushLoading(true)
+                      const res = webPushStatus.subscribed
+                        ? await unsubscribeFromWebPush()
+                        : await subscribeToWebPush(vapidInput)
+                      setPushLoading(false)
+                      if (res.success) {
+                        toast.success(res.message)
+                      } else {
+                        toast.error(res.message)
+                      }
+                      const next = await getWebPushStatus()
+                      setWebPushStatus(next)
+                    }}
+                    className={`px-2.5 py-1 rounded text-[11px] font-medium border transition cursor-pointer disabled:opacity-50 ${
+                      webPushStatus.subscribed
+                        ? 'border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20'
+                        : 'border-purple-500/30 bg-purple-500/15 text-purple-400 hover:bg-purple-500/25'
+                    }`}
+                  >
+                    {pushLoading
+                      ? 'Procesando...'
+                      : webPushStatus.subscribed
+                      ? 'Desactivar'
+                      : 'Activar Push'}
+                  </button>
+                </div>
+
+                {!import.meta.env.VITE_VAPID_PUBLIC_KEY && (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="text"
+                      value={vapidInput}
+                      onChange={(e) => {
+                        setVapidInput(e.target.value)
+                        saveVapidPublicKey(e.target.value)
+                      }}
+                      placeholder="Clave pública VAPID (ej. BEl62iUYg...)"
+                      className="flex-1 px-2 py-1 text-[11px] rounded border border-[var(--app-border)] bg-[var(--app-bg-secondary)] text-[var(--app-text-primary)] placeholder:text-[var(--app-text-muted)] font-mono"
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Category Filters */}
+            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+              {(
+                [
+                  { id: 'collaboration', label: 'Menciones y Comentarios' },
+                  { id: 'reminders', label: 'Recordatorios de Tareas' },
+                  { id: 'sync', label: 'Sincronización' },
+                  { id: 'system', label: 'Sistema' }
+                ] as const
+              ).map((cat) => {
+                const active = notifPrefs.categories[cat.id]
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() =>
+                      notificationService.updatePreferences({
+                        categories: { ...notifPrefs.categories, [cat.id]: !active }
+                      })
+                    }
+                    className={`px-2 py-1 rounded-md text-[10px] font-medium border transition cursor-pointer ${
+                      active
+                        ? 'border-purple-500/40 bg-purple-500/15 text-purple-400'
+                        : 'border-[var(--app-border)] bg-[var(--app-bg-primary)] text-[var(--app-text-muted)]'
+                    }`}
+                  >
+                    {active ? '✓ ' : ''}
+                    {cat.label}
+                  </button>
+                )
+              })}
             </div>
           </div>
 
