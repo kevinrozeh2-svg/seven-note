@@ -17,7 +17,7 @@ import {
   testSupabaseConnection
 } from '../../lib/supabase'
 import { syncEngine, type SyncEngineStatus } from '../../lib/syncEngine'
-import { db } from '../../db'
+import { db, markAccountSeeded, normalizeFolderPath } from '../../db'
 import schemaSql from '../../supabase_schema.sql?raw'
 import { toast } from 'sonner'
 import { isTauri, checkForAppUpdates } from '../../lib/tauriUpdater'
@@ -184,16 +184,24 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
         }
 
         if (confirm(`Se importarán ${parsed.workspaces.length} páginas y ${parsed.nodes.length} tarjetas. ¿Continuar?`)) {
+          const markPending = <T extends Record<string, any>>(rows: T[]) =>
+            rows.map((r) => ({ ...r, syncStatus: 'pending' as const }))
           if (parsed.spaces && parsed.spaces.length > 0) {
-            await db.spaces.bulkPut(parsed.spaces)
+            await db.spaces.bulkPut(markPending(parsed.spaces))
           }
-          await db.workspaces.bulkPut(parsed.workspaces)
-          await db.canvasNodes.bulkPut(parsed.nodes)
-          if (parsed.edges) await db.canvasEdges.bulkPut(parsed.edges)
-          if (parsed.collections) await db.collections.bulkPut(parsed.collections)
-          if (parsed.tags) await db.tags.bulkPut(parsed.tags)
+          await db.workspaces.bulkPut(
+            markPending(parsed.workspaces).map((w: any) => ({
+              ...w,
+              folder: normalizeFolderPath(w.folder)
+            }))
+          )
+          await db.canvasNodes.bulkPut(markPending(parsed.nodes))
+          if (parsed.edges) await db.canvasEdges.bulkPut(markPending(parsed.edges))
+          if (parsed.collections) await db.collections.bulkPut(markPending(parsed.collections))
+          if (parsed.tags) await db.tags.bulkPut(markPending(parsed.tags))
 
-          syncEngine.scheduleSync(500)
+          markAccountSeeded()
+          await syncEngine.triggerSync()
           alert('¡Copia de seguridad restaurada con éxito!')
           window.location.reload()
         }

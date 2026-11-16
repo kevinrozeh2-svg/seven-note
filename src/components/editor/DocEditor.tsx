@@ -389,6 +389,9 @@ export function DocEditor({
 
   const isFirstRender = useRef(true)
   const saveTimeoutRef = useRef<any>(null)
+  const pendingSaveRef = useRef<{ workspaceId: string; html: string } | null>(null)
+  const currentWorkspaceIdRef = useRef(workspace.id)
+  currentWorkspaceIdRef.current = workspace.id
   const editorImageInputRef = useRef<HTMLInputElement>(null)
   const titleTextareaRef = useRef<HTMLTextAreaElement>(null)
   const notionButtonRef = useRef<HTMLButtonElement>(null)
@@ -698,9 +701,15 @@ export function DocEditor({
 
       // Debounced save
       if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
+      const targetWsId = workspace.id
+      pendingSaveRef.current = { workspaceId: targetWsId, html }
       saveTimeoutRef.current = setTimeout(async () => {
+        saveTimeoutRef.current = null
+        const pending = pendingSaveRef.current
+        if (!pending || pending.workspaceId !== targetWsId) return
+        pendingSaveRef.current = null
         try {
-          await db.workspaces.update(workspace.id, {
+          await db.workspaces.update(targetWsId, {
             docContent: html,
             updatedAt: Date.now(),
             syncStatus: 'pending'
@@ -717,10 +726,39 @@ export function DocEditor({
 
   editorRef.current = editor
 
+  // Flush any pending debounced content save on unmount or page hide so rapid navigation never loses edits
+  useEffect(() => {
+    const flushPendingSave = () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current)
+        saveTimeoutRef.current = null
+      }
+      const pending = pendingSaveRef.current
+      if (pending) {
+        pendingSaveRef.current = null
+        void db.workspaces
+          .update(pending.workspaceId, {
+            docContent: pending.html,
+            updatedAt: Date.now(),
+            syncStatus: 'pending'
+          })
+          .then(() => syncEngine.scheduleSync(500))
+          .catch(() => {})
+      }
+    }
+    window.addEventListener('beforeunload', flushPendingSave)
+    return () => {
+      window.removeEventListener('beforeunload', flushPendingSave)
+      flushPendingSave()
+    }
+  }, [workspace.id])
+
   // Synchronize editor content when workspace changes
   useEffect(() => {
     if (editor && !isFirstRender.current) {
-      if (editor.getHTML() !== workspace.docContent) {
+      // No sobrescribir ediciones locales pendientes de guardar mientras el usuario sigue escribiendo
+      const hasUnsavedForCurrent = pendingSaveRef.current?.workspaceId === workspace.id
+      if (!hasUnsavedForCurrent && editor.getHTML() !== workspace.docContent) {
         editor.commands.setContent(workspace.docContent || '<p></p>', { emitUpdate: false })
       }
       setInfoText(workspace.informationContent || '')
@@ -852,6 +890,7 @@ export function DocEditor({
       updatedAt: Date.now(),
       syncStatus: 'pending'
     })
+    syncEngine.scheduleSync(1000)
   }
 
   // Update info content
@@ -862,6 +901,7 @@ export function DocEditor({
       updatedAt: Date.now(),
       syncStatus: 'pending'
     })
+    syncEngine.scheduleSync(1500)
   }
 
   // Toggle Bi-Directional links visibility
@@ -873,6 +913,7 @@ export function DocEditor({
       updatedAt: Date.now(),
       syncStatus: 'pending'
     })
+    syncEngine.scheduleSync(1000)
   }
 
   // Bidirectional links across all public workspaces (both incoming backlinks and outgoing linked notes)

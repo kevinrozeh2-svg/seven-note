@@ -42,7 +42,8 @@ import {
   type WorkspaceItem,
   type SpaceItem,
   DEFAULT_SPACE_ID,
-  updateSpace
+  updateSpace,
+  normalizeFolderPath
 } from '../../db'
 import { isItemUnread, NewBadge, NewDot, useUnreadTrigger } from '../../lib/unreadTracker'
 import { type SyncEngineStatus, syncEngine } from '../../lib/syncEngine'
@@ -469,6 +470,8 @@ export function Sidebar({
   const draggedDocIdRef = useRef<string | null>(null)
   const draggedFolderNameRef = useRef<string | null>(null)
   const hasJustDraggedRef = useRef<boolean>(false)
+  const folderSubmitLockRef = useRef<boolean>(false)
+  const spaceRenameLockRef = useRef<boolean>(false)
 
   // Persisted folder order for current space (synced via db.spaces + Supabase)
   const spaceFolderOrder = (currentSpace as SpaceItem).folderOrder
@@ -491,49 +494,44 @@ export function Sidebar({
       return
     }
 
+    // Solo leer el orden visual local sin sobreescribir db.spaces ni marcar syncStatus='pending'
+    // automáticamente en el arranque (evita machacar nombres u orden de espacios desde caché vieja).
     try {
       const saved = localStorage.getItem(`seven_note_folder_order_${currentSpace.id}`)
       const parsed: string[] = saved ? JSON.parse(saved) : []
-      setFolderOrder(parsed)
-      // Migrate existing localStorage-only folder order into db.spaces so it syncs across devices
-      // Only run once initial workspace/space hydration & sync has completed so stale localStorage
-      // never marks a space as pending before pulling remote updates.
-      if (!isLoading && parsed.length > 0 && visibleSpaces.some((s) => s.id === currentSpace.id)) {
-        db.spaces
-          .update(currentSpace.id, {
-            folderOrder: parsed,
-            updatedAt: Date.now(),
-            syncStatus: 'pending'
-          })
-          .then(() => syncEngine.scheduleSync(500))
-          .catch(() => {})
-      }
+      setFolderOrder(Array.isArray(parsed) ? parsed : [])
     } catch {
       setFolderOrder([])
     }
-  }, [currentSpace.id, spaceFolderOrder, isLoading])
+  }, [currentSpace.id, spaceFolderOrder])
 
   const persistFolderOrder = useCallback(
     (nextOrUpdater: string[] | ((prev: string[]) => string[])) => {
       setFolderOrder((prev) => {
-        const next = typeof nextOrUpdater === 'function' ? nextOrUpdater(prev) : nextOrUpdater
+        const rawNext = typeof nextOrUpdater === 'function' ? nextOrUpdater(prev) : nextOrUpdater
+        const next = Array.from(
+          new Set(rawNext.map((f) => normalizeFolderPath(f)).filter((f): f is string => Boolean(f)))
+        )
         try {
           localStorage.setItem(`seven_note_folder_order_${currentSpace.id}`, JSON.stringify(next))
         } catch (err) {
           console.warn('Error saving folder order', err)
         }
-        db.spaces
-          .update(currentSpace.id, {
-            folderOrder: next,
-            updatedAt: Date.now(),
-            syncStatus: 'pending'
-          })
-          .then(() => syncEngine.scheduleSync(500))
-          .catch((err) => console.warn('Error syncing folder order', err))
+        const spObj = visibleSpaces.find((s) => s.id === currentSpace.id)
+        if (spObj && canUserManageSpace(spObj, activeMember, authUser?.id)) {
+          db.spaces
+            .update(currentSpace.id, {
+              folderOrder: next,
+              updatedAt: Date.now(),
+              syncStatus: 'pending'
+            })
+            .then(() => syncEngine.scheduleSync(500))
+            .catch((err) => console.warn('Error syncing folder order', err))
+        }
         return next
       })
     },
-    [currentSpace.id]
+    [currentSpace.id, visibleSpaces, activeMember, authUser?.id]
   )
 
 
@@ -544,13 +542,14 @@ export function Sidebar({
     viewMode: 'doc' | 'canvas' = 'doc',
     isPrivate: boolean = isCurrentSpacePrivate
   ) => {
+    const cleanFolder = isPrivate ? null : normalizeFolderPath(folderName)
     const newId = crypto.randomUUID()
     const now = Date.now()
     const newWs: WorkspaceItem = {
       id: newId,
       parentId,
       spaceId: currentSpace.id,
-      folder: folderName,
+      folder: cleanFolder,
       title: isPrivate
         ? (viewMode === 'canvas' ? 'Tablero privado sin título' : 'Nota privada sin título')
         : (viewMode === 'canvas' ? 'Tablero sin título' : 'Nota sin título'),
@@ -581,10 +580,11 @@ export function Sidebar({
     }
     try {
       await db.workspaces.add(newWs)
-      if (folderName) {
+      syncEngine.scheduleSync(500)
+      if (cleanFolder) {
         setFolderOpenMap((prev) => {
           const next = { ...prev }
-          const parts = folderName.split('/')
+          const parts = cleanFolder.split('/')
           let curr = ''
           for (const p of parts) {
             curr = curr ? `${curr}/${p}` : p
@@ -604,11 +604,12 @@ export function Sidebar({
   const handleToggleFavorite = async (e: React.MouseEvent, ws: WorkspaceItem) => {
     e.stopPropagation()
     try {
+      const canSync = canUserEditWorkspace(ws, activeMember, authUser?.id)
       await db.workspaces.update(ws.id, {
         isFavorite: !ws.isFavorite,
-        updatedAt: Date.now(),
-        syncStatus: 'pending'
+        ...(canSync ? { updatedAt: Date.now(), syncStatus: 'pending' as const } : { syncStatus: ws.syncStatus || 'synced' })
       })
+      if (canSync) syncEngine.scheduleSync(500)
     } catch (err) {
       console.error('Error toggling favorite', err)
     }
@@ -676,17 +677,36 @@ export function Sidebar({
     }
     if (!confirm('¿Mover esta página a la papelera?')) return
     try {
+      const now = Date.now()
       await db.workspaces.update(id, {
         isDeleted: true,
-        updatedAt: Date.now(),
+        updatedAt: now,
         syncStatus: 'pending'
       })
+
+      // Promover subpáginas activas para que no queden huérfanas e invisibles al borrar el padre
+      const childPages = workspaces.filter((w) => w.parentId === id && !w.isDeleted)
+      for (const child of childPages) {
+        if (canUserEditWorkspace(child, activeMember, authUser?.id)) {
+          await db.workspaces.update(child.id, {
+            parentId: targetWs?.parentId || null,
+            folder: child.folder || targetWs?.folder || null,
+            updatedAt: now,
+            syncStatus: 'pending'
+          })
+        }
+      }
+
       syncEngine.scheduleSync(500)
 
       if (id === currentWorkspaceId) {
         const targetSpaceId = targetWs?.spaceId || currentSpace.id
         const remaining = workspaces.filter(
-          (w) => w.id !== id && !w.isDeleted && (w.spaceId || currentSpace.id) === targetSpaceId
+          (w) =>
+            w.id !== id &&
+            !w.isDeleted &&
+            (w.spaceId || DEFAULT_SPACE_ID) === targetSpaceId &&
+            isWorkspaceVisible(w, activeMember, authUser?.id)
         )
         if (remaining.length > 0) onSelectWorkspace(remaining[0].id, targetSpaceId)
       }
@@ -752,9 +772,10 @@ export function Sidebar({
   // Helper: folder date statistics based on notes inside it
   const getFolderTimestamps = useCallback(
     (folderPath: string) => {
-      const insideDocs = teamDocs.filter(
-        (w) => w.folder === folderPath || (w.folder && w.folder.startsWith(folderPath + '/'))
-      )
+      const insideDocs = teamDocs.filter((w) => {
+        const f = normalizeFolderPath(w.folder)
+        return f === folderPath || (f !== null && f.startsWith(folderPath + '/'))
+      })
       if (insideDocs.length === 0) {
         return { maxUpdated: 0, minUpdated: 0, maxCreated: 0, minCreated: 0 }
       }
@@ -781,11 +802,17 @@ export function Sidebar({
     return path.slice(0, idx)
   }
 
+  const activeWorkspaceIds = useMemo(
+    () => new Set(activeWorkspaces.map((w) => w.id)),
+    [activeWorkspaces]
+  )
+
   const allFolders = useMemo(() => {
     const rawList = new Set<string>()
     teamDocs.forEach((w) => {
-      if (w.folder && w.folder.trim()) {
-        rawList.add(w.folder.trim())
+      const normalized = normalizeFolderPath(w.folder)
+      if (normalized) {
+        rawList.add(normalized)
       }
     })
     const fullSet = new Set<string>()
@@ -903,7 +930,7 @@ export function Sidebar({
   )
 
   const rootPages = teamDocs
-    .filter((w) => !w.parentId && (!w.folder || !w.folder.trim()))
+    .filter((w) => (!w.parentId || !activeWorkspaceIds.has(w.parentId)) && !normalizeFolderPath(w.folder))
     .sort(sortByOrder)
 
   // Direct grab & move Drag & Drop Handlers
@@ -992,19 +1019,34 @@ export function Sidebar({
     const movingDoc = workspaces.find((w) => w.id === movingDocId)
     if (!movingDoc) return
 
-    // Prevent moving parent page into its child
-    if (targetDoc.parentId === movingDocId) return
+    if (!canUserEditWorkspace(movingDoc, activeMember, authUser?.id)) {
+      toast.error('Solo el autor o un administrador pueden mover esta nota.')
+      return
+    }
+
+    // Prevent moving parent page into itself or any of its descendants
+    let ancestorCursor: string | null | undefined = targetDoc.parentId
+    const visitedAncestors = new Set<string>([targetDoc.id])
+    while (ancestorCursor) {
+      if (ancestorCursor === movingDocId) return
+      if (visitedAncestors.has(ancestorCursor)) break
+      visitedAncestors.add(ancestorCursor)
+      const parentItem = workspaces.find((w) => w.id === ancestorCursor)
+      ancestorCursor = parentItem?.parentId
+    }
+
+    const cleanTargetFolder = normalizeFolderPath(targetFolder)
 
     // Determine target group docs
     let groupDocs: WorkspaceItem[] = []
     if (movingDoc.isPrivate) {
       groupDocs = activeWorkspaces.filter((w) => w.isPrivate)
-    } else if (targetDoc.parentId) {
+    } else if (targetDoc.parentId && activeWorkspaceIds.has(targetDoc.parentId)) {
       groupDocs = activeWorkspaces.filter((w) => w.parentId === targetDoc.parentId)
-    } else if (targetFolder) {
-      groupDocs = teamDocs.filter((w) => w.folder === targetFolder)
+    } else if (cleanTargetFolder) {
+      groupDocs = teamDocs.filter((w) => (!w.parentId || !activeWorkspaceIds.has(w.parentId)) && normalizeFolderPath(w.folder) === cleanTargetFolder)
     } else {
-      groupDocs = teamDocs.filter((w) => !w.parentId && (!w.folder || !w.folder.trim()))
+      groupDocs = teamDocs.filter((w) => (!w.parentId || !activeWorkspaceIds.has(w.parentId)) && !normalizeFolderPath(w.folder))
     }
 
     // Sort according to current order
@@ -1021,29 +1063,46 @@ export function Sidebar({
         ? targetIdx
         : targetIdx + 1
 
+    const nextParentId = targetDoc.parentId && activeWorkspaceIds.has(targetDoc.parentId) ? targetDoc.parentId : null
     const updatedMovingDoc: WorkspaceItem = {
       ...movingDoc,
-      folder: movingDoc.isPrivate ? null : targetFolder,
-      parentId: targetDoc.parentId || null
+      folder: movingDoc.isPrivate ? null : cleanTargetFolder,
+      parentId: movingDoc.isPrivate ? null : nextParentId
     }
     groupDocs.splice(insertIdx, 0, updatedMovingDoc)
 
-    // Assign spaced sortOrder values to ensure persistent order
+    // Assign spaced sortOrder values only for editable docs, and only change folder/parentId on movingDoc
     const now = Date.now()
-    const updates = groupDocs.map((w, idx) => ({
-      key: w.id,
-      changes: {
-        folder: movingDoc.isPrivate ? null : targetFolder,
-        parentId: targetDoc.parentId || null,
-        sortOrder: (idx + 1) * 1000,
-        updatedAt: now,
-        syncStatus: 'pending' as const
+    const updates: Array<{ key: string; changes: Record<string, any> }> = []
+    groupDocs.forEach((w, idx) => {
+      if (w.id === movingDocId) {
+        updates.push({
+          key: w.id,
+          changes: {
+            folder: movingDoc.isPrivate ? null : cleanTargetFolder,
+            parentId: movingDoc.isPrivate ? null : nextParentId,
+            sortOrder: (idx + 1) * 1000,
+            updatedAt: now,
+            syncStatus: 'pending' as const
+          }
+        })
+      } else if (canUserEditWorkspace(w, activeMember, authUser?.id)) {
+        updates.push({
+          key: w.id,
+          changes: {
+            sortOrder: (idx + 1) * 1000,
+            updatedAt: now,
+            syncStatus: 'pending' as const
+          }
+        })
       }
-    }))
+    })
 
     try {
-      await db.workspaces.bulkUpdate(updates)
-      syncEngine.scheduleSync(500)
+      if (updates.length > 0) {
+        await db.workspaces.bulkUpdate(updates)
+        syncEngine.scheduleSync(500)
+      }
       setDocSortMode('custom')
       try {
         localStorage.setItem('seven_note_doc_sort_mode', 'custom')
@@ -1054,30 +1113,49 @@ export function Sidebar({
   }
 
   // Folder hierarchy move & rename handler
-  const moveOrRenameFolderHierarchy = async (oldPath: string, newPath: string) => {
-    if (oldPath === newPath) return
+  const moveOrRenameFolderHierarchy = async (oldPathRaw: string, newPathRaw: string) => {
+    const oldPath = normalizeFolderPath(oldPathRaw)
+    const newPath = normalizeFolderPath(newPathRaw)
+    if (!oldPath || !newPath || oldPath === newPath) return
 
-    // Find all affected docs (either directly in oldPath or in subfolders of oldPath)
-    const affectedDocs = teamDocs.filter(
-      (w) => w.folder === oldPath || w.folder?.startsWith(oldPath + '/')
+    const spaceDocs = await db.workspaces
+      .where('spaceId')
+      .equals(currentSpace.id)
+      .and((w) => !w.isPrivate)
+      .toArray()
+
+    const affectedDocs = spaceDocs.filter((w) => {
+      const f = normalizeFolderPath(w.folder)
+      return f === oldPath || (f !== null && f.startsWith(oldPath + '/'))
+    })
+
+    const uneditableActive = affectedDocs.filter(
+      (w) => !w.isDeleted && !canUserEditWorkspace(w, activeMember, authUser?.id)
     )
+    if (uneditableActive.length > 0) {
+      toast.error('Esta carpeta contiene notas de otros miembros que no puedes modificar.')
+      return
+    }
 
     const now = Date.now()
-    const updates = affectedDocs.map((w) => {
-      let updatedFolder = newPath
-      if (w.folder && w.folder !== oldPath && w.folder.startsWith(oldPath + '/')) {
-        const suffix = w.folder.slice(oldPath.length)
-        updatedFolder = `${newPath}${suffix}`
-      }
-      return {
-        key: w.id,
-        changes: {
-          folder: updatedFolder,
-          updatedAt: now,
-          syncStatus: 'pending' as const
+    const updates = affectedDocs
+      .filter((w) => canUserEditWorkspace(w, activeMember, authUser?.id))
+      .map((w) => {
+        const currentFolder = normalizeFolderPath(w.folder) || oldPath
+        let updatedFolder = newPath
+        if (currentFolder !== oldPath && currentFolder.startsWith(oldPath + '/')) {
+          const suffix = currentFolder.slice(oldPath.length)
+          updatedFolder = `${newPath}${suffix}`
         }
-      }
-    })
+        return {
+          key: w.id,
+          changes: {
+            folder: updatedFolder,
+            updatedAt: now,
+            syncStatus: 'pending' as const
+          }
+        }
+      })
 
     if (updates.length > 0) {
       await db.workspaces.bulkUpdate(updates)
@@ -1331,9 +1409,18 @@ export function Sidebar({
     if (movingDocId) {
       const movingDoc = workspaces.find((w) => w.id === movingDocId)
       if (!movingDoc) return
+      if (!canUserEditWorkspace(movingDoc, activeMember, authUser?.id)) {
+        toast.error('Solo el autor o un administrador pueden mover esta nota.')
+        return
+      }
+      if (movingDoc.isPrivate) {
+        toast.info('Las notas privadas permanecen en "Mis Notas Privadas".')
+        return
+      }
 
+      const cleanTargetFolder = normalizeFolderPath(folderName)
       const existingInFolder = teamDocs
-        .filter((w) => w.folder === folderName && w.id !== movingDocId)
+        .filter((w) => normalizeFolderPath(w.folder) === cleanTargetFolder && w.id !== movingDocId)
         .sort(sortByOrder)
 
       const maxOrder = existingInFolder.length > 0
@@ -1341,14 +1428,16 @@ export function Sidebar({
         : 0
 
       await db.workspaces.update(movingDocId, {
-        folder: folderName,
+        folder: cleanTargetFolder,
         parentId: null,
         sortOrder: maxOrder + 1000,
         updatedAt: Date.now(),
         syncStatus: 'pending'
       })
       syncEngine.scheduleSync(500)
-      setFolderOpenMap((prev) => ({ ...prev, [folderName]: true }))
+      if (cleanTargetFolder) {
+        setFolderOpenMap((prev) => ({ ...prev, [cleanTargetFolder]: true }))
+      }
     }
   }
 
@@ -1446,10 +1535,14 @@ export function Sidebar({
 
     if (movingDocId) {
       const movingDoc = workspaces.find((w) => w.id === movingDocId)
-      if (!movingDoc || (!movingDoc.folder && !movingDoc.parentId)) return
+      if (!movingDoc || (!normalizeFolderPath(movingDoc.folder) && !movingDoc.parentId)) return
+      if (!canUserEditWorkspace(movingDoc, activeMember, authUser?.id)) {
+        toast.error('Solo el autor o un administrador pueden mover esta nota.')
+        return
+      }
 
       const existingRoot = teamDocs
-        .filter((w) => !w.parentId && (!w.folder || !w.folder.trim()) && w.id !== movingDocId)
+        .filter((w) => !w.parentId && !normalizeFolderPath(w.folder) && w.id !== movingDocId)
         .sort(sortByOrder)
 
       const maxOrder = existingRoot.length > 0
@@ -1480,83 +1573,120 @@ export function Sidebar({
   }
 
   const handleCreateFolder = async (name: string) => {
-    const trimmed = name.trim()
-    if (!trimmed) {
+    if (folderSubmitLockRef.current) return
+    folderSubmitLockRef.current = true
+    try {
+      const trimmed = normalizeFolderPath(name.replace(/\//g, ' '))
+      if (!trimmed) {
+        setIsCreatingFolder(false)
+        setNewFolderName('')
+        return
+      }
+
+      setFolderOpenMap((prev) => ({ ...prev, [trimmed]: true }))
       setIsCreatingFolder(false)
       setNewFolderName('')
-      return
+
+      persistFolderOrder((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed]))
+
+      await handleCreateWorkspace(null, trimmed, 'doc', false)
+      toast.success(`Carpeta "${trimmed}" creada`)
+    } finally {
+      setTimeout(() => {
+        folderSubmitLockRef.current = false
+      }, 150)
     }
-
-    setFolderOpenMap((prev) => ({ ...prev, [trimmed]: true }))
-    setIsCreatingFolder(false)
-    setNewFolderName('')
-
-    persistFolderOrder((prev) => (prev.includes(trimmed) ? prev : [...prev, trimmed]))
-
-    await handleCreateWorkspace(null, trimmed, 'doc', false)
-    toast.success(`Carpeta "${trimmed}" creada`)
   }
 
   const handleCreateSubfolder = async (parentPath: string, name: string) => {
-    const trimmed = name.trim()
-    if (!trimmed) {
+    if (folderSubmitLockRef.current) return
+    folderSubmitLockRef.current = true
+    try {
+      const trimmed = name.replace(/\//g, ' ').trim()
+      if (!trimmed) {
+        setCreatingSubfolderParent(null)
+        setNewSubfolderName('')
+        return
+      }
+
+      const fullPath = normalizeFolderPath(`${parentPath}/${trimmed}`)
+      if (!fullPath) return
+      setFolderOpenMap((prev) => ({ ...prev, [parentPath]: true, [fullPath]: true }))
       setCreatingSubfolderParent(null)
       setNewSubfolderName('')
-      return
+
+      persistFolderOrder((prev) => (prev.includes(fullPath) ? prev : [...prev, fullPath]))
+
+      await handleCreateWorkspace(null, fullPath, 'doc', false)
+      toast.success(`Subcarpeta "${trimmed}" creada`)
+    } finally {
+      setTimeout(() => {
+        folderSubmitLockRef.current = false
+      }, 150)
     }
-
-    const fullPath = `${parentPath}/${trimmed}`
-    setFolderOpenMap((prev) => ({ ...prev, [parentPath]: true, [fullPath]: true }))
-    setCreatingSubfolderParent(null)
-    setNewSubfolderName('')
-
-    persistFolderOrder((prev) => (prev.includes(fullPath) ? prev : [...prev, fullPath]))
-
-    await handleCreateWorkspace(null, fullPath, 'doc', false)
-    toast.success(`Subcarpeta "${trimmed}" creada`)
   }
 
   const handleRenameFolder = async (oldPath: string, newLeafName: string) => {
-    const trimmed = newLeafName.trim()
+    const trimmed = newLeafName.replace(/\//g, ' ').trim()
     if (!trimmed) return
     const parent = getParentFolderPath(oldPath)
-    const newPath = parent ? `${parent}/${trimmed}` : trimmed
-    if (newPath === oldPath) return
+    const newPath = normalizeFolderPath(parent ? `${parent}/${trimmed}` : trimmed)
+    if (!newPath || newPath === oldPath) return
 
     await moveOrRenameFolderHierarchy(oldPath, newPath)
     toast.success(`Carpeta renombrada a "${trimmed}"`)
   }
 
   const handleDeleteFolder = async (folderPath: string) => {
-    const leaf = getFolderLeafName(folderPath)
+    const cleanPath = normalizeFolderPath(folderPath)
+    if (!cleanPath) return
+    const leaf = getFolderLeafName(cleanPath)
     if (!confirm(`¿Eliminar la carpeta "${leaf}" y mover sus notas a la raíz?`)) return
 
-    const docsToUpdate = teamDocs.filter(
-      (w) => w.folder === folderPath || w.folder?.startsWith(folderPath + '/')
+    const spaceDocs = await db.workspaces
+      .where('spaceId')
+      .equals(currentSpace.id)
+      .and((w) => !w.isPrivate)
+      .toArray()
+
+    const docsToUpdate = spaceDocs.filter((w) => {
+      const f = normalizeFolderPath(w.folder)
+      return f === cleanPath || (f !== null && f.startsWith(cleanPath + '/'))
+    })
+
+    const uneditableActive = docsToUpdate.filter(
+      (w) => !w.isDeleted && !canUserEditWorkspace(w, activeMember, authUser?.id)
     )
+    if (uneditableActive.length > 0) {
+      toast.error('Esta carpeta contiene notas de otros miembros que no puedes modificar.')
+      return
+    }
 
     try {
-      if (docsToUpdate.length > 0) {
-        await Promise.all(
-          docsToUpdate.map((w) =>
-            db.workspaces.update(w.id, {
+      const editableDocs = docsToUpdate.filter((w) => canUserEditWorkspace(w, activeMember, authUser?.id))
+      if (editableDocs.length > 0) {
+        const now = Date.now()
+        await db.workspaces.bulkUpdate(
+          editableDocs.map((w) => ({
+            key: w.id,
+            changes: {
               folder: null,
-              updatedAt: Date.now(),
-              syncStatus: 'pending'
-            })
-          )
+              updatedAt: now,
+              syncStatus: 'pending' as const
+            }
+          }))
         )
         syncEngine.scheduleSync(500)
       }
 
       persistFolderOrder((prev) =>
-        prev.filter((f) => f !== folderPath && !f.startsWith(folderPath + '/'))
+        prev.filter((f) => f !== cleanPath && !f.startsWith(cleanPath + '/'))
       )
 
       setFolderOpenMap((prev) => {
         const next = { ...prev }
         Object.keys(next).forEach((k) => {
-          if (k === folderPath || k.startsWith(folderPath + '/')) {
+          if (k === cleanPath || k.startsWith(cleanPath + '/')) {
             delete next[k]
           }
         })
@@ -1682,7 +1812,10 @@ export function Sidebar({
                   onDragEnd={handleDocDragEnd}
                   onDragOver={(e) => handleDocDragOver(e, sub, folderPath)}
                   onDrop={(e) => handleDocDrop(e, sub, folderPath)}
-                  onClick={() => onSelectWorkspace(sub.id)}
+                  onClick={() => {
+                    if (hasJustDraggedRef.current) return
+                    onSelectWorkspace(sub.id)
+                  }}
                   onContextMenu={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
@@ -1768,7 +1901,7 @@ export function Sidebar({
   const renderFolderItem = (folderPath: string, level = 0): React.ReactNode => {
     const leafName = getFolderLeafName(folderPath)
     const folderDocs = teamDocs
-      .filter((w) => w.folder === folderPath)
+      .filter((w) => (!w.parentId || !activeWorkspaceIds.has(w.parentId)) && normalizeFolderPath(w.folder) === folderPath)
       .sort(sortByOrder)
     const childFolders = sortFolders(allFolders.filter((f) => getParentFolderPath(f) === folderPath))
     const isFolderOpen = folderOpenMap[folderPath] !== false
@@ -1909,13 +2042,19 @@ export function Sidebar({
                 onChange={(e) => setNewSubfolderName(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
+                    e.preventDefault()
                     handleCreateSubfolder(folderPath, newSubfolderName)
                   } else if (e.key === 'Escape') {
+                    folderSubmitLockRef.current = true
                     setCreatingSubfolderParent(null)
                     setNewSubfolderName('')
+                    setTimeout(() => {
+                      folderSubmitLockRef.current = false
+                    }, 150)
                   }
                 }}
                 onBlur={() => {
+                  if (folderSubmitLockRef.current) return
                   if (newSubfolderName.trim()) {
                     handleCreateSubfolder(folderPath, newSubfolderName)
                   } else {
@@ -2070,26 +2209,35 @@ export function Sidebar({
                   const isEditingThis = editingSpaceId === sp.id
 
                   if (isEditingThis) {
+                    const commitSpaceRename = () => {
+                      if (spaceRenameLockRef.current) return
+                      spaceRenameLockRef.current = true
+                      const trimmed = editingSpaceName.trim()
+                      if (trimmed && trimmed !== sp.name && onRenameSpace) {
+                        onRenameSpace(sp.id, trimmed)
+                      }
+                      setEditingSpaceId(null)
+                      setTimeout(() => {
+                        spaceRenameLockRef.current = false
+                      }, 100)
+                    }
                     return (
                       <div key={sp.id} className="p-1">
                         <input
                           type="text"
                           value={editingSpaceName}
                           onChange={(e) => setEditingSpaceName(e.target.value)}
-                          onBlur={() => {
-                            if (editingSpaceName.trim() && onRenameSpace) {
-                              onRenameSpace(sp.id, editingSpaceName.trim())
-                            }
-                            setEditingSpaceId(null)
-                          }}
+                          onBlur={commitSpaceRename}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
-                              if (editingSpaceName.trim() && onRenameSpace) {
-                                onRenameSpace(sp.id, editingSpaceName.trim())
-                              }
-                              setEditingSpaceId(null)
+                              e.preventDefault()
+                              commitSpaceRename()
                             } else if (e.key === 'Escape') {
+                              spaceRenameLockRef.current = true
                               setEditingSpaceId(null)
+                              setTimeout(() => {
+                                spaceRenameLockRef.current = false
+                              }, 100)
                             }
                           }}
                           autoFocus
@@ -2569,9 +2717,6 @@ export function Sidebar({
                           }}
                         />
                         <span className="truncate flex-1 text-[13px] select-none pointer-events-none">{renderWithAppleEmoji(doc.title || 'Untitled')}</span>
-                    {isItemUnread(doc, 'workspace', activeMember, authUser?.id) && (
-                      <NewBadge className="ml-1.5" />
-                    )}
                         {isItemUnread(doc, 'workspace', activeMember, authUser?.id) && (
                           <NewBadge className="ml-1.5" />
                         )}
@@ -2671,13 +2816,19 @@ export function Sidebar({
                       onChange={(e) => setNewFolderName(e.target.value)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
+                          e.preventDefault()
                           handleCreateFolder(newFolderName)
                         } else if (e.key === 'Escape') {
+                          folderSubmitLockRef.current = true
                           setIsCreatingFolder(false)
                           setNewFolderName('')
+                          setTimeout(() => {
+                            folderSubmitLockRef.current = false
+                          }, 150)
                         }
                       }}
                       onBlur={() => {
+                        if (folderSubmitLockRef.current) return
                         if (newFolderName.trim()) {
                           handleCreateFolder(newFolderName)
                         } else {
@@ -2754,24 +2905,40 @@ export function Sidebar({
               onSelectEmoji={async (emoji: string) => {
                 if (emojiPickerTarget.type === 'space') {
                   await updateSpace(emojiPickerTarget.id, { icon: emoji })
+                  syncEngine.scheduleSync(500)
                 } else {
+                  const targetDoc = workspaces.find((w) => w.id === emojiPickerTarget.id)
+                  if (targetDoc && !canUserEditWorkspace(targetDoc, activeMember, authUser?.id)) {
+                    toast.error('Solo el autor o un administrador pueden cambiar el icono.')
+                    setEmojiPickerTarget(null)
+                    return
+                  }
                   await db.workspaces.update(emojiPickerTarget.id, {
                     icon: emoji,
                     updatedAt: Date.now(),
                     syncStatus: 'pending'
                   })
+                  syncEngine.scheduleSync(500)
                 }
                 setEmojiPickerTarget(null)
               }}
               onRemoveEmoji={async () => {
                 if (emojiPickerTarget.type === 'space') {
                   await updateSpace(emojiPickerTarget.id, { icon: '' })
+                  syncEngine.scheduleSync(500)
                 } else {
+                  const targetDoc = workspaces.find((w) => w.id === emojiPickerTarget.id)
+                  if (targetDoc && !canUserEditWorkspace(targetDoc, activeMember, authUser?.id)) {
+                    toast.error('Solo el autor o un administrador pueden cambiar el icono.')
+                    setEmojiPickerTarget(null)
+                    return
+                  }
                   await db.workspaces.update(emojiPickerTarget.id, {
                     icon: '',
                     updatedAt: Date.now(),
                     syncStatus: 'pending'
                   })
+                  syncEngine.scheduleSync(500)
                 }
                 setEmojiPickerTarget(null)
               }}

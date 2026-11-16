@@ -1,10 +1,96 @@
 import Dexie, { type Table } from 'dexie'
-import { getSupabaseClient } from '../lib/supabase'
+import { getSupabaseClient, isSupabaseConfigured } from '../lib/supabase'
 
 export type ViewMode = 'doc' | 'canvas' | 'split'
 export type SyncStatus = 'synced' | 'pending' | 'failed'
 
 export const DEFAULT_SPACE_ID = 'default-workspace'
+
+export type PendingHardDeleteTable =
+  | 'spaces'
+  | 'workspaces'
+  | 'canvasNodes'
+  | 'canvasEdges'
+  | 'collections'
+  | 'tags'
+
+const PENDING_HARD_DELETES_KEY = 'seven_note_pending_hard_deletes_v1'
+
+type PendingHardDeletesMap = Record<PendingHardDeleteTable, string[]>
+
+function readPendingHardDeletesMap(): PendingHardDeletesMap {
+  const empty: PendingHardDeletesMap = {
+    spaces: [],
+    workspaces: [],
+    canvasNodes: [],
+    canvasEdges: [],
+    collections: [],
+    tags: []
+  }
+  if (typeof localStorage === 'undefined') return empty
+  try {
+    const raw = localStorage.getItem(PENDING_HARD_DELETES_KEY)
+    if (!raw) return empty
+    const parsed = JSON.parse(raw)
+    return {
+      spaces: Array.isArray(parsed?.spaces) ? parsed.spaces : [],
+      workspaces: Array.isArray(parsed?.workspaces) ? parsed.workspaces : [],
+      canvasNodes: Array.isArray(parsed?.canvasNodes) ? parsed.canvasNodes : [],
+      canvasEdges: Array.isArray(parsed?.canvasEdges) ? parsed.canvasEdges : [],
+      collections: Array.isArray(parsed?.collections) ? parsed.collections : [],
+      tags: Array.isArray(parsed?.tags) ? parsed.tags : []
+    }
+  } catch {
+    return empty
+  }
+}
+
+function writePendingHardDeletesMap(map: PendingHardDeletesMap): void {
+  if (typeof localStorage === 'undefined') return
+  try {
+    localStorage.setItem(PENDING_HARD_DELETES_KEY, JSON.stringify(map))
+  } catch {
+    // ignore quota errors
+  }
+}
+
+export function getPendingHardDeletes(table: PendingHardDeleteTable): string[] {
+  return readPendingHardDeletesMap()[table]
+}
+
+export function recordPendingHardDeletes(table: PendingHardDeleteTable, ids: string[]): void {
+  const clean = ids.filter(Boolean)
+  if (clean.length === 0) return
+  const map = readPendingHardDeletesMap()
+  map[table] = Array.from(new Set([...map[table], ...clean]))
+  writePendingHardDeletesMap(map)
+}
+
+export function clearPendingHardDeletes(table: PendingHardDeleteTable, ids: string[]): void {
+  const toRemove = new Set(ids.filter(Boolean))
+  if (toRemove.size === 0) return
+  const map = readPendingHardDeletesMap()
+  map[table] = map[table].filter((id) => !toRemove.has(id))
+  writePendingHardDeletesMap(map)
+}
+
+export function clearAllPendingHardDeletes(): void {
+  if (typeof localStorage === 'undefined') return
+  try {
+    localStorage.removeItem(PENDING_HARD_DELETES_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+export function normalizeFolderPath(path?: string | null): string | null {
+  if (!path) return null
+  const segments = path
+    .split('/')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  return segments.length > 0 ? segments.join('/') : null
+}
 
 export interface SpaceItem {
   id: string
@@ -433,20 +519,39 @@ export async function cleanupLegacyTemplatePresets() {
 }
 
 // Key to track whether initial demo data was seeded once, preventing resurrecting deleted spaces
-const DEMO_SEEDED_KEY = 'seven_note_demo_seeded_v1'
+export const DEMO_SEEDED_KEY = 'seven_note_demo_seeded_v1'
 
-const WELCOME_GUIDE_KEY = 'seven_note_welcome_guide_v1'
+export const WELCOME_GUIDE_KEY = 'seven_note_welcome_guide_v1'
 
-// Renames "Demo Workspace" to "Bienvenido" and adds a how-to note + board (once)
-async function ensureWelcomeGuide() {
+export function markAccountSeeded(): void {
+  if (typeof localStorage === 'undefined') return
+  try {
+    localStorage.setItem(DEMO_SEEDED_KEY, 'true')
+    localStorage.setItem(WELCOME_GUIDE_KEY, 'true')
+  } catch {
+    // ignore
+  }
+}
+
+// Renames "Demo Workspace" to "Bienvenido" (only if still named "Demo Workspace") and adds a how-to note + board (once on fresh account)
+async function ensureWelcomeGuide(allowCreateDocs: boolean) {
   if (typeof localStorage !== 'undefined' && localStorage.getItem(WELCOME_GUIDE_KEY)) return
-  const space =
-    (await db.spaces.get(DEFAULT_SPACE_ID)) ||
-    (await db.spaces.filter((s) => s.name === 'Demo Workspace').first())
-  if (!space) return
-  const now = Date.now()
-  await db.spaces.update(space.id, { name: 'Bienvenido', updatedAt: now, syncStatus: 'pending' } as never)
+  const demoSpace = await db.spaces.filter((s) => s.name === 'Demo Workspace').first()
+  if (demoSpace) {
+    await db.spaces.update(demoSpace.id, { name: 'Bienvenido', updatedAt: Date.now(), syncStatus: 'pending' } as never)
+  }
 
+  const space =
+    demoSpace ||
+    (await db.spaces.get(DEFAULT_SPACE_ID))
+  if (!space) return
+
+  if (!allowCreateDocs) {
+    if (typeof localStorage !== 'undefined') localStorage.setItem(WELCOME_GUIDE_KEY, 'true')
+    return
+  }
+
+  const now = Date.now()
   const guideDocId = 'guide-como-usar'
   const guideBoardId = 'guide-tablero'
   const html = `
@@ -522,49 +627,63 @@ async function ensureWelcomeGuide() {
 // Seed default initial data if database is empty
 let isSeeding = false
 
-export async function seedInitialData() {
+export async function seedInitialData(options?: { allowWhenSupabaseConfigured?: boolean }) {
   if (isSeeding) return
   isSeeding = true
   try {
     await cleanupLegacyTemplatePresets()
 
-    await ensureWelcomeGuide()
-
-    // If already seeded previously, do not recreate deleted demo spaces
-    const alreadySeeded = typeof localStorage !== 'undefined' ? localStorage.getItem(DEMO_SEEDED_KEY) : null
-    const spaceCount = await db.spaces.count()
-    if (spaceCount === 0 && !alreadySeeded) {
-      await db.spaces.put({
-        id: DEFAULT_SPACE_ID,
-        name: 'Bienvenido',
-        icon: '⚡',
-        color: '#1e96eb',
-        createdAt: Date.now(),
-        updatedAt: 1,
-        syncStatus: 'synced'
-      }).catch(() => {})
-      if (typeof localStorage !== 'undefined') localStorage.setItem(DEMO_SEEDED_KEY, 'true')
-    } else if (spaceCount > 0 && typeof localStorage !== 'undefined') {
-      localStorage.setItem(DEMO_SEEDED_KEY, 'true')
+    const supabaseConfigured = isSupabaseConfigured()
+    // When Supabase is configured, do not seed demo spaces/notes before initial remote sync completes;
+    // otherwise a new browser/device would re-create and push deleted demo spaces, folders, and notes.
+    if (supabaseConfigured && !options?.allowWhenSupabaseConfigured) {
+      return
     }
 
-  // Ensure any existing workspaces without spaceId are attributed to DEFAULT_SPACE_ID
-  const withoutSpace = await db.workspaces.filter((w) => !w.spaceId).toArray()
-  if (withoutSpace.length > 0) {
-    await db.workspaces.bulkUpdate(
-      withoutSpace.map((w) => ({
-        key: w.id,
-        changes: { spaceId: DEFAULT_SPACE_ID }
-      }))
-    )
-  }
+    // If already seeded previously, do not recreate deleted demo spaces/notes
+    const alreadySeeded = typeof localStorage !== 'undefined' ? Boolean(localStorage.getItem(DEMO_SEEDED_KEY)) : false
+    const [spaceCount, wsCount] = await Promise.all([db.spaces.count(), db.workspaces.count()])
 
-  const count = await db.workspaces.count()
-  if (count > 0 || alreadySeeded) return
+    if (spaceCount > 0 || wsCount > 0) {
+      markAccountSeeded()
+    }
 
-  const now = 1
-  const rootWorkspaceId = 'welcome-workspace'
-  const subboard1Id = 'subboard-design'
+    // Ensure any existing workspaces without spaceId are attributed to an existing space (prefer DEFAULT_SPACE_ID)
+    if (spaceCount > 0) {
+      const firstSpace = (await db.spaces.get(DEFAULT_SPACE_ID)) || (await db.spaces.toCollection().first())
+      const fallbackSpaceId = firstSpace?.id || DEFAULT_SPACE_ID
+      const withoutSpace = await db.workspaces.filter((w) => !w.spaceId || w.spaceId === 'default-space').toArray()
+      if (withoutSpace.length > 0) {
+        await db.workspaces.bulkUpdate(
+          withoutSpace.map((w) => ({
+            key: w.id,
+            changes: { spaceId: fallbackSpaceId }
+          }))
+        )
+      }
+    }
+
+    if (alreadySeeded || spaceCount > 0 || wsCount > 0) {
+      await ensureWelcomeGuide(false)
+      return
+    }
+
+    const now = Date.now()
+    await db.spaces.put({
+      id: DEFAULT_SPACE_ID,
+      name: 'Bienvenido',
+      icon: '⚡',
+      color: '#1e96eb',
+      createdAt: now,
+      updatedAt: now,
+      syncStatus: supabaseConfigured ? 'pending' : 'synced'
+    }).catch(() => {})
+
+    await ensureWelcomeGuide(true)
+    markAccountSeeded()
+
+    const rootWorkspaceId = 'welcome-workspace'
+    const subboard1Id = 'subboard-design'
 
   const defaultDocHtml = `
     <h1>⚡ Bienvenido a Seven Note</h1>
@@ -601,7 +720,7 @@ export async function seedInitialData() {
       updatedAt: now,
       isFavorite: false,
       isDeleted: false,
-      syncStatus: 'synced',
+      syncStatus: supabaseConfigured ? 'pending' : 'synced',
       activeProperties: [
         'tags',
         'documentMode',
@@ -945,34 +1064,69 @@ export async function updateSpace(id: string, updates: Partial<SpaceItem>): Prom
 }
 
 export async function deleteSpace(id: string): Promise<void> {
-  const pages = await db.workspaces.where('spaceId').equals(id).toArray()
+  const [pages, cols, tags] = await Promise.all([
+    db.workspaces.where('spaceId').equals(id).toArray(),
+    db.collections.where('spaceId').equals(id).toArray(),
+    db.tags.where('spaceId').equals(id).toArray()
+  ])
   const pageIds = pages.map((p) => p.id)
+  const colIds = cols.map((c) => c.id)
+  const tagIds = tags.map((t) => t.id)
+
+  // Registrar tombstones locales para que un fallo offline/de red no resucite el espacio ni sus notas
+  recordPendingHardDeletes('spaces', [id])
+  if (pageIds.length > 0) recordPendingHardDeletes('workspaces', pageIds)
+  if (colIds.length > 0) recordPendingHardDeletes('collections', colIds)
+  if (tagIds.length > 0) recordPendingHardDeletes('tags', tagIds)
 
   // 1. Si Supabase está conectado, eliminar o marcar en la nube para que no resucite
   const supabase = getSupabaseClient()
   if (supabase) {
     try {
       if (pageIds.length > 0) {
-        await Promise.allSettled([
+        const [nodesRes, edgesRes, wsDelRes] = await Promise.all([
           supabase.from('seven_canvas_nodes').delete().in('workspace_id', pageIds),
           supabase.from('seven_canvas_edges').delete().in('workspace_id', pageIds),
-          supabase.from('seven_workspaces').delete().in('id', pageIds),
-          // También marcamos is_deleted por si las políticas RLS previenen DELETE
-          supabase.from('seven_workspaces').update({ is_deleted: true, updated_at: Date.now() }).in('id', pageIds)
+          supabase.from('seven_workspaces').delete().in('id', pageIds)
         ])
+        let wsCleared = !wsDelRes.error
+        if (wsDelRes.error) {
+          const wsSoftRes = await supabase
+            .from('seven_workspaces')
+            .update({ is_deleted: true, updated_at: Date.now() })
+            .in('id', pageIds)
+          wsCleared = !wsSoftRes.error
+        }
+        if (wsCleared && !nodesRes.error && !edgesRes.error) {
+          clearPendingHardDeletes('workspaces', pageIds)
+        }
       }
-      await Promise.allSettled([
+
+      const [colDelRes, tagDelRes, spDelRes] = await Promise.all([
         supabase.from('seven_collections').delete().eq('space_id', id),
         supabase.from('seven_tags').delete().eq('space_id', id),
-        supabase.from('seven_spaces').delete().eq('id', id),
-        supabase.from('seven_spaces').update({ is_deleted: true, updated_at: Date.now() }).eq('id', id)
+        supabase.from('seven_spaces').delete().eq('id', id)
       ])
+      if (!colDelRes.error && colIds.length > 0) clearPendingHardDeletes('collections', colIds)
+      if (!tagDelRes.error && tagIds.length > 0) clearPendingHardDeletes('tags', tagIds)
+
+      let spaceCleared = !spDelRes.error
+      if (spDelRes.error) {
+        const spSoftRes = await supabase
+          .from('seven_spaces')
+          .update({ is_deleted: true, updated_at: Date.now() })
+          .eq('id', id)
+        spaceCleared = !spSoftRes.error
+      }
+      if (spaceCleared) {
+        clearPendingHardDeletes('spaces', [id])
+      }
     } catch (err) {
       console.warn('Error purging space from Supabase:', err)
     }
   }
 
-  // 2. Limpiar en local (IndexedDB)
+  // 2. Limpiar en local (IndexedDB + localStorage)
   for (const pageId of pageIds) {
     await db.canvasNodes.where('workspaceId').equals(pageId).delete().catch(() => {})
     await db.canvasEdges.where('workspaceId').equals(pageId).delete().catch(() => {})
@@ -981,6 +1135,13 @@ export async function deleteSpace(id: string): Promise<void> {
   await db.collections.where('spaceId').equals(id).delete().catch(() => {})
   await db.tags.where('spaceId').equals(id).delete().catch(() => {})
   await db.spaces.delete(id).catch(() => {})
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(`seven_note_folder_order_${id}`)
+    }
+  } catch {
+    // ignore
+  }
 }
 
 // Collections helpers
@@ -1015,6 +1176,24 @@ export async function updateCollection(id: string, updates: Partial<CollectionIt
 }
 
 export async function deleteCollection(id: string): Promise<void> {
+  recordPendingHardDeletes('collections', [id])
+  const supabase = getSupabaseClient()
+  if (supabase) {
+    try {
+      const { error } = await supabase.from('seven_collections').delete().eq('id', id)
+      if (!error) {
+        clearPendingHardDeletes('collections', [id])
+      } else {
+        const softRes = await supabase
+          .from('seven_collections')
+          .update({ is_deleted: true, updated_at: Date.now() })
+          .eq('id', id)
+        if (!softRes.error) clearPendingHardDeletes('collections', [id])
+      }
+    } catch {
+      // keep pending hard delete for syncEngine
+    }
+  }
   await db.collections.delete(id)
 }
 
@@ -1081,6 +1260,24 @@ export async function renameTag(id: string, spaceId: string, oldName: string, ne
 }
 
 export async function deleteTag(id: string, spaceId: string, tagName: string): Promise<void> {
+  recordPendingHardDeletes('tags', [id])
+  const supabase = getSupabaseClient()
+  if (supabase) {
+    try {
+      const { error } = await supabase.from('seven_tags').delete().eq('id', id)
+      if (!error) {
+        clearPendingHardDeletes('tags', [id])
+      } else {
+        const softRes = await supabase
+          .from('seven_tags')
+          .update({ is_deleted: true })
+          .eq('id', id)
+        if (!softRes.error) clearPendingHardDeletes('tags', [id])
+      }
+    } catch {
+      // keep pending hard delete for syncEngine
+    }
+  }
   await db.tags.delete(id)
   const docs = await db.workspaces.where('spaceId').equals(spaceId).toArray()
   for (const doc of docs) {
@@ -1104,6 +1301,24 @@ export async function clearLocalUserData(): Promise<void> {
     db.tags.clear(),
     db.spaces.clear(),
     db.offlineAssets.clear(),
-    db.syncLogs.clear()
+    db.syncLogs.clear(),
+    db.notifications.clear()
   ])
+  clearAllPendingHardDeletes()
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(DEMO_SEEDED_KEY)
+      localStorage.removeItem(WELCOME_GUIDE_KEY)
+      const keysToRemove: string[] = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i)
+        if (key && (key.startsWith('seven_note_folder_order_') || key.startsWith('seven_note_viewed_'))) {
+          keysToRemove.push(key)
+        }
+      }
+      keysToRemove.forEach((k) => localStorage.removeItem(k))
+    }
+  } catch {
+    // ignore
+  }
 }

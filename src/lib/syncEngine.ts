@@ -8,10 +8,21 @@ import {
   type SpaceItem,
   type CollectionItem,
   type TagItem,
-  type NotificationItem
+  type NotificationItem,
+  getPendingHardDeletes,
+  clearPendingHardDeletes,
+  markAccountSeeded,
+  normalizeFolderPath,
+  seedInitialData
 } from '../db'
 import { getSupabaseClient, getStoredSupabaseConfig, getAuthUser } from './supabase'
-import { getCurrentMember, TEAM_MEMBERS, isUserAdmin, isWorkspaceOwner } from './teamAuth'
+import {
+  getCurrentMember,
+  TEAM_MEMBERS,
+  isUserAdmin,
+  isWorkspaceOwner,
+  canUserManageSpace
+} from './teamAuth'
 import { computeImageHash, uploadToSupabaseStorage } from './imageOptimizer'
 import { notificationService } from './notificationService'
 
@@ -49,9 +60,116 @@ class SyncEngine {
   private lastPushCompletedAt = 0
   private serverClockOffset = 0
   private lastClockSyncAt = 0
+  private syncGeneration = 0
+  private initialPullCompleted = false
+  private recentPushedVersions = new Map<string, number>()
 
   private getServerNow(): number {
     return Date.now() + this.serverClockOffset
+  }
+
+  private recordRecentPush(id: string, ts: number) {
+    this.recentPushedVersions.set(id, ts)
+    if (this.recentPushedVersions.size > 500) {
+      const firstKey = this.recentPushedVersions.keys().next().value
+      if (firstKey) this.recentPushedVersions.delete(firstKey)
+    }
+  }
+
+  public hasCompletedInitialSync(): boolean {
+    return this.initialPullCompleted
+  }
+
+  public abortForSignOut(): void {
+    this.syncGeneration += 1
+    this.initialPullCompleted = false
+    this.syncQueued = false
+    if (this.syncTimeout) {
+      clearTimeout(this.syncTimeout)
+      this.syncTimeout = null
+    }
+    this.recentPushedVersions.clear()
+    this.stopRealtimeSubscription()
+    this.resetLastSyncTime()
+    this.pendingCount = 0
+    this.state = 'idle'
+    this.errorMessage = null
+    this.notify()
+  }
+
+  private async fetchAllRows<T = any>(
+    buildQuery: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: any }>
+  ): Promise<{ data: T[]; error: any }> {
+    const pageSize = 1000
+    const all: T[] = []
+    let from = 0
+    while (true) {
+      const { data, error } = await buildQuery(from, from + pageSize - 1)
+      if (error) {
+        return { data: all, error }
+      }
+      const batch = data || []
+      all.push(...batch)
+      if (batch.length < pageSize) {
+        break
+      }
+      from += pageSize
+    }
+    return { data: all, error: null }
+  }
+
+  private async flushPendingHardDeletes(supabase: any): Promise<void> {
+    const pendingSpaces = getPendingHardDeletes('spaces')
+    if (pendingSpaces.length > 0) {
+      const { error } = await supabase.from('seven_spaces').delete().in('id', pendingSpaces)
+      if (!error) {
+        clearPendingHardDeletes('spaces', pendingSpaces)
+      } else {
+        const soft = await supabase
+          .from('seven_spaces')
+          .update({ is_deleted: true, updated_at: this.getServerNow() })
+          .in('id', pendingSpaces)
+        if (!soft.error) clearPendingHardDeletes('spaces', pendingSpaces)
+      }
+    }
+
+    const pendingWorkspaces = getPendingHardDeletes('workspaces')
+    if (pendingWorkspaces.length > 0) {
+      const { error } = await supabase.from('seven_workspaces').delete().in('id', pendingWorkspaces)
+      if (!error) {
+        clearPendingHardDeletes('workspaces', pendingWorkspaces)
+      } else {
+        const soft = await supabase
+          .from('seven_workspaces')
+          .update({ is_deleted: true, updated_at: this.getServerNow() })
+          .in('id', pendingWorkspaces)
+        if (!soft.error) clearPendingHardDeletes('workspaces', pendingWorkspaces)
+      }
+    }
+
+    const pendingNodes = getPendingHardDeletes('canvasNodes')
+    if (pendingNodes.length > 0) {
+      const { error } = await supabase.from('seven_canvas_nodes').delete().in('id', pendingNodes)
+      if (!error) clearPendingHardDeletes('canvasNodes', pendingNodes)
+    }
+
+    const pendingEdges = getPendingHardDeletes('canvasEdges')
+    if (pendingEdges.length > 0) {
+      const { error } = await supabase.from('seven_canvas_edges').delete().in('id', pendingEdges)
+      if (!error) clearPendingHardDeletes('canvasEdges', pendingEdges)
+    }
+
+    const pendingCols = getPendingHardDeletes('collections')
+    if (pendingCols.length > 0) {
+      const { error } = await supabase.from('seven_collections').delete().in('id', pendingCols)
+      if (!error) clearPendingHardDeletes('collections', pendingCols)
+    }
+
+    const pendingTags = getPendingHardDeletes('tags')
+    if (pendingTags.length > 0) {
+      const { error } = await supabase.from('seven_tags').delete().in('id', pendingTags)
+      if (!error) clearPendingHardDeletes('tags', pendingTags)
+    }
   }
 
   private async calibrateServerClock(supabase: any): Promise<void> {
@@ -189,14 +307,26 @@ class SyncEngine {
     this.listeners.forEach((fn) => fn(status))
   }
 
-  private handleRealtimeEvent = () => {
+  private handleRealtimeEvent = (payload?: any) => {
     if (!this.isOnline) return
+    const changedId = payload?.new?.id || payload?.old?.id
+    const changedUpdatedAt = Number(payload?.new?.updated_at) || 0
+    if (
+      payload?.eventType !== 'DELETE' &&
+      changedId &&
+      changedUpdatedAt > 0 &&
+      this.recentPushedVersions.get(changedId) === changedUpdatedAt &&
+      Date.now() - this.lastPushCompletedAt < 5000
+    ) {
+      return
+    }
     if (this.isSyncing) {
       this.syncQueued = true
       return
     }
-    if (Date.now() - this.lastPushCompletedAt < 1500) return
-    this.scheduleSync(800)
+    const elapsedSincePush = Date.now() - this.lastPushCompletedAt
+    const delay = elapsedSincePush < 1200 ? 1500 : 700
+    this.scheduleSync(delay)
   }
 
   public async initRealtimeSubscription() {
@@ -317,29 +447,67 @@ class SyncEngine {
     this.errorMessage = null
     this.notify()
 
+    const syncGen = this.syncGeneration
+
     try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      if (!sessionData?.session?.access_token) {
+        await supabase.auth.refreshSession().catch(() => {})
+      }
+
       const authUser = await getAuthUser()
       const authUserId = authUser?.id || undefined
       const currentMember = getCurrentMember()
 
-      // Si no hay usuario autenticado, NO intentamos sincronizar
-      // ya que las políticas RLS en Supabase bloquearían la consulta y corromperían lastSyncTime
-      if (!authUserId) {
+      // Si no hay usuario autenticado o se cerró sesión, NO intentamos sincronizar
+      if (!authUserId || syncGen !== this.syncGeneration) {
         this.state = 'idle'
         this.notify()
         return { success: true, message: 'Esperando sesión de usuario' }
       }
 
+      // Verificar que el perfil en Supabase esté activo antes de permitir borrados huérfanos en pull
+      const { data: profileRow, error: profileErr } = await supabase
+        .from('user_profiles')
+        .select('status, role')
+        .eq('id', authUserId)
+        .maybeSingle()
+      const isActiveAccountVerified = !profileErr && profileRow?.status === 'active'
+
+      if (syncGen !== this.syncGeneration) {
+        return { success: false, message: 'Sincronización cancelada' }
+      }
+
       void this.initRealtimeSubscription()
       await this.calibrateServerClock(supabase)
       const nowServer = this.getServerNow()
+      let hasPushErrors = false
+
+      // ==========================================
+      // 0. FLUSH PENDING HARD DELETES (Offline tombstones)
+      // ==========================================
+      await this.flushPendingHardDeletes(supabase)
+      const blockedSpaceIds = new Set(getPendingHardDeletes('spaces'))
+      const blockedWorkspaceIds = new Set(getPendingHardDeletes('workspaces'))
+      const blockedNodeIds = new Set(getPendingHardDeletes('canvasNodes'))
+      const blockedEdgeIds = new Set(getPendingHardDeletes('canvasEdges'))
+      const blockedCollectionIds = new Set(getPendingHardDeletes('collections'))
+      const blockedTagIds = new Set(getPendingHardDeletes('tags'))
+
+      if (syncGen !== this.syncGeneration) {
+        return { success: false, message: 'Sincronización cancelada' }
+      }
 
       // Solo empujar cambios locales si hay sesión autenticada (las políticas RLS requieren usuario autenticado)
       if (authUserId) {
+        const isUserAdminCurrent = isUserAdmin(currentMember)
+
         // ==========================================
         // 1. PUSH: SPACES
         // ==========================================
-        const pendingSpaces = await db.spaces.where('syncStatus').equals('pending').toArray()
+        const pendingSpaces = (await db.spaces.where('syncStatus').equals('pending').toArray()).filter(
+          (s) => !blockedSpaceIds.has(s.id) && (isUserAdminCurrent || canUserManageSpace(s, currentMember, authUserId))
+        )
         if (pendingSpaces.length > 0) {
           // Evitar sobrescribir en la nube una versión más reciente del espacio con una copia local desactualizada
           const remoteSpaceVersions = new Map<string, number>()
@@ -364,28 +532,34 @@ class SyncEngine {
             return true
           })
 
-          if (staleSpaceIds.length > 0) {
+          if (staleSpaceIds.length > 0 && syncGen === this.syncGeneration) {
             await db.spaces.bulkUpdate(
               staleSpaceIds.map((id) => ({ key: id, changes: { syncStatus: 'synced' as const } }))
             )
           }
 
           if (allowedPendingSpaces.length > 0) {
-            const payload = allowedPendingSpaces.map((s: SpaceItem) => ({
-              id: s.id,
-              name: s.name,
-              icon: s.icon,
-              color: s.color,
-              created_at: this.clampTimestamp(s.createdAt, nowServer),
-              updated_at: this.clampTimestamp(s.updatedAt, nowServer),
-              is_deleted: Boolean(s.isDeleted),
-              is_private: Boolean(s.isPrivate),
-              admin_only: Boolean(s.adminOnly),
-              sort_order: typeof s.sortOrder === 'number' ? s.sortOrder : s.createdAt,
-              folder_order: Array.isArray(s.folderOrder) ? s.folderOrder : null,
-              owner_member: s.ownerMember || currentMember.id,
-              user_id: authUserId
-            }))
+            const payload = allowedPendingSpaces.map((s: SpaceItem) => {
+              const clampedUpdated = this.clampTimestamp(s.updatedAt, nowServer)
+              const row: Record<string, any> = {
+                id: s.id,
+                name: s.name,
+                icon: s.icon,
+                color: s.color,
+                created_at: this.clampTimestamp(s.createdAt, nowServer),
+                updated_at: clampedUpdated,
+                is_deleted: Boolean(s.isDeleted),
+                is_private: Boolean(s.isPrivate),
+                admin_only: Boolean(s.adminOnly),
+                sort_order: typeof s.sortOrder === 'number' ? s.sortOrder : s.createdAt,
+                owner_member: s.ownerMember || currentMember.id,
+                user_id: s.userId || authUserId
+              }
+              if (Array.isArray(s.folderOrder)) {
+                row.folder_order = s.folderOrder
+              }
+              return row
+            })
             let { error: spError } = await supabase.from('seven_spaces').upsert(payload, { onConflict: 'id' })
             if (
               spError &&
@@ -399,12 +573,25 @@ class SyncEngine {
               const retry = await supabase.from('seven_spaces').upsert(fallbackPayload, { onConflict: 'id' })
               spError = retry.error
             }
-            if (!spError) {
+            if (!spError && syncGen === this.syncGeneration) {
               this.lastPushCompletedAt = Date.now()
-              await db.spaces.bulkUpdate(
-                allowedPendingSpaces.map((s) => ({ key: s.id, changes: { syncStatus: 'synced' as const } }))
-              )
-            } else {
+              await db.transaction('rw', db.spaces, async () => {
+                for (const s of allowedPendingSpaces) {
+                  const clampedUpdated = this.clampTimestamp(s.updatedAt, nowServer)
+                  this.recordRecentPush(s.id, clampedUpdated)
+                  const current = await db.spaces.get(s.id)
+                  if (
+                    current &&
+                    current.updatedAt === s.updatedAt &&
+                    current.name === s.name &&
+                    Boolean(current.isDeleted) === Boolean(s.isDeleted)
+                  ) {
+                    await db.spaces.update(s.id, { syncStatus: 'synced', updatedAt: clampedUpdated })
+                  }
+                }
+              })
+            } else if (spError) {
+              hasPushErrors = true
               console.warn('Warning syncing spaces:', spError.message)
             }
           }
@@ -413,9 +600,10 @@ class SyncEngine {
         // ==========================================
         // 2. PUSH: WORKSPACES (PAGES / DOCS)
         // ==========================================
-        const pendingWorkspaces = await db.workspaces.where('syncStatus').equals('pending').toArray()
+        const pendingWorkspaces = (await db.workspaces.where('syncStatus').equals('pending').toArray()).filter(
+          (w) => !blockedWorkspaceIds.has(w.id) && !blockedSpaceIds.has(w.spaceId || '')
+        )
         // Capa 2: Si el usuario es un trabajador, solo sube cambios de lo que él mismo creó
-        const isUserAdminCurrent = isUserAdmin(currentMember)
         const ownedPending = pendingWorkspaces.filter((w) => {
           if (isUserAdminCurrent) return true
           return isWorkspaceOwner(w, currentMember, authUserId)
@@ -447,7 +635,7 @@ class SyncEngine {
           }
           return true
         })
-        if (staleIds.length > 0) {
+        if (staleIds.length > 0 && syncGen === this.syncGeneration) {
           // La versión remota es más nueva: el pull la aplicará localmente
           await db.workspaces.bulkUpdate(
             staleIds.map((id) => ({ key: id, changes: { syncStatus: 'synced' as const } }))
@@ -455,72 +643,84 @@ class SyncEngine {
         }
 
         if (allowedPending.length > 0) {
-          const payload = allowedPending.map((w: WorkspaceItem) => ({
-            id: w.id,
-            parent_id: w.parentId,
-            space_id: w.spaceId || 'default-workspace',
-            folder: w.folder || null,
-            title: w.title,
-            icon: w.icon,
-            color: w.color,
-            view_mode: w.viewMode,
-            doc_content: w.docContent,
-            created_at: this.clampTimestamp(w.createdAt, nowServer),
-            updated_at: this.clampTimestamp(w.updatedAt, nowServer),
-            is_favorite: w.isFavorite,
-            is_deleted: w.isDeleted,
-            is_private: Boolean(w.isPrivate),
-            owner_member: w.ownerMember || currentMember.id || 'kevin',
-            is_public_shared: Boolean(w.isPublicShared),
-            share_token: w.shareToken || null,
-            share_permission: w.sharePermission || 'view',
-            user_id: w.userId || authUserId,
-            metadata: {
-              tags: w.tags || [],
-              documentMode: w.documentMode,
-              isJournal: w.isJournal,
-              journalDate: w.journalDate,
-              templateName: w.templateName,
-              createdBy: w.createdBy,
-              lastEditedBy: w.lastEditedBy,
-              borderlessTheme: w.borderlessTheme,
-              pageWidth: w.pageWidth,
-              isInformationOpen: w.isInformationOpen,
-              informationContent: w.informationContent,
-              biDirectionalLinksVisible: w.biDirectionalLinksVisible,
-              propertyVisibility: w.propertyVisibility,
-              activeProperties: w.activeProperties,
-              customProperties: w.customProperties,
-              databaseData: w.databaseData,
-              canvasGridVariant: w.canvasGridVariant,
-              sortOrder: w.sortOrder,
-              viewedBy: w.viewedBy,
-              isNewItem: w.isNewItem,
-              hasCover: w.hasCover,
-              coverType: w.coverType,
-              coverUrl: w.coverUrl,
-              coverColor: w.coverColor,
-              coverBannerTitle: w.coverBannerTitle,
-              coverBannerSubtitle: w.coverBannerSubtitle,
-              coverBannerStyle: w.coverBannerStyle,
-              coverPosition: w.coverPosition
+          const payload = allowedPending.map((w: WorkspaceItem) => {
+            const clampedUpdated = this.clampTimestamp(w.updatedAt, nowServer)
+            return {
+              id: w.id,
+              parent_id: w.parentId,
+              space_id: w.spaceId && w.spaceId !== 'default-space' ? w.spaceId : 'default-workspace',
+              folder: normalizeFolderPath(w.folder),
+              title: w.title,
+              icon: w.icon,
+              color: w.color,
+              view_mode: w.viewMode,
+              doc_content: w.docContent,
+              created_at: this.clampTimestamp(w.createdAt, nowServer),
+              updated_at: clampedUpdated,
+              is_favorite: w.isFavorite,
+              is_deleted: w.isDeleted,
+              is_private: Boolean(w.isPrivate),
+              owner_member: w.ownerMember || currentMember.id || 'kevin',
+              is_public_shared: Boolean(w.isPublicShared),
+              share_token: w.shareToken || null,
+              share_permission: w.sharePermission || 'view',
+              user_id: w.userId || authUserId,
+              metadata: {
+                tags: w.tags || [],
+                documentMode: w.documentMode,
+                isJournal: w.isJournal,
+                journalDate: w.journalDate,
+                templateName: w.templateName,
+                createdBy: w.createdBy,
+                lastEditedBy: w.lastEditedBy,
+                borderlessTheme: w.borderlessTheme,
+                pageWidth: w.pageWidth,
+                isInformationOpen: w.isInformationOpen,
+                informationContent: w.informationContent,
+                biDirectionalLinksVisible: w.biDirectionalLinksVisible,
+                propertyVisibility: w.propertyVisibility,
+                activeProperties: w.activeProperties,
+                customProperties: w.customProperties,
+                databaseData: w.databaseData,
+                canvasGridVariant: w.canvasGridVariant,
+                sortOrder: w.sortOrder,
+                viewedBy: w.viewedBy,
+                isNewItem: w.isNewItem,
+                hasCover: w.hasCover,
+                coverType: w.coverType,
+                coverUrl: w.coverUrl,
+                coverColor: w.coverColor,
+                coverBannerTitle: w.coverBannerTitle,
+                coverBannerSubtitle: w.coverBannerSubtitle,
+                coverBannerStyle: w.coverBannerStyle,
+                coverPosition: w.coverPosition
+              }
             }
-          }))
+          })
 
           const { error: wsError } = await supabase.from('seven_workspaces').upsert(payload, { onConflict: 'id' })
-          if (!wsError) {
+          if (!wsError && syncGen === this.syncGeneration) {
             this.lastPushCompletedAt = Date.now()
             // Solo marcar como sincronizadas las notas que no cambiaron durante el envío
-            // (si se borraron mientras se sincronizaba, siguen pendientes y se reenvían).
+            // (si se editaron o borraron mientras se sincronizaba, siguen pendientes y se reenvían).
             await db.transaction('rw', db.workspaces, async () => {
               for (const w of allowedPending) {
+                const clampedUpdated = this.clampTimestamp(w.updatedAt, nowServer)
+                this.recordRecentPush(w.id, clampedUpdated)
                 const current = await db.workspaces.get(w.id)
-                if (current && current.updatedAt === w.updatedAt && current.isDeleted === w.isDeleted) {
-                  await db.workspaces.update(w.id, { syncStatus: 'synced' })
+                if (
+                  current &&
+                  current.updatedAt === w.updatedAt &&
+                  current.isDeleted === w.isDeleted &&
+                  current.title === w.title &&
+                  current.folder === w.folder
+                ) {
+                  await db.workspaces.update(w.id, { syncStatus: 'synced', updatedAt: clampedUpdated })
                 }
               }
             })
-          } else {
+          } else if (wsError) {
+            hasPushErrors = true
             console.warn('Warning syncing workspaces:', wsError.message)
           }
         }
@@ -572,72 +772,150 @@ class SyncEngine {
         // ==========================================
         // 3. PUSH: CANVAS NODES
         // ==========================================
-        const pendingNodes = await db.canvasNodes.where('syncStatus').equals('pending').toArray()
+        const pendingNodes = (await db.canvasNodes.where('syncStatus').equals('pending').toArray()).filter(
+          (n) => !blockedNodeIds.has(n.id) && !blockedWorkspaceIds.has(n.workspaceId)
+        )
         if (pendingNodes.length > 0) {
-          const payload = pendingNodes.map((n: CanvasNodeItem) => ({
-            id: n.id,
-            user_id: authUserId,
-            workspace_id: n.workspaceId,
-            type: n.type,
-            position_x: n.positionX,
-            position_y: n.positionY,
-            width: n.width,
-            height: n.height,
-            data: n.data,
-            created_at: this.clampTimestamp(n.createdAt, nowServer),
-            updated_at: this.clampTimestamp(n.updatedAt, nowServer),
-            is_deleted: n.isDeleted
-          }))
-
-          const { error: nodeError } = await supabase.from('seven_canvas_nodes').upsert(payload, { onConflict: 'id' })
-          if (!nodeError) {
-            this.lastPushCompletedAt = Date.now()
+          const remoteNodeVersions = new Map<string, number>()
+          for (let i = 0; i < pendingNodes.length; i += 100) {
+            const ids = pendingNodes.slice(i, i + 100).map((n) => n.id)
+            const { data: remoteRows } = await supabase
+              .from('seven_canvas_nodes')
+              .select('id, updated_at')
+              .in('id', ids)
+            for (const r of remoteRows || []) remoteNodeVersions.set(r.id, Number(r.updated_at) || 0)
+          }
+          const staleNodeIds: string[] = []
+          const allowedPendingNodes = pendingNodes.filter((n) => {
+            const remoteUpdated = remoteNodeVersions.get(n.id)
+            const effectiveRemote =
+              remoteUpdated !== undefined && remoteUpdated > nowServer + 5000 ? nowServer : remoteUpdated
+            if (effectiveRemote !== undefined && effectiveRemote > (n.updatedAt || 0)) {
+              staleNodeIds.push(n.id)
+              return false
+            }
+            return true
+          })
+          if (staleNodeIds.length > 0 && syncGen === this.syncGeneration) {
             await db.canvasNodes.bulkUpdate(
-              pendingNodes.map((n) => ({ key: n.id, changes: { syncStatus: 'synced' as const } }))
+              staleNodeIds.map((id) => ({ key: id, changes: { syncStatus: 'synced' as const } }))
             )
-          } else {
-            console.warn('Warning syncing canvas nodes:', nodeError.message)
+          }
+
+          if (allowedPendingNodes.length > 0) {
+            const payload = allowedPendingNodes.map((n: CanvasNodeItem) => ({
+              id: n.id,
+              user_id: authUserId,
+              workspace_id: n.workspaceId,
+              type: n.type,
+              position_x: n.positionX,
+              position_y: n.positionY,
+              width: n.width,
+              height: n.height,
+              data: n.data,
+              created_at: this.clampTimestamp(n.createdAt, nowServer),
+              updated_at: this.clampTimestamp(n.updatedAt, nowServer),
+              is_deleted: n.isDeleted
+            }))
+
+            const { error: nodeError } = await supabase.from('seven_canvas_nodes').upsert(payload, { onConflict: 'id' })
+            if (!nodeError && syncGen === this.syncGeneration) {
+              this.lastPushCompletedAt = Date.now()
+              await db.transaction('rw', db.canvasNodes, async () => {
+                for (const n of allowedPendingNodes) {
+                  const clampedUpdated = this.clampTimestamp(n.updatedAt, nowServer)
+                  this.recordRecentPush(n.id, clampedUpdated)
+                  const current = await db.canvasNodes.get(n.id)
+                  if (current && current.updatedAt === n.updatedAt && current.isDeleted === n.isDeleted) {
+                    await db.canvasNodes.update(n.id, { syncStatus: 'synced', updatedAt: clampedUpdated })
+                  }
+                }
+              })
+            } else if (nodeError) {
+              hasPushErrors = true
+              console.warn('Warning syncing canvas nodes:', nodeError.message)
+            }
           }
         }
 
         // ==========================================
         // 4. PUSH: CANVAS EDGES
         // ==========================================
-        const pendingEdges = await db.canvasEdges.where('syncStatus').equals('pending').toArray()
+        const pendingEdges = (await db.canvasEdges.where('syncStatus').equals('pending').toArray()).filter(
+          (e) => !blockedEdgeIds.has(e.id) && !blockedWorkspaceIds.has(e.workspaceId)
+        )
         if (pendingEdges.length > 0) {
-          const payload = pendingEdges.map((e: CanvasEdgeItem) => ({
-            id: e.id,
-            user_id: authUserId,
-            workspace_id: e.workspaceId,
-            source: e.source,
-            target: e.target,
-            source_handle: e.sourceHandle,
-            target_handle: e.targetHandle,
-            label: e.label,
-            animated: e.animated,
-            color: e.color,
-            edge_type: e.edgeType || 'default',
-            marker_end_type: e.markerEndType || 'arrow',
-            created_at: this.clampTimestamp(e.createdAt, nowServer),
-            updated_at: this.clampTimestamp(e.updatedAt, nowServer),
-            is_deleted: e.isDeleted
-          }))
-
-          const { error: edgeError } = await supabase.from('seven_canvas_edges').upsert(payload, { onConflict: 'id' })
-          if (!edgeError) {
-            this.lastPushCompletedAt = Date.now()
+          const remoteEdgeVersions = new Map<string, number>()
+          for (let i = 0; i < pendingEdges.length; i += 100) {
+            const ids = pendingEdges.slice(i, i + 100).map((e) => e.id)
+            const { data: remoteRows } = await supabase
+              .from('seven_canvas_edges')
+              .select('id, updated_at')
+              .in('id', ids)
+            for (const r of remoteRows || []) remoteEdgeVersions.set(r.id, Number(r.updated_at) || 0)
+          }
+          const staleEdgeIds: string[] = []
+          const allowedPendingEdges = pendingEdges.filter((e) => {
+            const remoteUpdated = remoteEdgeVersions.get(e.id)
+            const effectiveRemote =
+              remoteUpdated !== undefined && remoteUpdated > nowServer + 5000 ? nowServer : remoteUpdated
+            if (effectiveRemote !== undefined && effectiveRemote > (e.updatedAt || 0)) {
+              staleEdgeIds.push(e.id)
+              return false
+            }
+            return true
+          })
+          if (staleEdgeIds.length > 0 && syncGen === this.syncGeneration) {
             await db.canvasEdges.bulkUpdate(
-              pendingEdges.map((e) => ({ key: e.id, changes: { syncStatus: 'synced' as const } }))
+              staleEdgeIds.map((id) => ({ key: id, changes: { syncStatus: 'synced' as const } }))
             )
-          } else {
-            console.warn('Warning syncing canvas edges:', edgeError.message)
+          }
+
+          if (allowedPendingEdges.length > 0) {
+            const payload = allowedPendingEdges.map((e: CanvasEdgeItem) => ({
+              id: e.id,
+              user_id: authUserId,
+              workspace_id: e.workspaceId,
+              source: e.source,
+              target: e.target,
+              source_handle: e.sourceHandle,
+              target_handle: e.targetHandle,
+              label: e.label,
+              animated: e.animated,
+              color: e.color,
+              edge_type: e.edgeType || 'default',
+              marker_end_type: e.markerEndType || 'arrow',
+              created_at: this.clampTimestamp(e.createdAt, nowServer),
+              updated_at: this.clampTimestamp(e.updatedAt, nowServer),
+              is_deleted: e.isDeleted
+            }))
+
+            const { error: edgeError } = await supabase.from('seven_canvas_edges').upsert(payload, { onConflict: 'id' })
+            if (!edgeError && syncGen === this.syncGeneration) {
+              this.lastPushCompletedAt = Date.now()
+              await db.transaction('rw', db.canvasEdges, async () => {
+                for (const e of allowedPendingEdges) {
+                  const clampedUpdated = this.clampTimestamp(e.updatedAt, nowServer)
+                  this.recordRecentPush(e.id, clampedUpdated)
+                  const current = await db.canvasEdges.get(e.id)
+                  if (current && current.updatedAt === e.updatedAt && current.isDeleted === e.isDeleted) {
+                    await db.canvasEdges.update(e.id, { syncStatus: 'synced', updatedAt: clampedUpdated })
+                  }
+                }
+              })
+            } else if (edgeError) {
+              hasPushErrors = true
+              console.warn('Warning syncing canvas edges:', edgeError.message)
+            }
           }
         }
 
         // ==========================================
         // 5. PUSH: COLLECTIONS
         // ==========================================
-        const pendingCollections = await db.collections.where('syncStatus').equals('pending').toArray()
+        const pendingCollections = (await db.collections.where('syncStatus').equals('pending').toArray()).filter(
+          (c) => !blockedCollectionIds.has(c.id) && !blockedSpaceIds.has(c.spaceId)
+        )
         if (pendingCollections.length > 0) {
           const payload = pendingCollections.map((c: CollectionItem) => ({
             id: c.id,
@@ -652,12 +930,19 @@ class SyncEngine {
             is_deleted: Boolean(c.isDeleted)
           }))
           const { error: colError } = await supabase.from('seven_collections').upsert(payload, { onConflict: 'id' })
-          if (!colError) {
+          if (!colError && syncGen === this.syncGeneration) {
             this.lastPushCompletedAt = Date.now()
-            await db.collections.bulkUpdate(
-              pendingCollections.map((c) => ({ key: c.id, changes: { syncStatus: 'synced' as const } }))
-            )
-          } else {
+            await db.transaction('rw', db.collections, async () => {
+              for (const c of pendingCollections) {
+                const clampedUpdated = this.clampTimestamp(c.updatedAt, nowServer)
+                const current = await db.collections.get(c.id)
+                if (current && current.updatedAt === c.updatedAt) {
+                  await db.collections.update(c.id, { syncStatus: 'synced', updatedAt: clampedUpdated })
+                }
+              }
+            })
+          } else if (colError) {
+            hasPushErrors = true
             console.warn('Warning syncing collections:', colError.message)
           }
         }
@@ -665,7 +950,9 @@ class SyncEngine {
         // ==========================================
         // 6. PUSH: TAGS
         // ==========================================
-        const pendingTags = await db.tags.where('syncStatus').equals('pending').toArray()
+        const pendingTags = (await db.tags.where('syncStatus').equals('pending').toArray()).filter(
+          (t) => !blockedTagIds.has(t.id) && !blockedSpaceIds.has(t.spaceId)
+        )
         if (pendingTags.length > 0) {
           const payload = pendingTags.map((t: TagItem) => ({
             id: t.id,
@@ -673,16 +960,17 @@ class SyncEngine {
             space_id: t.spaceId,
             name: t.name,
             color: t.color,
-            created_at: t.createdAt,
+            created_at: this.clampTimestamp(t.createdAt, nowServer),
             is_deleted: Boolean(t.isDeleted)
           }))
           const { error: tagError } = await supabase.from('seven_tags').upsert(payload, { onConflict: 'id' })
-          if (!tagError) {
+          if (!tagError && syncGen === this.syncGeneration) {
             this.lastPushCompletedAt = Date.now()
             await db.tags.bulkUpdate(
               pendingTags.map((t) => ({ key: t.id, changes: { syncStatus: 'synced' as const } }))
             )
-          } else {
+          } else if (tagError) {
+            hasPushErrors = true
             console.warn('Warning syncing tags:', tagError.message)
           }
         }
@@ -726,6 +1014,10 @@ class SyncEngine {
         }
       }
 
+      if (syncGen !== this.syncGeneration) {
+        return { success: false, message: 'Sincronización cancelada' }
+      }
+
       // ==========================================
       // 7. PULL REMOTE CHANGES (Delta sync o pull completo si dispositivo nuevo)
       // ==========================================
@@ -744,20 +1036,30 @@ class SyncEngine {
 
       let hasPullErrors = false
       const restrictedAdminSpaceIds = new Set<string>()
+      const deletedRemoteSpaceIds = new Set<string>()
       const isCurrentAdmin = isUserAdmin(currentMember)
 
-      // Pull Spaces: siempre traemos todos los espacios visibles para no perder ninguno por desfase de reloj o lastSyncTime
-      const { data: remoteSpaces, error: spPullErr } = await supabase
-        .from('seven_spaces')
-        .select('*')
+      // Pull Spaces: siempre traemos todos los espacios visibles paginados
+      const { data: remoteSpaces, error: spPullErr } = await this.fetchAllRows((from, to) =>
+        supabase.from('seven_spaces').select('*').range(from, to)
+      )
+
+      if (syncGen !== this.syncGeneration) {
+        return { success: false, message: 'Sincronización cancelada' }
+      }
 
       if (spPullErr) {
         console.warn('Error pulling spaces:', spPullErr.message)
         hasPullErrors = true
-      } else if (remoteSpaces && remoteSpaces.length > 0) {
+      } else {
+        if (remoteSpaces.length > 0) {
+          markAccountSeeded()
+        }
+
         for (const rs of remoteSpaces) {
+          if (blockedSpaceIds.has(rs.id)) continue
+
           // Si el espacio remoto es privado y NO pertenece al miembro actual, NO lo guardamos localmente
-          // Ni los administradores pueden recibir o ver espacios privados ajenos
           const isSpaceOwner =
             rs.owner_member === currentMember.id ||
             rs.owner_member === currentMember.name?.toLowerCase() ||
@@ -771,6 +1073,10 @@ class SyncEngine {
             )
 
           if (rs.is_private && !isSpaceOwner) {
+            const existingLocal = await db.spaces.get(rs.id)
+            if (existingLocal && existingLocal.syncStatus === 'synced') {
+              await db.spaces.delete(rs.id).catch(() => {})
+            }
             continue
           }
 
@@ -787,14 +1093,21 @@ class SyncEngine {
           const local = await db.spaces.get(rs.id)
           // Si en Supabase ya fue eliminado, aseguramos que en local tampoco exista
           if (rs.is_deleted) {
+            deletedRemoteSpaceIds.add(rs.id)
             if (local) {
               await db.spaces.delete(rs.id).catch(() => {})
             }
+            try {
+              localStorage.removeItem(`seven_note_folder_order_${rs.id}`)
+            } catch {}
             continue
           }
 
           const remoteSpaceUpdated = this.clampTimestamp(Number(rs.updated_at) || 0, nowServer)
           if (this.shouldApplyRemote(local, remoteSpaceUpdated, nowServer)) {
+            const normalizedFolderOrder = Array.isArray(rs.folder_order)
+              ? (rs.folder_order as string[]).map((f) => normalizeFolderPath(f)).filter(Boolean) as string[]
+              : undefined
             await db.spaces.put({
               id: rs.id,
               name: rs.name,
@@ -806,29 +1119,44 @@ class SyncEngine {
               isPrivate: Boolean(rs.is_private),
               adminOnly: Boolean(rs.admin_only),
               sortOrder: typeof rs.sort_order === 'number' ? rs.sort_order : rs.created_at,
-              folderOrder: Array.isArray(rs.folder_order) ? rs.folder_order : undefined,
+              folderOrder: normalizedFolderOrder,
               ownerMember: rs.owner_member,
               userId: rs.user_id,
+              viewedBy: local?.viewedBy,
               syncStatus: 'synced'
             })
           }
         }
 
         // Eliminar espacios locales ya sincronizados que fueron borrados definitivamente en Supabase
-        const remoteSpaceIds = new Set(remoteSpaces.map((rs: any) => rs.id))
-        const allLocalSpaces = await db.spaces.toArray()
-        for (const ls of allLocalSpaces) {
-          if (ls.syncStatus === 'synced' && !remoteSpaceIds.has(ls.id)) {
-            await db.spaces.delete(ls.id).catch(() => {})
+        // Solo cuando la cuenta activa esté verificada para evitar borrados accidentales por RLS/JWT
+        if (isActiveAccountVerified) {
+          const remoteSpaceIds = new Set(remoteSpaces.map((rs: any) => rs.id))
+          const allLocalSpaces = await db.spaces.toArray()
+          for (const ls of allLocalSpaces) {
+            if (ls.syncStatus === 'synced' && !remoteSpaceIds.has(ls.id)) {
+              deletedRemoteSpaceIds.add(ls.id)
+              await db.spaces.delete(ls.id).catch(() => {})
+              try {
+                localStorage.removeItem(`seven_note_folder_order_${ls.id}`)
+              } catch {}
+            }
           }
         }
       }
 
-      // Pull Workspaces
-      const { data: remoteWorkspacesData, error: wsPullErr } = await supabase
-        .from('seven_workspaces')
-        .select('*')
-        .gt('updated_at', lastSync)
+      // Pull Workspaces (paginado)
+      const { data: remoteWorkspacesData, error: wsPullErr } = await this.fetchAllRows((from, to) =>
+        supabase
+          .from('seven_workspaces')
+          .select('*')
+          .gt('updated_at', lastSync)
+          .range(from, to)
+      )
+
+      if (syncGen !== this.syncGeneration) {
+        return { success: false, message: 'Sincronización cancelada' }
+      }
 
       if (wsPullErr) {
         console.warn('Error pulling workspaces:', wsPullErr.message)
@@ -836,12 +1164,15 @@ class SyncEngine {
       } else {
         const allLocalWs = await db.workspaces.toArray()
         const localWsMap = new Map(allLocalWs.map((w) => [w.id, w]))
-        const remoteWorkspaces: any[] = [...(remoteWorkspacesData || [])]
+        const remoteWorkspaces: any[] = [...remoteWorkspacesData]
         const fetchedWsIds = new Set(remoteWorkspaces.map((rw: any) => rw.id))
         let allRemoteWsIds: Set<string> | null =
           lastSync === 0 ? new Set(remoteWorkspaces.map((rw: any) => rw.id)) : null
 
         const isWorkspaceAccessible = (rw: any): boolean => {
+          if (rw.space_id && deletedRemoteSpaceIds.has(rw.space_id)) {
+            return false
+          }
           if (rw.space_id && restrictedAdminSpaceIds.has(rw.space_id) && !isCurrentAdmin) {
             return false
           }
@@ -861,19 +1192,24 @@ class SyncEngine {
           )
         }
 
-        // En sync incremental, verificar índice ligero para detectar documentos nuevos o actualizados
-        // que hayan quedado con un updated_at anterior a lastSync (p. ej. creados offline o por desfase de reloj).
+        let wsIndexFailed = false
         if (lastSync > 0) {
-          const { data: remoteWsIndex, error: wsIndexErr } = await supabase
-            .from('seven_workspaces')
-            .select('id, updated_at, is_deleted, is_private, owner_member, user_id, space_id')
+          const { data: remoteWsIndex, error: wsIndexErr } = await this.fetchAllRows((from, to) =>
+            supabase
+              .from('seven_workspaces')
+              .select('id, updated_at, is_deleted, is_private, owner_member, user_id, space_id')
+              .range(from, to)
+          )
 
-          if (!wsIndexErr && remoteWsIndex) {
+          if (wsIndexErr) {
+            wsIndexFailed = true
+            hasPullErrors = true
+          } else if (remoteWsIndex) {
             allRemoteWsIds = new Set(remoteWsIndex.map((r: any) => r.id))
             const missingOrNewerIds: string[] = []
 
             for (const r of remoteWsIndex) {
-              if (fetchedWsIds.has(r.id) || !isWorkspaceAccessible(r)) continue
+              if (blockedWorkspaceIds.has(r.id) || fetchedWsIds.has(r.id) || !isWorkspaceAccessible(r)) continue
               const local = localWsMap.get(r.id)
               if (!local) {
                 missingOrNewerIds.push(r.id)
@@ -893,7 +1229,9 @@ class SyncEngine {
                 .from('seven_workspaces')
                 .select('*')
                 .in('id', batchIds)
-              if (!missingErr && missingRows) {
+              if (missingErr) {
+                hasPullErrors = true
+              } else if (missingRows) {
                 for (const mr of missingRows) {
                   if (!fetchedWsIds.has(mr.id)) {
                     fetchedWsIds.add(mr.id)
@@ -905,25 +1243,41 @@ class SyncEngine {
           }
         }
 
+        if (remoteWorkspaces.length > 0) {
+          markAccountSeeded()
+        }
+
         const wsToPut: WorkspaceItem[] = []
+        const inaccessibleLocalWsIds: string[] = []
 
         for (const rw of remoteWorkspaces) {
-          // Si la nota remota es privada y NO pertenece al miembro actual, NO la guardamos localmente
-          // ¡Ni siquiera el administrador puede recibir o guardar notas privadas de otros usuarios, y viceversa!
+          if (blockedWorkspaceIds.has(rw.id)) continue
+          if (rw.space_id && blockedSpaceIds.has(rw.space_id)) continue
+
+          const local = localWsMap.get(rw.id)
+
           if (!isWorkspaceAccessible(rw)) {
+            if (local && local.syncStatus === 'synced') {
+              inaccessibleLocalWsIds.push(rw.id)
+            }
             continue
           }
 
-          const local = localWsMap.get(rw.id)
           const remoteUpdated = this.clampTimestamp(Number(rw.updated_at) || 0, nowServer)
 
           if (this.shouldApplyRemote(local, remoteUpdated, nowServer)) {
             const meta = rw.metadata || {}
+            const mergedViewed = Array.from(
+              new Set([
+                ...(Array.isArray(local?.viewedBy) ? local!.viewedBy : []),
+                ...(Array.isArray(meta.viewedBy) ? meta.viewedBy : [])
+              ])
+            )
             wsToPut.push({
               id: rw.id,
               parentId: rw.parent_id,
-              spaceId: rw.space_id || 'default-workspace',
-              folder: rw.folder,
+              spaceId: rw.space_id && rw.space_id !== 'default-space' ? rw.space_id : 'default-workspace',
+              folder: normalizeFolderPath(rw.folder),
               title: rw.title,
               icon: rw.icon,
               color: rw.color,
@@ -932,7 +1286,6 @@ class SyncEngine {
               createdAt: this.clampTimestamp(rw.created_at, nowServer),
               updatedAt: remoteUpdated,
               isFavorite: rw.is_favorite,
-              // is_deleted en la nube = está en la papelera (el borrado definitivo elimina la fila)
               isDeleted: Boolean(rw.is_deleted),
               syncStatus: 'synced',
               isPrivate: Boolean(rw.is_private),
@@ -959,7 +1312,7 @@ class SyncEngine {
               databaseData: meta.databaseData,
               canvasGridVariant: meta.canvasGridVariant,
               sortOrder: meta.sortOrder ?? (rw as any).sort_order ?? (rw as any).sortOrder,
-              viewedBy: meta.viewedBy,
+              viewedBy: mergedViewed.length > 0 ? mergedViewed : undefined,
               isNewItem: meta.isNewItem,
               hasCover: meta.hasCover,
               coverType: meta.coverType,
@@ -971,6 +1324,14 @@ class SyncEngine {
               coverPosition: meta.coverPosition
             })
           }
+        }
+
+        if (syncGen !== this.syncGeneration) {
+          return { success: false, message: 'Sincronización cancelada' }
+        }
+
+        if (inaccessibleLocalWsIds.length > 0) {
+          await db.workspaces.bulkDelete(inaccessibleLocalWsIds).catch(() => {})
         }
 
         if (wsToPut.length > 0) {
@@ -1008,34 +1369,94 @@ class SyncEngine {
         }
 
         // Eliminar notas locales ya sincronizadas que fueron borradas definitivamente en Supabase
-        if (allRemoteWsIds) {
+        // Solo si la sesión/perfil está verificado y no hubo errores de descarga ni índice
+        if (allRemoteWsIds && isActiveAccountVerified && !wsIndexFailed && !spPullErr) {
           const wsToDelete = allLocalWs
-            .filter((lw) => lw.syncStatus === 'synced' && !allRemoteWsIds!.has(lw.id))
+            .filter(
+              (lw) =>
+                lw.syncStatus === 'synced' &&
+                (!allRemoteWsIds!.has(lw.id) || deletedRemoteSpaceIds.has(lw.spaceId || ''))
+            )
             .map((lw) => lw.id)
           if (wsToDelete.length > 0) {
             await db.workspaces.bulkDelete(wsToDelete).catch(() => {})
+            await Promise.all(
+              wsToDelete.map((id) =>
+                Promise.all([
+                  db.canvasNodes.where('workspaceId').equals(id).delete().catch(() => {}),
+                  db.canvasEdges.where('workspaceId').equals(id).delete().catch(() => {})
+                ])
+              )
+            )
           }
         }
       }
 
-      // Pull Canvas Nodes
-      const { data: remoteNodes, error: nodesPullErr } = await supabase
-        .from('seven_canvas_nodes')
-        .select('*')
-        .gt('updated_at', lastSync)
+      // Pull Canvas Nodes (paginado + índice incremental para eliminaciones/reloj)
+      const { data: remoteNodesData, error: nodesPullErr } = await this.fetchAllRows((from, to) =>
+        supabase.from('seven_canvas_nodes').select('*').gt('updated_at', lastSync).range(from, to)
+      )
 
       if (nodesPullErr) {
         console.warn('Error pulling canvas nodes:', nodesPullErr.message)
         hasPullErrors = true
-      } else if (remoteNodes && remoteNodes.length > 0) {
-        const localNodeRows = await db.canvasNodes.bulkGet(remoteNodes.map((rn: any) => rn.id))
-        const localNodeMap = new Map(
-          localNodeRows.filter((n): n is CanvasNodeItem => Boolean(n)).map((n) => [n.id, n])
-        )
+      } else {
+        const remoteNodes: any[] = [...remoteNodesData]
+        const fetchedNodeIds = new Set(remoteNodes.map((rn: any) => rn.id))
+        let allRemoteNodeIds: Set<string> | null =
+          lastSync === 0 ? new Set(remoteNodes.map((rn: any) => rn.id)) : null
+        let nodesIndexFailed = false
+
+        const allLocalNodes = await db.canvasNodes.toArray()
+        const localNodeMap = new Map(allLocalNodes.map((n) => [n.id, n]))
+
+        if (lastSync > 0) {
+          const { data: remoteNodeIndex, error: nodeIdxErr } = await this.fetchAllRows((from, to) =>
+            supabase.from('seven_canvas_nodes').select('id, updated_at, is_deleted').range(from, to)
+          )
+          if (nodeIdxErr) {
+            nodesIndexFailed = true
+            hasPullErrors = true
+          } else if (remoteNodeIndex) {
+            allRemoteNodeIds = new Set(remoteNodeIndex.map((r: any) => r.id))
+            const missingNodeIds: string[] = []
+            for (const r of remoteNodeIndex) {
+              if (blockedNodeIds.has(r.id) || fetchedNodeIds.has(r.id)) continue
+              const local = localNodeMap.get(r.id)
+              if (!local) {
+                if (!r.is_deleted) missingNodeIds.push(r.id)
+                continue
+              }
+              if (local.syncStatus !== 'pending') {
+                const remoteUpdated = this.clampTimestamp(Number(r.updated_at) || 0, nowServer)
+                if (remoteUpdated > (local.updatedAt || 0) || Boolean(r.is_deleted) !== Boolean(local.isDeleted)) {
+                  missingNodeIds.push(r.id)
+                }
+              }
+            }
+            for (let i = 0; i < missingNodeIds.length; i += 100) {
+              const batch = missingNodeIds.slice(i, i + 100)
+              const { data: missingRows, error: missingErr } = await supabase
+                .from('seven_canvas_nodes')
+                .select('*')
+                .in('id', batch)
+              if (!missingErr && missingRows) {
+                for (const mr of missingRows) {
+                  if (!fetchedNodeIds.has(mr.id)) {
+                    fetchedNodeIds.add(mr.id)
+                    remoteNodes.push(mr)
+                  }
+                }
+              }
+            }
+          }
+        }
+
         const nodesToDelete: string[] = []
         const nodesToPut: CanvasNodeItem[] = []
 
         for (const rn of remoteNodes) {
+          if (blockedNodeIds.has(rn.id) || blockedWorkspaceIds.has(rn.workspace_id)) continue
           const local = localNodeMap.get(rn.id)
           if (rn.is_deleted) {
             if (local) nodesToDelete.push(rn.id)
@@ -1060,8 +1481,20 @@ class SyncEngine {
           }
         }
 
+        if (allRemoteNodeIds && isActiveAccountVerified && !nodesIndexFailed) {
+          for (const ln of allLocalNodes) {
+            if (ln.syncStatus === 'synced' && !allRemoteNodeIds.has(ln.id)) {
+              nodesToDelete.push(ln.id)
+            }
+          }
+        }
+
+        if (syncGen !== this.syncGeneration) {
+          return { success: false, message: 'Sincronización cancelada' }
+        }
+
         if (nodesToDelete.length > 0) {
-          await db.canvasNodes.bulkDelete(nodesToDelete).catch(() => {})
+          await db.canvasNodes.bulkDelete(Array.from(new Set(nodesToDelete))).catch(() => {})
         }
         if (nodesToPut.length > 0) {
           await db.canvasNodes.bulkPut(nodesToPut)
@@ -1094,24 +1527,71 @@ class SyncEngine {
         }
       }
 
-      // Pull Canvas Edges
-      const { data: remoteEdges, error: edgesPullErr } = await supabase
-        .from('seven_canvas_edges')
-        .select('*')
-        .gt('updated_at', lastSync)
+      // Pull Canvas Edges (paginado + índice incremental)
+      const { data: remoteEdgesData, error: edgesPullErr } = await this.fetchAllRows((from, to) =>
+        supabase.from('seven_canvas_edges').select('*').gt('updated_at', lastSync).range(from, to)
+      )
 
       if (edgesPullErr) {
         console.warn('Error pulling canvas edges:', edgesPullErr.message)
         hasPullErrors = true
-      } else if (remoteEdges && remoteEdges.length > 0) {
-        const localEdgeRows = await db.canvasEdges.bulkGet(remoteEdges.map((re: any) => re.id))
-        const localEdgeMap = new Map(
-          localEdgeRows.filter((e): e is CanvasEdgeItem => Boolean(e)).map((e) => [e.id, e])
-        )
+      } else {
+        const remoteEdges: any[] = [...remoteEdgesData]
+        const fetchedEdgeIds = new Set(remoteEdges.map((re: any) => re.id))
+        let allRemoteEdgeIds: Set<string> | null =
+          lastSync === 0 ? new Set(remoteEdges.map((re: any) => re.id)) : null
+        let edgesIndexFailed = false
+
+        const allLocalEdges = await db.canvasEdges.toArray()
+        const localEdgeMap = new Map(allLocalEdges.map((e) => [e.id, e]))
+
+        if (lastSync > 0) {
+          const { data: remoteEdgeIndex, error: edgeIdxErr } = await this.fetchAllRows((from, to) =>
+            supabase.from('seven_canvas_edges').select('id, updated_at, is_deleted').range(from, to)
+          )
+          if (edgeIdxErr) {
+            edgesIndexFailed = true
+            hasPullErrors = true
+          } else if (remoteEdgeIndex) {
+            allRemoteEdgeIds = new Set(remoteEdgeIndex.map((r: any) => r.id))
+            const missingEdgeIds: string[] = []
+            for (const r of remoteEdgeIndex) {
+              if (blockedEdgeIds.has(r.id) || fetchedEdgeIds.has(r.id)) continue
+              const local = localEdgeMap.get(r.id)
+              if (!local) {
+                if (!r.is_deleted) missingEdgeIds.push(r.id)
+                continue
+              }
+              if (local.syncStatus !== 'pending') {
+                const remoteUpdated = this.clampTimestamp(Number(r.updated_at) || 0, nowServer)
+                if (remoteUpdated > (local.updatedAt || 0) || Boolean(r.is_deleted) !== Boolean(local.isDeleted)) {
+                  missingEdgeIds.push(r.id)
+                }
+              }
+            }
+            for (let i = 0; i < missingEdgeIds.length; i += 100) {
+              const batch = missingEdgeIds.slice(i, i + 100)
+              const { data: missingRows, error: missingErr } = await supabase
+                .from('seven_canvas_edges')
+                .select('*')
+                .in('id', batch)
+              if (!missingErr && missingRows) {
+                for (const mr of missingRows) {
+                  if (!fetchedEdgeIds.has(mr.id)) {
+                    fetchedEdgeIds.add(mr.id)
+                    remoteEdges.push(mr)
+                  }
+                }
+              }
+            }
+          }
+        }
+
         const edgesToDelete: string[] = []
         const edgesToPut: CanvasEdgeItem[] = []
 
         for (const re of remoteEdges) {
+          if (blockedEdgeIds.has(re.id) || blockedWorkspaceIds.has(re.workspace_id)) continue
           const local = localEdgeMap.get(re.id)
           if (re.is_deleted) {
             if (local) edgesToDelete.push(re.id)
@@ -1139,8 +1619,20 @@ class SyncEngine {
           }
         }
 
+        if (allRemoteEdgeIds && isActiveAccountVerified && !edgesIndexFailed) {
+          for (const le of allLocalEdges) {
+            if (le.syncStatus === 'synced' && !allRemoteEdgeIds.has(le.id)) {
+              edgesToDelete.push(le.id)
+            }
+          }
+        }
+
+        if (syncGen !== this.syncGeneration) {
+          return { success: false, message: 'Sincronización cancelada' }
+        }
+
         if (edgesToDelete.length > 0) {
-          await db.canvasEdges.bulkDelete(edgesToDelete).catch(() => {})
+          await db.canvasEdges.bulkDelete(Array.from(new Set(edgesToDelete))).catch(() => {})
         }
         if (edgesToPut.length > 0) {
           await db.canvasEdges.bulkPut(edgesToPut)
@@ -1148,23 +1640,22 @@ class SyncEngine {
       }
 
       // Pull Collections
-      const { data: remoteCollections, error: colPullErr } = await supabase
-        .from('seven_collections')
-        .select('*')
-        .gt('updated_at', lastSync)
+      const { data: remoteCollections, error: colPullErr } = await this.fetchAllRows((from, to) =>
+        supabase.from('seven_collections').select('*').range(from, to)
+      )
 
       if (colPullErr) {
         console.warn('Error pulling collections:', colPullErr.message)
         hasPullErrors = true
-      } else if (remoteCollections && remoteCollections.length > 0) {
-        const localColRows = await db.collections.bulkGet(remoteCollections.map((rc: any) => rc.id))
-        const localColMap = new Map(
-          localColRows.filter((c): c is CollectionItem => Boolean(c)).map((c) => [c.id, c])
-        )
+      } else {
+        const allLocalCols = await db.collections.toArray()
+        const localColMap = new Map(allLocalCols.map((c) => [c.id, c]))
         const colsToDelete: string[] = []
         const colsToPut: CollectionItem[] = []
+        const remoteColIds = new Set(remoteCollections.map((rc: any) => rc.id))
 
         for (const rc of remoteCollections) {
+          if (blockedCollectionIds.has(rc.id) || blockedSpaceIds.has(rc.space_id)) continue
           const local = localColMap.get(rc.id)
           if (rc.is_deleted) {
             if (local) colsToDelete.push(rc.id)
@@ -1187,8 +1678,16 @@ class SyncEngine {
           }
         }
 
+        if (isActiveAccountVerified) {
+          for (const lc of allLocalCols) {
+            if (lc.syncStatus === 'synced' && !remoteColIds.has(lc.id)) {
+              colsToDelete.push(lc.id)
+            }
+          }
+        }
+
         if (colsToDelete.length > 0) {
-          await db.collections.bulkDelete(colsToDelete).catch(() => {})
+          await db.collections.bulkDelete(Array.from(new Set(colsToDelete))).catch(() => {})
         }
         if (colsToPut.length > 0) {
           await db.collections.bulkPut(colsToPut)
@@ -1196,22 +1695,27 @@ class SyncEngine {
       }
 
       // Pull Tags (incluyendo actualizaciones y eliminaciones)
-      const { data: remoteTags, error: tagPullErr } = await supabase
-        .from('seven_tags')
-        .select('*')
+      const { data: remoteTags, error: tagPullErr } = await this.fetchAllRows((from, to) =>
+        supabase.from('seven_tags').select('*').range(from, to)
+      )
 
       if (tagPullErr) {
         console.warn('Error pulling tags:', tagPullErr.message)
         hasPullErrors = true
-      } else if (remoteTags && remoteTags.length > 0) {
-        const localTagRows = await db.tags.bulkGet(remoteTags.map((rt: any) => rt.id))
-        const localTagMap = new Map(
-          localTagRows.filter((t): t is TagItem => Boolean(t)).map((t) => [t.id, t])
-        )
+      } else {
+        const allLocalTags = await db.tags.toArray()
+        const localTagMap = new Map(allLocalTags.map((t) => [t.id, t]))
         const tagsToPut: TagItem[] = []
+        const tagsToDelete: string[] = []
+        const remoteTagIds = new Set(remoteTags.map((rt: any) => rt.id))
 
         for (const rt of remoteTags) {
+          if (blockedTagIds.has(rt.id) || blockedSpaceIds.has(rt.space_id)) continue
           const local = localTagMap.get(rt.id)
+          if (rt.is_deleted) {
+            if (local) tagsToDelete.push(rt.id)
+            continue
+          }
           if (!local || local.syncStatus !== 'pending') {
             tagsToPut.push({
               id: rt.id,
@@ -1219,12 +1723,23 @@ class SyncEngine {
               name: rt.name,
               color: rt.color,
               createdAt: rt.created_at,
-              isDeleted: rt.is_deleted,
+              isDeleted: false,
               syncStatus: 'synced'
             })
           }
         }
 
+        if (isActiveAccountVerified) {
+          for (const lt of allLocalTags) {
+            if (lt.syncStatus === 'synced' && !remoteTagIds.has(lt.id)) {
+              tagsToDelete.push(lt.id)
+            }
+          }
+        }
+
+        if (tagsToDelete.length > 0) {
+          await db.tags.bulkDelete(Array.from(new Set(tagsToDelete))).catch(() => {})
+        }
         if (tagsToPut.length > 0) {
           await db.tags.bulkPut(tagsToPut)
         }
@@ -1285,16 +1800,25 @@ class SyncEngine {
 
       // Actualizar timestamp de última sincronización solo si no hubo errores de red/descarga
       if (!hasPullErrors) {
+        this.initialPullCompleted = true
         this.lastSyncTime = this.getServerNow()
         localStorage.setItem(LAST_SYNC_KEY, this.lastSyncTime.toString())
-        this.state = 'synced'
+        this.state = hasPushErrors ? 'error' : 'synced'
+        if (hasPushErrors) {
+          this.errorMessage = 'Algunos cambios locales no pudieron subirse a la nube'
+        }
+        // Si la cuenta en la nube estaba completamente vacía (0 espacios y 0 notas), inicializar espacio de bienvenida una sola vez
+        await seedInitialData({ allowWhenSupabaseConfigured: true })
       } else {
         this.state = 'error'
         this.errorMessage = 'Sincronización completada con advertencias en la descarga remota'
       }
       await this.updatePendingCount()
 
-      return { success: !hasPullErrors, message: hasPullErrors ? this.errorMessage! : 'Sincronización completada' }
+      return {
+        success: !hasPullErrors && !hasPushErrors,
+        message: hasPullErrors || hasPushErrors ? this.errorMessage! : 'Sincronización completada'
+      }
     } catch (err: any) {
       console.error('Sync failed:', err)
       this.state = 'error'

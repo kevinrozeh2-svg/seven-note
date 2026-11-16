@@ -233,6 +233,18 @@ export function setCurrentMember(memberIdOrMember: string | TeamMember): TeamMem
   return memberToSet
 }
 
+export function clearCurrentMember(): void {
+  activeProfileMemory = null
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(CURRENT_MEMBER_STORAGE_KEY)
+      localStorage.removeItem(CURRENT_PROFILE_STORAGE_KEY)
+    }
+  } catch (e) {
+    console.warn('Error clearing current member', e)
+  }
+}
+
 export function subscribeToMemberChanges(callback: (member: TeamMember) => void): () => void {
   if (typeof window === 'undefined') return () => {}
   const handler = (e: any) => {

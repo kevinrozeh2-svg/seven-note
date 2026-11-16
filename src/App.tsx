@@ -58,6 +58,7 @@ import { type AppTemplate } from './lib/templates'
 import {
   getCurrentMember,
   setCurrentMember,
+  clearCurrentMember,
   subscribeToMemberChanges,
   mapSupabaseUserToMember,
   type TeamMember,
@@ -66,9 +67,10 @@ import {
   isUserAdmin,
   canUserEditWorkspace,
   canUserDeleteWorkspace,
-  canUserTogglePrivacy
+  canUserTogglePrivacy,
+  canUserManageSpace
 } from './lib/teamAuth'
-import { getAuthUser, onAuthChange, signOutUser, fetchUserProfile } from './lib/supabase'
+import { getAuthUser, onAuthChange, signOutUser, fetchUserProfile, isSupabaseConfigured } from './lib/supabase'
 import {
   exportDocumentAsMarkdown,
   exportDocumentAsHtml,
@@ -168,6 +170,8 @@ function MainApp() {
     }
   }, [authLoading, webUpdateAvailable])
 
+  const lastAuthUserIdRef = useRef<string | null>(null)
+
   // Sincronizar sesión activa de Supabase Auth
   useEffect(() => {
     initTauriUpdater()
@@ -180,6 +184,7 @@ function MainApp() {
     // 1. Comprobar usuario ya autenticado
     getAuthUser().then(async (user) => {
       if (user) {
+        lastAuthUserIdRef.current = user.id
         setAuthUser(user)
         const profile = await fetchUserProfile(user.id)
         const mapped = mapSupabaseUserToMember(user, profile)
@@ -203,16 +208,20 @@ function MainApp() {
       const user = session?.user || null
       setAuthUser(user)
       if (user) {
+        const isDifferentUser = Boolean(lastAuthUserIdRef.current && lastAuthUserIdRef.current !== user.id)
+        const isFreshSignIn = event === 'SIGNED_IN' && lastAuthUserIdRef.current !== user.id
+        lastAuthUserIdRef.current = user.id
         const profile = await fetchUserProfile(user.id)
         const mapped = mapSupabaseUserToMember(user, profile)
         setCurrentMember(mapped)
         setCurrentMemberState(mapped)
-        if (event === 'SIGNED_IN') {
+        if (isDifferentUser || isFreshSignIn) {
           syncEngine.resetLastSyncTime()
         }
         syncEngine.initRealtimeSubscription()
         syncEngine.triggerSync()
       } else {
+        lastAuthUserIdRef.current = null
         syncEngine.stopRealtimeSubscription()
       }
       setAuthLoading(false)
@@ -237,10 +246,11 @@ function MainApp() {
   }
 
   const handleSignOut = async () => {
+    lastAuthUserIdRef.current = null
+    syncEngine.abortForSignOut()
     await signOutUser()
     await clearLocalUserData()
-    syncEngine.stopRealtimeSubscription()
-    syncEngine.resetLastSyncTime()
+    clearCurrentMember()
     localStorage.removeItem('seven_note_workbench_tabs')
     localStorage.removeItem('seven_note_workbench_active_tab')
     localStorage.removeItem('seven_note_active_space_id')
@@ -394,7 +404,8 @@ function MainApp() {
 
   // Synchronize and deduplicate tabs whenever workspaces are loaded or changed
   useEffect(() => {
-    if (workspaces.length === 0) return
+    if (isDbHydrating || workspaces.length === 0) return
+    const canPruneMissingTabs = !isSupabaseConfigured() || syncEngine.hasCompletedInitialSync()
 
     setTabs((prev) => {
       let changed = false
@@ -415,8 +426,16 @@ function MainApp() {
 
         // For workspace items, resolve and sync real title, icon, and spaceId from database
         if (t.workspaceId && (!t.viewType || t.viewType === 'doc')) {
-          const ws = workspaces.find((w) => w.id === t.workspaceId && !w.isDeleted)
+          const ws = workspaces.find((w) => w.id === t.workspaceId)
           if (!ws) {
+            if (canPruneMissingTabs) {
+              changed = true
+              continue
+            }
+            sanitized.push(t)
+            continue
+          }
+          if (ws.isDeleted) {
             changed = true
             continue
           }
@@ -444,7 +463,7 @@ function MainApp() {
 
       return changed ? sanitized : prev
     })
-  }, [workspaces])
+  }, [workspaces, isDbHydrating])
 
   const selectWorkspaceWithTab = async (
     wsId: string,
@@ -475,7 +494,6 @@ function MainApp() {
       markItemAsRead(targetSpaceId, 'space', currentMember, authUser?.id)
     }
     setCurrentWorkspaceId(wsId)
-    setViewMode(ws?.viewMode || 'doc')
     markItemAsRead(wsId, 'workspace', currentMember, authUser?.id)
 
     setTabs((prev) => {
@@ -628,6 +646,7 @@ function MainApp() {
       isNewItem: true
     }
     await db.workspaces.add(newWs)
+    syncEngine.scheduleSync(500)
     setOptimisticWorkspace(newWs)
     const newTab: WorkbenchTab = {
       id: `tab-${crypto.randomUUID()}`,
@@ -641,7 +660,6 @@ function MainApp() {
     setTabs((prev) => [...prev, newTab])
     setActiveTabId(newTab.id)
     setCurrentWorkspaceId(newId)
-    setViewMode('doc')
   }
 
   const handleTogglePinTab = (tabId: string) => {
@@ -941,12 +959,10 @@ function MainApp() {
           }
           const first = activeWorkspaces[0]
           setCurrentWorkspaceId(first.id)
-          setViewMode(first.viewMode || 'doc')
         }).catch(() => {
           if (isMounted) {
             const first = activeWorkspaces[0]
             setCurrentWorkspaceId(first.id)
-            setViewMode(first.viewMode || 'doc')
           }
         })
         return () => {
@@ -1004,14 +1020,19 @@ function MainApp() {
     localStorage.setItem('seven_note_active_space_id', spaceId)
     markItemAsRead(spaceId, 'space', currentMember, authUser?.id)
 
-    const targetSpacePages = workspaces.filter(
-      (w) => !w.isDeleted && (w.spaceId || DEFAULT_SPACE_ID) === spaceId && isWorkspaceVisible(w, currentMember, authUser?.id)
+    const dbSpacePages = await db.workspaces
+      .where('spaceId')
+      .equals(spaceId)
+      .toArray()
+    const targetSpacePages = dbSpacePages.filter(
+      (w) => !w.isDeleted && isWorkspaceVisible(w, currentMember, authUser?.id)
     )
     if (targetSpacePages.length > 0) {
       setCurrentWorkspaceId(targetSpacePages[0].id)
       markItemAsRead(targetSpacePages[0].id, 'workspace', currentMember, authUser?.id)
-    } else {
-      // Auto-create initial page if space has no visible pages
+    } else if (!isSupabaseConfigured() || syncEngine.hasCompletedInitialSync()) {
+      // Solo crear página inicial si la sincronización inicial ya terminó y el espacio realmente no tiene páginas
+      if (dbSpacePages.length > 0) return
       const sp = spaces.find((s) => s.id === spaceId)
       const isSpPrivate = Boolean(sp?.isPrivate)
       const newPageId = crypto.randomUUID()
@@ -1047,6 +1068,7 @@ function MainApp() {
           updatedAt: 'always_show'
         }
       })
+      syncEngine.scheduleSync(500)
       setCurrentWorkspaceId(newPageId)
     }
   }
@@ -1116,11 +1138,18 @@ function MainApp() {
 
   const handleDeleteSpace = async (id: string) => {
     const sp = spaces.find((s) => s.id === id)
+    if (!canUserManageSpace(sp, currentMember, authUser?.id)) {
+      toast.error('Solo el creador o un administrador pueden eliminar este espacio.')
+      return
+    }
     if (!confirm(`¿Eliminar el espacio "${sp?.name || 'Espacio'}" y todos sus documentos asociados?`)) {
       return
     }
     await deleteSpace(id)
-    const remaining = spaces.filter((s) => s.id !== id)
+    syncEngine.scheduleSync(500)
+    const remaining = spaces.filter(
+      (s) => s.id !== id && !s.isDeleted && isSpaceVisible(s, currentMember, authUser?.id)
+    )
     if (remaining.length > 0) {
       await handleSelectSpace(remaining[0].id)
     }
@@ -1178,12 +1207,14 @@ function MainApp() {
   const handleToggleFavorite = async () => {
     if (!currentWorkspace) return
     try {
+      const canSync = canUserEditWorkspace(currentWorkspace, currentMember, authUser?.id)
       await db.workspaces.update(currentWorkspace.id, {
         isFavorite: !currentWorkspace.isFavorite,
-        updatedAt: Date.now(),
-        syncStatus: 'pending'
+        ...(canSync
+          ? { updatedAt: Date.now(), syncStatus: 'pending' as const }
+          : { syncStatus: currentWorkspace.syncStatus || 'synced' })
       })
-      syncEngine.scheduleSync(1000)
+      if (canSync) syncEngine.scheduleSync(1000)
     } catch (e) {
       console.error('Error toggling favorite', e)
     }
@@ -2003,13 +2034,31 @@ function MainApp() {
                     <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-0.5 sm:my-1" />
 
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         if (currentWorkspace) {
-                          db.workspaces.update(currentWorkspace.id, {
+                          if (!canUserDeleteWorkspace(currentWorkspace, currentMember, authUser?.id)) {
+                            toast.error('Solo el autor o un administrador pueden eliminar esta nota.')
+                            setActiveDropdown(null)
+                            return
+                          }
+                          const now = Date.now()
+                          await db.workspaces.update(currentWorkspace.id, {
                             isDeleted: true,
-                            updatedAt: Date.now(),
+                            updatedAt: now,
                             syncStatus: 'pending'
-                          }).then(() => syncEngine.scheduleSync(500))
+                          })
+                          const children = workspaces.filter((w) => w.parentId === currentWorkspace.id && !w.isDeleted)
+                          for (const child of children) {
+                            if (canUserEditWorkspace(child, currentMember, authUser?.id)) {
+                              await db.workspaces.update(child.id, {
+                                parentId: currentWorkspace.parentId || null,
+                                folder: child.folder || currentWorkspace.folder || null,
+                                updatedAt: now,
+                                syncStatus: 'pending'
+                              })
+                            }
+                          }
+                          syncEngine.scheduleSync(500)
                         }
                         setActiveDropdown(null)
                       }}
@@ -2198,10 +2247,10 @@ function MainApp() {
                 currentWorkspaceId={currentWorkspace?.id}
                 currentSpaceId={currentSpaceId}
                 onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
-                onCreateWorkspace={() => {
+                onCreateWorkspace={async () => {
                   const newId = crypto.randomUUID()
                   const now = Date.now()
-                  db.workspaces.add({
+                  const newWs: WorkspaceItem = {
                     id: newId,
                     parentId: null,
                     spaceId: currentSpaceId,
@@ -2221,12 +2270,19 @@ function MainApp() {
                     userId: authUser?.id || undefined,
                     viewedBy: [currentMember.id, currentMember.fullName || currentMember.name, currentMember.email, authUser?.id].filter(Boolean) as string[],
                     isNewItem: true
-                  })
-                  selectWorkspaceWithTab(newId)
+                  }
+                  await db.workspaces.add(newWs)
+                  syncEngine.scheduleSync(500)
+                  selectWorkspaceWithTab(newId, currentSpaceId, newWs)
                 }}
                 onToggleFavorite={async (e, ws) => {
                   e.stopPropagation()
-                  await db.workspaces.update(ws.id, { isFavorite: !ws.isFavorite })
+                  const canSync = canUserEditWorkspace(ws, currentMember, authUser?.id)
+                  await db.workspaces.update(ws.id, {
+                    isFavorite: !ws.isFavorite,
+                    ...(canSync ? { updatedAt: Date.now(), syncStatus: 'pending' as const } : { syncStatus: ws.syncStatus || 'synced' })
+                  })
+                  if (canSync) syncEngine.scheduleSync(500)
                 }}
                 onDeleteWorkspace={async (e, id) => {
                   e.stopPropagation()
@@ -2235,7 +2291,19 @@ function MainApp() {
                     toast.error('Solo el autor o un administrador pueden eliminar esta nota.')
                     return
                   }
-                  await db.workspaces.update(id, { isDeleted: true, updatedAt: Date.now(), syncStatus: 'pending' })
+                  const now = Date.now()
+                  await db.workspaces.update(id, { isDeleted: true, updatedAt: now, syncStatus: 'pending' })
+                  const children = workspaces.filter((w) => w.parentId === id && !w.isDeleted)
+                  for (const child of children) {
+                    if (canUserEditWorkspace(child, currentMember, authUser?.id)) {
+                      await db.workspaces.update(child.id, {
+                        parentId: target?.parentId || null,
+                        folder: child.folder || target?.folder || null,
+                        updatedAt: now,
+                        syncStatus: 'pending'
+                      })
+                    }
+                  }
                   syncEngine.scheduleSync(500)
                 }}
               />
@@ -2269,8 +2337,9 @@ function MainApp() {
                     isNewItem: true
                   }
                   await db.workspaces.add(newWs)
+                  syncEngine.scheduleSync(500)
                   setOptimisticWorkspace(newWs)
-                  selectWorkspaceWithTab(newId)
+                  selectWorkspaceWithTab(newId, currentSpaceId, newWs)
                 }}
                 onBack={() => {
                   const currentIndex = tabs.findIndex((t) => t.id === activeTabId)
@@ -2449,6 +2518,7 @@ function MainApp() {
             viewedBy: [currentMember.id, currentMember.fullName || currentMember.name, currentMember.email, authUser?.id].filter(Boolean) as string[],
             isNewItem: true
           })
+          syncEngine.scheduleSync(500)
           selectWorkspaceWithTab(newId)
           toast.success('Página creada')
         }}

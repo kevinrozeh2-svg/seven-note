@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Trash2, RotateCcw, FileText, Layout } from 'lucide-react'
-import { db, type WorkspaceItem } from '../../db'
+import { db, type WorkspaceItem, recordPendingHardDeletes, clearPendingHardDeletes } from '../../db'
 import { syncEngine } from '../../lib/syncEngine'
 import { toast } from 'sonner'
 import { AppleEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
 import { deleteImageFromStorage, extractStorageUrlsFromHtml } from '../../lib/imageOptimizer'
 import { getSupabaseClient } from '../../lib/supabase'
-import { getCurrentMember, isWorkspaceVisible, canUserDeleteWorkspace } from '../../lib/teamAuth'
+import { getCurrentMember, isWorkspaceVisible, canUserDeleteWorkspace, canUserEditWorkspace } from '../../lib/teamAuth'
 
 interface TrashPageProps {
   onSelectWorkspace: (id: string) => void
@@ -70,6 +70,14 @@ export const TrashPage: React.FC<TrashPageProps> = () => {
     try {
       // 1. Limpiar imágenes asociadas en Supabase Storage para liberar espacio
       const nodes = await db.canvasNodes.where('workspaceId').equals(id).toArray()
+      const edges = await db.canvasEdges.where('workspaceId').equals(id).toArray()
+      const nodeIds = nodes.map((n) => n.id)
+      const edgeIds = edges.map((e) => e.id)
+
+      recordPendingHardDeletes('workspaces', [id])
+      if (nodeIds.length > 0) recordPendingHardDeletes('canvasNodes', nodeIds)
+      if (edgeIds.length > 0) recordPendingHardDeletes('canvasEdges', edgeIds)
+
       for (const n of nodes) {
         if (n.data?.imageUrl) {
           deleteImageFromStorage(n.data.imageUrl).catch(() => {})
@@ -83,20 +91,38 @@ export const TrashPage: React.FC<TrashPageProps> = () => {
         }
       }
 
+      // Desvincular subpáginas activas para que no queden huérfanas e invisibles
+      const childPages = await db.workspaces.where('parentId').equals(id).toArray()
+      const now = Date.now()
+      for (const child of childPages) {
+        if (!child.isDeleted && canUserEditWorkspace(child, member)) {
+          await db.workspaces.update(child.id, {
+            parentId: ws?.parentId || null,
+            folder: child.folder || ws?.folder || null,
+            updatedAt: now,
+            syncStatus: 'pending'
+          })
+        }
+      }
+
       // 2. Eliminar de Supabase Postgres si está conectado
       const supabase = getSupabaseClient()
       if (supabase) {
-        await Promise.allSettled([
+        const [nodesRes, edgesRes, wsRes] = await Promise.all([
           supabase.from('seven_canvas_nodes').delete().eq('workspace_id', id),
           supabase.from('seven_canvas_edges').delete().eq('workspace_id', id),
           supabase.from('seven_workspaces').delete().eq('id', id)
         ])
+        if (!nodesRes.error && nodeIds.length > 0) clearPendingHardDeletes('canvasNodes', nodeIds)
+        if (!edgesRes.error && edgeIds.length > 0) clearPendingHardDeletes('canvasEdges', edgeIds)
+        if (!wsRes.error) clearPendingHardDeletes('workspaces', [id])
       }
 
       // 3. Eliminar de IndexedDB local
       await db.workspaces.delete(id)
       await db.canvasNodes.where('workspaceId').equals(id).delete()
       await db.canvasEdges.where('workspaceId').equals(id).delete()
+      syncEngine.scheduleSync(500)
       toast.info('Documento y sus fotos eliminados definitivamente')
       loadDeleted()
     } catch (err) {
@@ -105,14 +131,30 @@ export const TrashPage: React.FC<TrashPageProps> = () => {
   }
 
   const handleEmptyTrash = async () => {
-    if (deletedWorkspaces.length === 0) return
+    const member = getCurrentMember()
+    const deletable = deletedWorkspaces.filter((w) => canUserDeleteWorkspace(w, member))
+    if (deletable.length === 0) {
+      if (deletedWorkspaces.length > 0) {
+        toast.error('Solo los autores o un administrador pueden vaciar estos documentos.')
+      }
+      return
+    }
     if (!confirm('¿Vaciar toda la papelera permanentemente? Se eliminará todo sin dejar rastro en Supabase.')) return
     try {
-      const ids = deletedWorkspaces.map((w) => w.id)
+      const ids = deletable.map((w) => w.id)
+      const allNodeIds: string[] = []
+      const allEdgeIds: string[] = []
+      recordPendingHardDeletes('workspaces', ids)
+
       const supabase = getSupabaseClient()
-      for (const ws of deletedWorkspaces) {
+      for (const ws of deletable) {
         // Limpiar fotos asociadas en storage
-        const nodes = await db.canvasNodes.where('workspaceId').equals(ws.id).toArray()
+        const [nodes, edges] = await Promise.all([
+          db.canvasNodes.where('workspaceId').equals(ws.id).toArray(),
+          db.canvasEdges.where('workspaceId').equals(ws.id).toArray()
+        ])
+        nodes.forEach((n) => allNodeIds.push(n.id))
+        edges.forEach((e) => allEdgeIds.push(e.id))
         for (const n of nodes) {
           if (n.data?.imageUrl) {
             deleteImageFromStorage(n.data.imageUrl).catch(() => {})
@@ -124,18 +166,36 @@ export const TrashPage: React.FC<TrashPageProps> = () => {
             deleteImageFromStorage(u).catch(() => {})
           }
         }
+
+        const childPages = await db.workspaces.where('parentId').equals(ws.id).toArray()
+        const now = Date.now()
+        for (const child of childPages) {
+          if (!child.isDeleted && canUserEditWorkspace(child, member)) {
+            await db.workspaces.update(child.id, {
+              parentId: ws.parentId || null,
+              folder: child.folder || ws.folder || null,
+              updatedAt: now,
+              syncStatus: 'pending'
+            })
+          }
+        }
       }
+
+      if (allNodeIds.length > 0) recordPendingHardDeletes('canvasNodes', allNodeIds)
+      if (allEdgeIds.length > 0) recordPendingHardDeletes('canvasEdges', allEdgeIds)
 
       // Eliminar definitivamente de Supabase Postgres
       if (supabase) {
-        const [, , wsRes] = await Promise.all([
+        const [nodesRes, edgesRes, wsRes] = await Promise.all([
           supabase.from('seven_canvas_nodes').delete().in('workspace_id', ids),
           supabase.from('seven_canvas_edges').delete().in('workspace_id', ids),
           supabase.from('seven_workspaces').delete().in('id', ids)
         ])
-        // Limpiar también cualquier otro registro marcado como is_deleted en la nube
-        await supabase.from('seven_workspaces').delete().eq('is_deleted', true)
-        if (wsRes.error) {
+        if (!nodesRes.error && allNodeIds.length > 0) clearPendingHardDeletes('canvasNodes', allNodeIds)
+        if (!edgesRes.error && allEdgeIds.length > 0) clearPendingHardDeletes('canvasEdges', allEdgeIds)
+        if (!wsRes.error) {
+          clearPendingHardDeletes('workspaces', ids)
+        } else {
           console.warn('Error eliminando de Supabase:', wsRes.error.message)
         }
       }
@@ -150,6 +210,7 @@ export const TrashPage: React.FC<TrashPageProps> = () => {
           ])
         )
       )
+      syncEngine.scheduleSync(500)
       toast.info('Papelera vaciada y eliminada de Supabase')
       loadDeleted()
     } catch (err) {

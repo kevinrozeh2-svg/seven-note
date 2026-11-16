@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { db, type WorkspaceItem, type SpaceItem } from '../db'
-import { type TeamMember, getCurrentMember } from './teamAuth'
+import { type TeamMember, getCurrentMember, canUserEditWorkspace } from './teamAuth'
 
 export const UNREAD_CHANGED_EVENT = 'seven_note_unread_changed'
 
@@ -148,9 +148,11 @@ export async function markItemAsRead(
         if (combined.length !== existingViewed.length) {
           // No tocamos updatedAt: marcar como leído no debe ganar a cambios reales
           // (p. ej. un borrado hecho por otro usuario) en la resolución de conflictos.
+          // Solo marcamos pending si el usuario realmente tiene permisos de edición en la nube.
+          const canSyncViewed = canUserEditWorkspace(ws, member, authId || undefined)
           await (db.workspaces as any).update(itemId, {
             viewedBy: combined,
-            syncStatus: 'pending'
+            syncStatus: canSyncViewed ? 'pending' : (ws.syncStatus || 'synced')
           })
         }
       }
@@ -160,10 +162,11 @@ export async function markItemAsRead(
         const existingViewed = Array.isArray(sp.viewedBy) ? sp.viewedBy : []
         const combined = Array.from(new Set([...existingViewed, ...toAdd]))
         if (combined.length !== existingViewed.length) {
+          // Nunca tocamos updatedAt ni forzamos syncStatus='pending' en espacios solo por leerlos,
+          // para evitar que un dispositivo sobrescriba nombres u orden de espacios en la nube.
           await (db.spaces as any).update(itemId, {
             viewedBy: combined,
-            updatedAt: Date.now(),
-            syncStatus: 'pending'
+            syncStatus: sp.syncStatus || 'synced'
           })
         }
       }

@@ -65,8 +65,9 @@ import {
   StarIcon,
   RoundedRectangleIcon
 } from '@blocksuite/icons/rc'
-import { db, type CanvasNodeType, type WorkspaceItem } from '../../db'
+import { db, DEFAULT_SPACE_ID, type CanvasNodeType, type WorkspaceItem } from '../../db'
 import { syncEngine } from '../../lib/syncEngine'
+import { getCurrentMember } from '../../lib/teamAuth'
 const TemplatesModal = lazy(() => import('../modals/TemplatesModal').then(m => ({ default: m.TemplatesModal })))
 import { type AppTemplate } from '../../lib/templates'
 import { toast } from 'sonner'
@@ -378,32 +379,39 @@ function CanvasBoardInner({
   const laserPointsRef = useRef<Array<{ x: number; y: number; time: number }>>([])
   const laserAnimFrameRef = useRef<number | null>(null)
 
-  // Auto-seed central DocFrameNode if canvas is empty
+  // Auto-seed central DocFrameNode if canvas is empty (and not previously deleted or syncing)
   useEffect(() => {
     const ensureInitialCard = async () => {
-      if (!dbNodes) return
+      if (!dbNodes || readOnly) return
       if (dbNodes.length === 0) {
         const newId = `docframe-${workspaceId}`
-        await db.canvasNodes.add({
-          id: newId,
-          workspaceId,
-          type: 'docframe',
-          positionX: 350,
-          positionY: 200,
-          data: {
-            title: currentWorkspace?.title || 'Title',
+        const existing = await db.canvasNodes.get(newId)
+        if (existing) return
+        try {
+          await db.canvasNodes.add({
+            id: newId,
             workspaceId,
-            content: currentWorkspace?.docContent || ''
-          },
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-          isDeleted: false,
-          syncStatus: 'pending'
-        })
+            type: 'docframe',
+            positionX: 350,
+            positionY: 200,
+            data: {
+              title: currentWorkspace?.title || 'Title',
+              workspaceId,
+              content: currentWorkspace?.docContent || ''
+            },
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            isDeleted: false,
+            syncStatus: 'pending'
+          })
+          syncEngine.scheduleSync(1200)
+        } catch {
+          // ignore concurrent seed race
+        }
       }
     }
     ensureInitialCard()
-  }, [dbNodes, workspaceId, currentWorkspace?.title, currentWorkspace?.docContent])
+  }, [dbNodes, workspaceId, currentWorkspace?.title, currentWorkspace?.docContent, readOnly])
 
   // Reconcile IndexedDB nodes to React Flow nodes preserving existing references
   useEffect(() => {
@@ -1202,22 +1210,27 @@ function CanvasBoardInner({
       const docContent: string = typeof target.data?.content === 'string' ? target.data.content : ''
 
       try {
-        const newDocId = `ws-doc-${Date.now()}`
+        const newDocId = `ws-doc-${crypto.randomUUID()}`
+        const member = getCurrentMember()
+        const now = Date.now()
         await db.workspaces.add({
           id: newDocId,
           parentId: workspaceId,
-          spaceId: currentWorkspace?.spaceId || 'default-space',
+          spaceId: currentWorkspace?.spaceId || DEFAULT_SPACE_ID,
           folder: 'General',
           title: docTitle,
           icon: '📄',
           color: '#3b82f6',
           viewMode: 'doc',
           docContent: `<p>${docContent || 'Documento vinculado desde tarjeta.'}</p>`,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
+          createdAt: now,
+          updatedAt: now,
           isFavorite: false,
           isDeleted: false,
-          syncStatus: 'pending'
+          syncStatus: 'pending',
+          ownerMember: member.id,
+          ownerName: member.name,
+          createdBy: member.name
         })
 
         await db.canvasNodes.update(nodeId, {
