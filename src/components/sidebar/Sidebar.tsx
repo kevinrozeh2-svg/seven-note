@@ -477,63 +477,67 @@ export function Sidebar({
 
   // Persisted folder order for current space (synced via db.spaces + Supabase)
   const spaceFolderOrder = (currentSpace as SpaceItem).folderOrder
-  const [folderOrder, setFolderOrder] = useState<string[]>(() => {
-    if (Array.isArray(spaceFolderOrder)) return spaceFolderOrder
+  const [localFallbackFolderOrder, setLocalFallbackFolderOrder] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem(`seven_note_folder_order_${currentSpace.id}`)
-      return saved ? JSON.parse(saved) : []
+      const parsed = saved ? JSON.parse(saved) : []
+      return Array.isArray(parsed) ? parsed : []
     } catch {
       return []
     }
   })
 
+  const folderOrder = useMemo(() => {
+    if (Array.isArray(spaceFolderOrder)) {
+      return spaceFolderOrder
+        .map((f) => normalizeFolderPath(f))
+        .filter((f): f is string => Boolean(f))
+    }
+    return localFallbackFolderOrder
+  }, [spaceFolderOrder, localFallbackFolderOrder])
+
   useEffect(() => {
     if (Array.isArray(spaceFolderOrder)) {
-      setFolderOrder(spaceFolderOrder)
       try {
         localStorage.setItem(`seven_note_folder_order_${currentSpace.id}`, JSON.stringify(spaceFolderOrder))
       } catch {}
       return
     }
 
-    // Solo leer el orden visual local sin sobreescribir db.spaces ni marcar syncStatus='pending'
-    // automáticamente en el arranque (evita machacar nombres u orden de espacios desde caché vieja).
     try {
       const saved = localStorage.getItem(`seven_note_folder_order_${currentSpace.id}`)
       const parsed: string[] = saved ? JSON.parse(saved) : []
-      setFolderOrder(Array.isArray(parsed) ? parsed : [])
+      setLocalFallbackFolderOrder(Array.isArray(parsed) ? parsed : [])
     } catch {
-      setFolderOrder([])
+      setLocalFallbackFolderOrder([])
     }
   }, [currentSpace.id, spaceFolderOrder])
 
   const persistFolderOrder = useCallback(
     (nextOrUpdater: string[] | ((prev: string[]) => string[])) => {
-      setFolderOrder((prev) => {
-        const rawNext = typeof nextOrUpdater === 'function' ? nextOrUpdater(prev) : nextOrUpdater
-        const next = Array.from(
-          new Set(rawNext.map((f) => normalizeFolderPath(f)).filter((f): f is string => Boolean(f)))
-        )
-        try {
-          localStorage.setItem(`seven_note_folder_order_${currentSpace.id}`, JSON.stringify(next))
-        } catch (err) {
-          console.warn('Error saving folder order', err)
-        }
-        const spObj = visibleSpaces.find((s) => s.id === currentSpace.id)
-        if (spObj && canUserManageSpace(spObj, activeMember, authUser?.id)) {
-          db.spaces
-            .update(currentSpace.id, {
-              folderOrder: next,
-              updatedAt: Date.now(),
-              syncStatus: 'pending'
-            })
-            .then(() => syncEngine.scheduleSync(500))
-            .catch((err) => console.warn('Error syncing folder order', err))
-        }
-        return next
-      })
+      const rawNext = typeof nextOrUpdater === 'function' ? nextOrUpdater(folderOrder) : nextOrUpdater
+      const next = Array.from(
+        new Set(rawNext.map((f) => normalizeFolderPath(f)).filter((f): f is string => Boolean(f)))
+      )
+      setLocalFallbackFolderOrder(next)
+      try {
+        localStorage.setItem(`seven_note_folder_order_${currentSpace.id}`, JSON.stringify(next))
+      } catch (err) {
+        console.warn('Error saving folder order', err)
+      }
+      const spObj = visibleSpaces.find((s) => s.id === currentSpace.id)
+      if (spObj && canUserManageSpace(spObj, activeMember, authUser?.id)) {
+        db.spaces
+          .update(currentSpace.id, {
+            folderOrder: next,
+            updatedAt: getSafeTimestamp(spObj.updatedAt),
+            syncStatus: 'pending'
+          })
+          .then(() => syncEngine.scheduleSync(50))
+          .catch((err) => console.warn('Error syncing folder order', err))
+      }
     },
-    [currentSpace.id, visibleSpaces, activeMember, authUser?.id]
+    [currentSpace.id, folderOrder, visibleSpaces, activeMember, authUser?.id]
   )
 
 

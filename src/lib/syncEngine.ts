@@ -627,7 +627,8 @@ class SyncEngine {
                     current &&
                     current.updatedAt === s.updatedAt &&
                     current.name === s.name &&
-                    Boolean(current.isDeleted) === Boolean(s.isDeleted)
+                    Boolean(current.isDeleted) === Boolean(s.isDeleted) &&
+                    JSON.stringify(current.folderOrder || null) === JSON.stringify(s.folderOrder || null)
                   ) {
                     await db.spaces.update(s.id, { syncStatus: 'synced', updatedAt: clampedUpdated })
                   }
@@ -1155,17 +1156,32 @@ class SyncEngine {
 
           const local = await db.spaces.get(rs.id)
           const remoteSpaceUpdated = this.clampTimestamp(Number(rs.updated_at) || 0, nowServer)
-          if (this.shouldApplyRemote(local, remoteSpaceUpdated, nowServer)) {
-            const normalizedFolderOrder = Array.isArray(rs.folder_order)
-              ? (rs.folder_order as string[]).map((f) => normalizeFolderPath(f)).filter(Boolean) as string[]
-              : undefined
+          let rawFolderOrder: unknown = rs.folder_order
+          if (typeof rawFolderOrder === 'string') {
+            try {
+              rawFolderOrder = JSON.parse(rawFolderOrder)
+            } catch {
+              rawFolderOrder = undefined
+            }
+          }
+          const normalizedFolderOrder = Array.isArray(rawFolderOrder)
+            ? (rawFolderOrder as string[]).map((f) => normalizeFolderPath(f)).filter(Boolean) as string[]
+            : undefined
+          const missingLocalFolderOrder =
+            Boolean(local && local.syncStatus === 'synced') &&
+            (!Array.isArray(local?.folderOrder) || local.folderOrder.length === 0) &&
+            Array.isArray(normalizedFolderOrder) &&
+            normalizedFolderOrder.length > 0
+
+          const shouldApply = this.shouldApplyRemote(local, remoteSpaceUpdated, nowServer)
+          if (shouldApply || missingLocalFolderOrder) {
             await db.spaces.put({
               id: rs.id,
               name: rs.name,
               icon: rs.icon,
               color: rs.color,
               createdAt: this.clampTimestamp(rs.created_at, nowServer),
-              updatedAt: remoteSpaceUpdated,
+              updatedAt: shouldApply ? remoteSpaceUpdated : Math.max(remoteSpaceUpdated, local?.updatedAt || 0),
               isDeleted: Boolean(rs.is_deleted),
               isPrivate: Boolean(rs.is_private),
               adminOnly: Boolean(rs.admin_only),
