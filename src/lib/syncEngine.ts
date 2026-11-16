@@ -106,17 +106,17 @@ class SyncEngine {
     const pageSize = 1000
     const all: T[] = []
     let from = 0
-    while (true) {
+    for (let page = 0; page < 100; page++) {
       const { data, error } = await buildQuery(from, from + pageSize - 1)
       if (error) {
         return { data: all, error }
       }
       const batch = data || []
-      all.push(...batch)
-      if (batch.length < pageSize) {
+      if (batch.length === 0) {
         break
       }
-      from += pageSize
+      all.push(...batch)
+      from += batch.length
     }
     return { data: all, error: null }
   }
@@ -303,6 +303,11 @@ class SyncEngine {
     } catch (e) {
       console.warn('Error removing sync storage', e)
     }
+  }
+
+  public async forceFullSync(): Promise<{ success: boolean; message?: string }> {
+    this.resetLastSyncTime()
+    return this.triggerSync()
   }
 
   public getSyncInterval(): number {
@@ -494,7 +499,7 @@ class SyncEngine {
       }
 
       const authUser = await getAuthUser()
-      const authUserId = authUser?.id || undefined
+      const authUserId = authUser?.id || sessionData?.session?.user?.id || undefined
       const currentMember = getCurrentMember()
 
       // Si no hay usuario autenticado o se cerró sesión, NO intentamos sincronizar
@@ -737,13 +742,37 @@ class SyncEngine {
             }
           })
 
-          const { error: wsError } = await supabase.from('seven_workspaces').upsert(payload, { onConflict: 'id' })
-          if (!wsError && syncGen === this.syncGeneration) {
+          const succeededItems: WorkspaceItem[] = []
+          for (let i = 0; i < payload.length; i += 10) {
+            const batchPayload = payload.slice(i, i + 10)
+            const batchSource = allowedPending.slice(i, i + 10)
+            const { error: batchErr } = await supabase
+              .from('seven_workspaces')
+              .upsert(batchPayload, { onConflict: 'id' })
+            if (!batchErr) {
+              succeededItems.push(...batchSource)
+            } else {
+              // Si un elemento en el lote falla (p. ej. payload muy grande), reintentar uno por uno para no bloquear los demás
+              for (let j = 0; j < batchPayload.length; j++) {
+                const { error: itemErr } = await supabase
+                  .from('seven_workspaces')
+                  .upsert(batchPayload[j], { onConflict: 'id' })
+                if (!itemErr) {
+                  succeededItems.push(batchSource[j])
+                } else {
+                  hasPushErrors = true
+                  console.warn('Warning syncing workspace item:', batchSource[j].id, itemErr.message)
+                }
+              }
+            }
+          }
+
+          if (succeededItems.length > 0 && syncGen === this.syncGeneration) {
             this.lastPushCompletedAt = Date.now()
             // Solo marcar como sincronizadas las notas que no cambiaron durante el envío
             // (si se editaron o borraron mientras se sincronizaba, siguen pendientes y se reenvían).
             await db.transaction('rw', db.workspaces, async () => {
-              for (const w of allowedPending) {
+              for (const w of succeededItems) {
                 const clampedUpdated = this.clampTimestamp(w.updatedAt, nowServer)
                 this.recordRecentPush(w.id, clampedUpdated)
                 const current = await db.workspaces.get(w.id)
@@ -752,15 +781,14 @@ class SyncEngine {
                   current.updatedAt === w.updatedAt &&
                   current.isDeleted === w.isDeleted &&
                   current.title === w.title &&
-                  current.folder === w.folder
+                  current.folder === w.folder &&
+                  current.hasCover === w.hasCover &&
+                  current.coverUrl === w.coverUrl
                 ) {
                   await db.workspaces.update(w.id, { syncStatus: 'synced', updatedAt: clampedUpdated })
                 }
               }
             })
-          } else if (wsError) {
-            hasPushErrors = true
-            console.warn('Warning syncing workspaces:', wsError.message)
           }
         }
 
@@ -1061,9 +1089,9 @@ class SyncEngine {
         db.spaces.count()
       ])
 
-      // Si la base local no tiene notas o espacios reales, forzamos un pull completo (lastSync = 0)
+      // Si la base local no tiene notas o espacios reales (o solo una página inicial), forzamos un pull completo (lastSync = 0)
       // para asegurar que dispositivos móviles o navegadores nuevos obtengan todo el contenido.
-      const isInitialDevicePull = localWsCount === 0 || localSpacesCount <= 1
+      const isInitialDevicePull = localWsCount <= 1 || localSpacesCount <= 1
       // Ventana de seguridad de 2 minutos para evitar pérdida de cambios por desfase de reloj entre dispositivos
       // y limitar cualquier lastSyncTime previo que hubiera quedado en el futuro.
       const effectiveLastSyncTime = Math.min(this.lastSyncTime || 0, nowServer)
@@ -1076,7 +1104,7 @@ class SyncEngine {
 
       // Pull Spaces: siempre traemos todos los espacios visibles paginados
       const { data: remoteSpaces, error: spPullErr } = await this.fetchAllRows((from, to) =>
-        supabase.from('seven_spaces').select('*').range(from, to)
+        supabase.from('seven_spaces').select('*').order('id', { ascending: true }).range(from, to)
       )
 
       if (syncGen !== this.syncGeneration) {
@@ -1152,8 +1180,8 @@ class SyncEngine {
         }
 
         // Eliminar espacios locales ya sincronizados que fueron borrados definitivamente en Supabase
-        // Solo cuando la cuenta activa esté verificada para evitar borrados accidentales por RLS/JWT
-        if (isActiveAccountVerified) {
+        // Solo cuando la cuenta activa esté verificada y la respuesta remota contenga datos válidos (evita vaciados por RLS/token expirado)
+        if (isActiveAccountVerified && remoteSpaces.length > 0) {
           const remoteSpaceIds = new Set(remoteSpaces.map((rs: any) => rs.id))
           const allLocalSpaces = await db.spaces.toArray()
           for (const ls of allLocalSpaces) {
@@ -1174,6 +1202,7 @@ class SyncEngine {
           .from('seven_workspaces')
           .select('*')
           .gt('updated_at', lastSync)
+          .order('id', { ascending: true })
           .range(from, to)
       )
 
@@ -1221,6 +1250,7 @@ class SyncEngine {
             supabase
               .from('seven_workspaces')
               .select('id, updated_at, is_deleted, is_private, owner_member, user_id, space_id')
+              .order('id', { ascending: true })
               .range(from, to)
           )
 
@@ -1394,8 +1424,8 @@ class SyncEngine {
         }
 
         // Eliminar notas locales ya sincronizadas que fueron borradas definitivamente en Supabase
-        // Solo si la sesión/perfil está verificado y no hubo errores de descarga ni índice
-        if (allRemoteWsIds && isActiveAccountVerified && !wsIndexFailed && !spPullErr) {
+        // Solo si la sesión/perfil está verificado, no hubo errores, y el índice remoto no vino vacío por expiración de JWT
+        if (allRemoteWsIds && allRemoteWsIds.size > 0 && isActiveAccountVerified && !wsIndexFailed && !spPullErr) {
           const wsToDelete = allLocalWs
             .filter(
               (lw) =>
@@ -1419,7 +1449,12 @@ class SyncEngine {
 
       // Pull Canvas Nodes (paginado + índice incremental para eliminaciones/reloj)
       const { data: remoteNodesData, error: nodesPullErr } = await this.fetchAllRows((from, to) =>
-        supabase.from('seven_canvas_nodes').select('*').gt('updated_at', lastSync).range(from, to)
+        supabase
+          .from('seven_canvas_nodes')
+          .select('*')
+          .gt('updated_at', lastSync)
+          .order('id', { ascending: true })
+          .range(from, to)
       )
 
       if (nodesPullErr) {
@@ -1437,7 +1472,11 @@ class SyncEngine {
 
         if (lastSync > 0) {
           const { data: remoteNodeIndex, error: nodeIdxErr } = await this.fetchAllRows((from, to) =>
-            supabase.from('seven_canvas_nodes').select('id, updated_at, is_deleted').range(from, to)
+            supabase
+              .from('seven_canvas_nodes')
+              .select('id, updated_at, is_deleted')
+              .order('id', { ascending: true })
+              .range(from, to)
           )
           if (nodeIdxErr) {
             nodesIndexFailed = true
@@ -1554,7 +1593,12 @@ class SyncEngine {
 
       // Pull Canvas Edges (paginado + índice incremental)
       const { data: remoteEdgesData, error: edgesPullErr } = await this.fetchAllRows((from, to) =>
-        supabase.from('seven_canvas_edges').select('*').gt('updated_at', lastSync).range(from, to)
+        supabase
+          .from('seven_canvas_edges')
+          .select('*')
+          .gt('updated_at', lastSync)
+          .order('id', { ascending: true })
+          .range(from, to)
       )
 
       if (edgesPullErr) {
@@ -1572,7 +1616,11 @@ class SyncEngine {
 
         if (lastSync > 0) {
           const { data: remoteEdgeIndex, error: edgeIdxErr } = await this.fetchAllRows((from, to) =>
-            supabase.from('seven_canvas_edges').select('id, updated_at, is_deleted').range(from, to)
+            supabase
+              .from('seven_canvas_edges')
+              .select('id, updated_at, is_deleted')
+              .order('id', { ascending: true })
+              .range(from, to)
           )
           if (edgeIdxErr) {
             edgesIndexFailed = true
@@ -1666,7 +1714,7 @@ class SyncEngine {
 
       // Pull Collections
       const { data: remoteCollections, error: colPullErr } = await this.fetchAllRows((from, to) =>
-        supabase.from('seven_collections').select('*').range(from, to)
+        supabase.from('seven_collections').select('*').order('id', { ascending: true }).range(from, to)
       )
 
       if (colPullErr) {
@@ -1721,7 +1769,7 @@ class SyncEngine {
 
       // Pull Tags (incluyendo actualizaciones y eliminaciones)
       const { data: remoteTags, error: tagPullErr } = await this.fetchAllRows((from, to) =>
-        supabase.from('seven_tags').select('*').range(from, to)
+        supabase.from('seven_tags').select('*').order('id', { ascending: true }).range(from, to)
       )
 
       if (tagPullErr) {

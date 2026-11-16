@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import {
   Palette,
   Image as ImageIcon,
@@ -27,8 +28,8 @@ interface CoverPickerPopoverProps {
   isOpen: boolean
   onClose: () => void
   currentConfig?: CoverConfig
-  onSelectCover: (config: CoverConfig) => void
-  onRemoveCover: () => void
+  onSelectCover: (config: CoverConfig) => void | Promise<void>
+  onRemoveCover: () => void | Promise<void>
   noteTitle?: string
 }
 
@@ -132,10 +133,15 @@ export function CoverPickerPopover({
   const [isUploading, setIsUploading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  const bannerTitleProp = currentConfig?.coverBannerTitle
+  const bannerSubtitleProp = currentConfig?.coverBannerSubtitle
+  const bannerColorProp = currentConfig?.coverColor
+
   useEffect(() => {
-    if (currentConfig?.coverBannerTitle) {
-      setCustomTitle(currentConfig.coverBannerTitle)
-    } else if (noteTitle && noteTitle !== 'Untitled' && noteTitle !== 'Documento sin título') {
+    if (!isOpen) return
+    if (bannerTitleProp) {
+      setCustomTitle(bannerTitleProp)
+    } else if (typeof noteTitle === 'string' && noteTitle && noteTitle !== 'Untitled' && noteTitle !== 'Documento sin título') {
       // Suggest based on note title
       const upper = noteTitle.toUpperCase()
       if (upper.includes(' Y ')) {
@@ -147,79 +153,104 @@ export function CoverPickerPopover({
         setCustomSubtitle('PROJECT')
       }
     }
-    if (currentConfig?.coverBannerSubtitle) {
-      setCustomSubtitle(currentConfig.coverBannerSubtitle)
+    if (bannerSubtitleProp) {
+      setCustomSubtitle(bannerSubtitleProp)
     }
-    if (currentConfig?.coverColor) {
-      setCustomBg(currentConfig.coverColor)
+    if (bannerColorProp) {
+      setCustomBg(bannerColorProp)
     }
-  }, [currentConfig, noteTitle, isOpen])
+  }, [bannerTitleProp, bannerSubtitleProp, bannerColorProp, noteTitle, isOpen])
 
   if (!isOpen) return null
 
-  const handleApplyPreset = (preset: typeof TYPOGRAPHY_PRESETS[0]) => {
-    onSelectCover({
-      hasCover: true,
-      coverType: 'bannerText',
-      coverBannerTitle: preset.title,
-      coverBannerSubtitle: preset.subtitle,
-      coverColor: preset.bg,
-      coverBannerStyle: preset.bg === '#18181b' ? 'minimal-dark' : 'minimal-light'
-    })
-    toast.success('Portada aplicada')
-    onClose()
+  const handleApplyPreset = async (preset: typeof TYPOGRAPHY_PRESETS[0]) => {
+    try {
+      await onSelectCover({
+        hasCover: true,
+        coverType: 'bannerText',
+        coverBannerTitle: preset.title,
+        coverBannerSubtitle: preset.subtitle,
+        coverColor: preset.bg,
+        coverBannerStyle: preset.bg === '#18181b' ? 'minimal-dark' : 'minimal-light'
+      })
+      toast.success('Portada aplicada')
+      onClose()
+    } catch {
+      toast.error('No se pudo guardar la portada')
+    }
   }
 
-  const handleApplyCustomTypography = () => {
-    onSelectCover({
-      hasCover: true,
-      coverType: 'bannerText',
-      coverBannerTitle: customTitle.trim() || 'PROJECTS &',
-      coverBannerSubtitle: customSubtitle.trim() || 'SUB-PROJECTS',
-      coverColor: customBg,
-      coverBannerStyle: customBg === '#18181b' ? 'minimal-dark' : 'minimal-light'
-    })
-    toast.success('Banner tipográfico aplicado')
-    onClose()
+  const handleApplyCustomTypography = async () => {
+    try {
+      await onSelectCover({
+        hasCover: true,
+        coverType: 'bannerText',
+        coverBannerTitle: customTitle.trim() || 'PROJECTS &',
+        coverBannerSubtitle: customSubtitle.trim() || 'SUB-PROJECTS',
+        coverColor: customBg,
+        coverBannerStyle: customBg === '#18181b' ? 'minimal-dark' : 'minimal-light'
+      })
+      toast.success('Banner tipográfico aplicado')
+      onClose()
+    } catch {
+      toast.error('No se pudo guardar el banner')
+    }
   }
 
-  const handleApplyGradient = (gradient: string) => {
-    onSelectCover({
-      hasCover: true,
-      coverType: 'gradient',
-      coverColor: gradient
-    })
-    toast.success('Color de portada aplicado')
-    onClose()
+  const handleApplyGradient = async (gradient: string) => {
+    try {
+      await onSelectCover({
+        hasCover: true,
+        coverType: 'gradient',
+        coverColor: gradient
+      })
+      toast.success('Color de portada aplicado')
+      onClose()
+    } catch {
+      toast.error('No se pudo guardar el color de portada')
+    }
   }
 
-  const handleApplyImage = (url: string) => {
-    onSelectCover({
-      hasCover: true,
-      coverType: 'image',
-      coverUrl: url
-    })
-    toast.success('Imagen de portada aplicada')
-    onClose()
+  const handleApplyImage = async (url: string) => {
+    try {
+      await onSelectCover({
+        hasCover: true,
+        coverType: 'image',
+        coverUrl: url
+      })
+      toast.success('Imagen de portada aplicada')
+      onClose()
+    } catch {
+      toast.error('No se pudo guardar la imagen de portada')
+    }
   }
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (!file) return
+    if (!file.type.startsWith('image/')) {
+      toast.error('Selecciona un archivo de imagen válido')
+      return
+    }
     try {
       setIsUploading(true)
-      const result = await processAndUploadImage(file)
-      handleApplyImage(result.url)
+      const result = await processAndUploadImage(file, {
+        maxWidth: 1600,
+        maxHeight: 1200,
+        quality: 0.78
+      })
+      await handleApplyImage(result.url)
     } catch {
-      toast.error('Error al subir la imagen')
+      toast.error('Error al procesar o subir la imagen de portada')
     } finally {
       setIsUploading(false)
     }
   }
 
-  return (
+  const modalContent = (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/50 backdrop-blur-xs animate-in fade-in"
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-2.5 sm:p-4 bg-black/50 backdrop-blur-xs animate-in fade-in"
       onClick={onClose}
     >
       <div
@@ -511,4 +542,6 @@ export function CoverPickerPopover({
       </div>
     </div>
   )
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent
 }

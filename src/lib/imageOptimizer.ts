@@ -118,11 +118,15 @@ export async function compressImage(
   const img = await loadImageElement(fileOrBlob)
   let { naturalWidth: width, naturalHeight: height } = img
 
+  if (!width || !height || width <= 0 || height <= 0) {
+    throw new Error('No se pudieron leer las dimensiones de la imagen')
+  }
+
   // Calcular nuevas dimensiones conservando la relación de aspecto
   if (width > maxWidth || height > maxHeight) {
     const ratio = Math.min(maxWidth / width, maxHeight / height)
-    width = Math.round(width * ratio)
-    height = Math.round(height * ratio)
+    width = Math.max(1, Math.round(width * ratio))
+    height = Math.max(1, Math.round(height * ratio))
   }
 
   const canvas = document.createElement('canvas')
@@ -267,14 +271,32 @@ export async function processAndUploadImage(
     }
   }
 
-  // Fallback local: DataURL de WebP comprimido
+  // Fallback local: DataURL de WebP comprimido (si excede ~250 KB, recomprimir ligeramente para no sobrecargar IndexedDB/sync)
+  let safeDataUrl = dataUrl
+  let safeSize = compressedSize
+  if (safeDataUrl.length > 260_000 && fileOrBlob.type !== 'image/svg+xml') {
+    try {
+      const lighter = await compressImage(blob, {
+        maxWidth: Math.min(options.maxWidth || 1200, 1200),
+        maxHeight: Math.min(options.maxHeight || 900, 900),
+        quality: 0.65
+      })
+      if (lighter.dataUrl.length < safeDataUrl.length) {
+        safeDataUrl = lighter.dataUrl
+        safeSize = lighter.compressedSize
+      }
+    } catch {
+      // Conservar dataUrl comprimida original si falla la segunda pasada
+    }
+  }
+
   return {
-    url: dataUrl,
+    url: safeDataUrl,
     isRemote: false,
     width,
     height,
     originalSize,
-    compressedSize,
+    compressedSize: safeSize,
     format
   }
 }

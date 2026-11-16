@@ -44,6 +44,7 @@ export interface ObsidianRibbonProps {
 
   // Status & User Profile in Ribbon footer
   syncStatus?: SyncEngineStatus
+  onForceSync?: () => void
   darkMode?: boolean
   onToggleDarkMode?: () => void
   currentMember?: TeamMember
@@ -76,6 +77,7 @@ export function ObsidianRibbon({
   notificationsDnd = false,
   activeView,
   syncStatus,
+  onForceSync,
   darkMode,
   onToggleDarkMode,
   currentMember,
@@ -252,28 +254,33 @@ export function ObsidianRibbon({
           </button>
         )}
 
-        {/* Sync Status Icon */}
+        {/* Sync Status Icon (Tappable to force full sync) */}
         {syncStatus && (
-          <div
-            className="w-8 h-8 rounded-md flex items-center justify-center text-[var(--app-text-muted)] cursor-default transition"
+          <button
+            type="button"
+            onClick={onForceSync}
+            className="relative w-8 h-8 rounded-md flex items-center justify-center text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5 cursor-pointer transition active:scale-95"
             title={
               syncStatus.state === 'syncing'
                 ? 'Sincronizando notas...'
                 : syncStatus.state === 'error'
-                ? 'Error de sincronización'
+                ? 'Error de sincronización (toca para reintentar)'
                 : syncStatus.state === 'offline'
                 ? 'Modo sin conexión'
-                : 'Sincronizado'
+                : 'Sincronizado (toca para resincronizar todo)'
             }
           >
             {syncStatus.state === 'syncing' ? (
-              <ArrowsClockwise size={17} className="animate-spin" />
+              <ArrowsClockwise size={17} className="animate-spin text-blue-400" />
             ) : syncStatus.state === 'error' || syncStatus.state === 'offline' ? (
-              <CloudSlash size={17} />
+              <CloudSlash size={17} className="text-amber-400" />
             ) : (
               <CloudCheck size={17} />
             )}
-          </div>
+            {syncStatus.pendingCount > 0 && (
+              <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400" />
+            )}
+          </button>
         )}
 
         {/* Dark / Light Mode Toggle */}

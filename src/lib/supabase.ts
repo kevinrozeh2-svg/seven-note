@@ -168,10 +168,20 @@ export async function getAuthUser() {
   const supabase = getSupabaseClient()
   if (!supabase) return null
   try {
-    const { data: { user } } = await supabase.auth.getUser()
-    return user
+    const { data: { user }, error } = await supabase.auth.getUser()
+    if (user) return user
+    if (error && (error.status === 401 || error.status === 403)) {
+      return null
+    }
+    const { data: sessionData } = await supabase.auth.getSession()
+    return sessionData?.session?.user || null
   } catch {
-    return null
+    try {
+      const { data: sessionData } = await supabase.auth.getSession()
+      return sessionData?.session?.user || null
+    } catch {
+      return null
+    }
   }
 }
 

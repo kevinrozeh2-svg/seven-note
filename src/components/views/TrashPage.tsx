@@ -403,7 +403,7 @@ export const TrashPage: React.FC<TrashPageProps> = ({ authUserId }) => {
           </div>
           <div>
             <h2 className="text-sm font-semibold text-[var(--app-text-primary)]">Papelera de reciclaje</h2>
-            <p className="text-[11px] text-[var(--app-text-muted)] hidden sm:block">
+            <p className="text-[11px] text-[var(--app-text-muted)]">
               {totalCount} {totalCount === 1 ? 'elemento' : 'elementos'} en la papelera
             </p>
           </div>

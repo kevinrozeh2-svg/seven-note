@@ -74,7 +74,15 @@ import {
   PageIcon,
   CopyIcon
 } from '@blocksuite/icons/rc'
-import { db, type WorkspaceItem, type SpaceItem, DEFAULT_SPACE_ID, type NotionDatabaseData, type NotionDatabaseViewType } from '../../db'
+import {
+  db,
+  type WorkspaceItem,
+  type SpaceItem,
+  DEFAULT_SPACE_ID,
+  type NotionDatabaseData,
+  type NotionDatabaseViewType,
+  getSafeTimestamp
+} from '../../db'
 import { syncEngine } from '../../lib/syncEngine'
 import { EmojiPickerPopover } from '../modals/EmojiPickerPopover'
 import { AppleEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
@@ -336,9 +344,14 @@ export function DocEditor({
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved')
   const [isIconModalOpen, setIsIconModalOpen] = useState(false)
   const [isCoverPickerOpen, setIsCoverPickerOpen] = useState(false)
+  const [coverImgError, setCoverImgError] = useState(false)
   const [isEditingBannerText, setIsEditingBannerText] = useState(false)
   const [tempBannerTitle, setTempBannerTitle] = useState(workspace.coverBannerTitle || 'PROJECTS &')
   const [tempBannerSubtitle, setTempBannerSubtitle] = useState(workspace.coverBannerSubtitle || 'SUB-PROJECTS')
+
+  useEffect(() => {
+    setCoverImgError(false)
+  }, [workspace.coverUrl, workspace.coverType])
 
   useEffect(() => {
     setTempBannerTitle(workspace.coverBannerTitle || 'PROJECTS &')
@@ -826,40 +839,49 @@ export function DocEditor({
       coverBannerSubtitle: config.coverBannerSubtitle,
       coverBannerStyle: config.coverBannerStyle,
       coverPosition: config.coverPosition,
-      updatedAt: Date.now(),
+      updatedAt: getSafeTimestamp(workspace.updatedAt),
       syncStatus: 'pending'
     })
-    syncEngine.scheduleSync(500)
+    syncEngine.scheduleSync(50)
   }
 
   const handleRemoveCover = async () => {
-    await db.workspaces.update(workspace.id, {
-      hasCover: false,
-      coverUrl: undefined,
-      coverColor: undefined,
-      coverBannerTitle: undefined,
-      coverBannerSubtitle: undefined,
-      updatedAt: Date.now(),
-      syncStatus: 'pending'
-    })
-    syncEngine.scheduleSync(500)
-    toast.info('Portada eliminada')
+    try {
+      await db.workspaces.update(workspace.id, {
+        hasCover: false,
+        coverUrl: undefined,
+        coverColor: undefined,
+        coverBannerTitle: undefined,
+        coverBannerSubtitle: undefined,
+        updatedAt: getSafeTimestamp(workspace.updatedAt),
+        syncStatus: 'pending'
+      })
+      syncEngine.scheduleSync(50)
+      toast.info('Portada eliminada')
+    } catch (err) {
+      console.error('Error removing cover', err)
+      toast.error('No se pudo eliminar la portada')
+    }
   }
 
   const handleAddDefaultCover = async () => {
-    await db.workspaces.update(workspace.id, {
-      hasCover: true,
-      coverType: 'bannerText',
-      coverBannerTitle: 'PROJECTS &',
-      coverBannerSubtitle: 'SUB-PROJECTS',
-      coverColor: '#ffffff',
-      coverBannerStyle: 'minimal-light',
-      icon: workspace.icon || 'folder',
-      updatedAt: Date.now(),
-      syncStatus: 'pending'
-    })
-    syncEngine.scheduleSync(500)
-    toast.success('Portada añadida (Estilo Proyectos)')
+    try {
+      await db.workspaces.update(workspace.id, {
+        hasCover: true,
+        coverType: 'bannerText',
+        coverBannerTitle: 'PROJECTS &',
+        coverBannerSubtitle: 'SUB-PROJECTS',
+        coverColor: '#ffffff',
+        coverBannerStyle: 'minimal-light',
+        updatedAt: getSafeTimestamp(workspace.updatedAt),
+        syncStatus: 'pending'
+      })
+      syncEngine.scheduleSync(50)
+      toast.success('Portada añadida (Estilo Proyectos)')
+    } catch (err) {
+      console.error('Error adding default cover', err)
+      toast.error('No se pudo añadir la portada')
+    }
   }
 
   // Icon handler
@@ -2273,10 +2295,10 @@ export function DocEditor({
                         await db.workspaces.update(workspace.id, {
                           coverBannerTitle: tempBannerTitle.trim() || 'PROJECTS &',
                           coverBannerSubtitle: tempBannerSubtitle.trim() || 'SUB-PROJECTS',
-                          updatedAt: Date.now(),
+                          updatedAt: getSafeTimestamp(workspace.updatedAt),
                           syncStatus: 'pending'
                         })
-                        syncEngine.scheduleSync(500)
+                        syncEngine.scheduleSync(50)
                         setIsEditingBannerText(false)
                         toast.success('Texto del banner guardado')
                       }}
@@ -2325,17 +2347,22 @@ export function DocEditor({
                 </div>
               )}
             </div>
-          ) : workspace.coverType === 'image' && workspace.coverUrl ? (
+          ) : workspace.coverType === 'image' && workspace.coverUrl && !coverImgError ? (
             <img
               src={workspace.coverUrl}
               alt=""
+              onError={() => setCoverImgError(true)}
               className="w-full h-full object-cover"
               style={{ objectPosition: `center ${workspace.coverPosition || 50}%` }}
             />
           ) : (
             <div
               className="w-full h-full"
-              style={{ background: workspace.coverColor || '#ffffff' }}
+              style={{
+                background:
+                  workspace.coverColor ||
+                  'linear-gradient(135deg, #27272a 0%, #18181b 100%)'
+              }}
             />
           )}
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react'
+import { Component, useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense, type ReactNode } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { AnimatePresence, motion, MotionConfig } from 'motion/react'
 import {
@@ -623,6 +623,9 @@ function MainApp() {
   }
 
   const handleNewTab = async () => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setSidebarOpen(false)
+    }
     const newId = crypto.randomUUID()
     const now = Date.now()
     const newWs: WorkspaceItem = {
@@ -1031,6 +1034,8 @@ function MainApp() {
     if (targetSpacePages.length > 0) {
       setCurrentWorkspaceId(targetSpacePages[0].id)
       markItemAsRead(targetSpacePages[0].id, 'workspace', currentMember, authUser?.id)
+    } else if (isSupabaseConfigured() && !syncEngine.hasCompletedInitialSync()) {
+      void syncEngine.triggerSync()
     } else if (!isSupabaseConfigured() || syncEngine.hasCompletedInitialSync()) {
       // Solo crear página inicial si la sincronización inicial ya terminó y el espacio realmente no tiene páginas
       if (dbSpacePages.length > 0) return
@@ -1500,6 +1505,20 @@ function MainApp() {
           notificationsDnd={notifPrefs.dndEnabled || notificationService.isInQuietHours()}
           activeView={activeTab?.viewType || activeViewMode}
           syncStatus={syncStatus}
+          onForceSync={() => {
+            if (!isSupabaseConfigured()) {
+              toast.info('Modo local activo (sin Supabase configurado)')
+              return
+            }
+            toast.info('Sincronizando todo con la nube...')
+            void syncEngine.forceFullSync().then((res) => {
+              if (res.success) {
+                toast.success('Datos actualizados desde la nube')
+              } else {
+                toast.error(res.message || 'No se pudo completar la sincronización')
+              }
+            })
+          }}
           darkMode={darkMode}
           onToggleDarkMode={() => setDarkMode(!darkMode)}
           currentMember={currentMember}
@@ -1535,7 +1554,7 @@ function MainApp() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -16 }}
               transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-              className="fixed inset-y-0 left-11 md:left-0 z-50 md:relative md:z-auto h-full max-w-[calc(100vw-44px)] md:max-w-none flex shrink-0"
+              className="fixed inset-y-0 left-11 md:left-0 z-50 md:relative md:z-auto h-full w-[calc(100vw-44px)] md:w-auto flex shrink-0"
             >
               <Sidebar
                 spaces={visibleSpaces}
@@ -1601,6 +1620,9 @@ function MainApp() {
 
         {/* Main Document / Canvas / Full Page Views */}
         <main className="flex-1 relative flex flex-col overflow-hidden">
+          <AppErrorBoundary
+            resetKey={`${activeTab?.id || ''}:${currentWorkspace?.id || ''}:${currentWorkspace?.coverUrl || ''}`}
+          >
           {/* Secondary Header for Document/Split Mode: Obsidian Minimalist Stealth Header */}
           {!isPresentationMode && !focusMode && (!activeTab || !activeTab.viewType || activeTab.viewType === 'doc') && currentWorkspace && (
             <header className={`h-8 sm:h-9 px-2 sm:px-3 flex items-center justify-between select-none text-xs transition-colors duration-150 ${
@@ -2481,6 +2503,7 @@ function MainApp() {
               </div>
             )}
           </Suspense>
+          </AppErrorBoundary>
         </main>
       </div>
 
@@ -2673,6 +2696,70 @@ function MainApp() {
   )
 }
 
+interface AppErrorBoundaryProps {
+  children: ReactNode
+  resetKey?: string
+}
+
+interface AppErrorBoundaryState {
+  hasError: boolean
+  errorMessage: string
+}
+
+class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorBoundaryState> {
+  state: AppErrorBoundaryState = { hasError: false, errorMessage: '' }
+
+  static getDerivedStateFromError(error: Error): AppErrorBoundaryState {
+    return {
+      hasError: true,
+      errorMessage: error?.message || 'Error inesperado al renderizar la vista'
+    }
+  }
+
+  componentDidUpdate(prevProps: AppErrorBoundaryProps) {
+    if (this.state.hasError && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({ hasError: false, errorMessage: '' })
+    }
+  }
+
+  componentDidCatch(error: Error) {
+    console.error('AppErrorBoundary caught error:', error)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex-1 h-full w-full flex flex-col items-center justify-center p-6 text-center bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] select-none gap-3">
+          <div className="w-11 h-11 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center text-xl font-bold">
+            !
+          </div>
+          <div className="text-sm font-semibold">Ocurrió un error al mostrar esta vista</div>
+          <p className="text-xs text-[var(--app-text-muted)] max-w-sm break-words">
+            {this.state.errorMessage}
+          </p>
+          <div className="flex items-center gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => this.setState({ hasError: false, errorMessage: '' })}
+              className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium transition cursor-pointer"
+            >
+              Reintentar
+            </button>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="px-3.5 py-1.5 rounded-lg bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-xs font-medium transition cursor-pointer"
+            >
+              Recargar página
+            </button>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 export default function App() {
   const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
   const externalShareId = urlParams?.get('share')
@@ -2680,12 +2767,18 @@ export default function App() {
 
   if (externalShareId && externalToken) {
     return (
-      <Suspense fallback={<div className="h-screen w-screen flex items-center justify-center p-8 text-neutral-400 text-xs">Cargando nota compartida...</div>}>
-        <ExternalShareView workspaceId={externalShareId} token={externalToken} />
-      </Suspense>
+      <AppErrorBoundary>
+        <Suspense fallback={<div className="h-screen w-screen flex items-center justify-center p-8 text-neutral-400 text-xs">Cargando nota compartida...</div>}>
+          <ExternalShareView workspaceId={externalShareId} token={externalToken} />
+        </Suspense>
+      </AppErrorBoundary>
     )
   }
 
-  return <MainApp />
+  return (
+    <AppErrorBoundary>
+      <MainApp />
+    </AppErrorBoundary>
+  )
 }
 

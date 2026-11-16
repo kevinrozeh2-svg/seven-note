@@ -35,7 +35,8 @@ import {
   Calendar,
   Folders,
   Shield,
-  SlidersHorizontal
+  SlidersHorizontal,
+  X
 } from '@phosphor-icons/react'
 import {
   db,
@@ -288,7 +289,7 @@ export function Sidebar({
   workspaces,
   currentWorkspaceId,
   onSelectWorkspace,
-  onToggleSidebar: _onToggleSidebar,
+  onToggleSidebar,
   onOpenSettings: _onOpenSettings,
   onOpenSearch: _onOpenSearch,
   onOpenAllDocs: _onOpenAllDocs,
@@ -1787,7 +1788,7 @@ export function Sidebar({
             )}
           </div>
           <div
-            className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+            className="flex items-center gap-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity shrink-0"
             onMouseDown={(e) => e.stopPropagation()}
           >
             <button
@@ -1997,10 +1998,10 @@ export function Sidebar({
             className="flex items-center gap-1"
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <span className="text-[11px] text-neutral-400 dark:text-neutral-500 tabular-nums group-hover:hidden">
+            <span className="text-[11px] text-neutral-400 dark:text-neutral-500 tabular-nums hidden md:inline md:group-hover:hidden">
               {folderDocs.length}
             </span>
-            <div className="hidden group-hover:flex items-center gap-0.5">
+            <div className="flex md:hidden md:group-hover:flex items-center gap-0.5">
               <button
                 onClick={(e) => {
                   e.stopPropagation()
@@ -2169,41 +2170,52 @@ export function Sidebar({
 
   return (
     <aside
-      style={{ width: `${sidebarWidth}px` }}
-      className={`relative h-full flex flex-col bg-[var(--obsidian-sidebar-bg,#181818)] border-r border-[var(--app-border)] text-[var(--app-text-primary)] select-none shrink-0 text-xs font-sans shadow-2xl md:shadow-none max-w-[85vw] ${
+      style={{ '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties}
+      className={`relative h-full w-[calc(100vw-44px)] md:w-[var(--sidebar-width)] flex flex-col bg-[var(--obsidian-sidebar-bg,#181818)] border-r border-[var(--app-border)] text-[var(--app-text-primary)] select-none shrink-0 text-xs font-sans shadow-2xl md:shadow-none ${
         isResizing ? '' : 'transition-[width] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]'
       }`}
     >
       {/* 1. Workspace Bar (Minimalist Obsidian Vault style) */}
       <div className="px-3 pt-2 pb-1 relative">
-        <button
-          type="button"
-          onClick={() => setShowSpaceMenu(!showSpaceMenu)}
-          className="w-full flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-black/[0.04] dark:hover:bg-white/[0.06] cursor-pointer transition text-left group"
-          title="Cambiar espacio de trabajo"
-        >
-          <div className="flex items-center gap-1.5 min-w-0 flex-1">
-            <span className="font-semibold text-neutral-800 dark:text-neutral-200 truncate text-[13px] tracking-tight">
-              {currentSpace.name}
-            </span>
-            {isCurrentSpacePrivate && (
-              <span className="text-amber-500 shrink-0" title="Espacio privado: Solo visible para ti">
-                <Lock size={12} weight="bold" />
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => setShowSpaceMenu(!showSpaceMenu)}
+            className="flex-1 min-w-0 flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-black/[0.04] dark:hover:bg-white/[0.06] cursor-pointer transition text-left group"
+            title="Cambiar espacio de trabajo"
+          >
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <span className="font-semibold text-neutral-800 dark:text-neutral-200 truncate text-[13px] tracking-tight">
+                {currentSpace.name}
               </span>
-            )}
-            {!isCurrentSpacePrivate && currentSpace.adminOnly && (
-              <span className="text-indigo-400 shrink-0" title="Solo Admins: Oculto para empleados">
-                <Shield size={12} weight="bold" />
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-1 shrink-0 ml-1">
-            {visibleSpaces.some((s) => s.id !== currentSpace.id && isItemUnread(s, 'space', activeMember, authUser?.id)) && (
-              <NewDot title="Nuevos espacios de trabajo disponibles" />
-            )}
-            <CaretDown size={12} className="text-neutral-400 group-hover:text-neutral-700 dark:group-hover:text-neutral-300 transition shrink-0" />
-          </div>
-        </button>
+              {isCurrentSpacePrivate && (
+                <span className="text-amber-500 shrink-0" title="Espacio privado: Solo visible para ti">
+                  <Lock size={12} weight="bold" />
+                </span>
+              )}
+              {!isCurrentSpacePrivate && currentSpace.adminOnly && (
+                <span className="text-indigo-400 shrink-0" title="Solo Admins: Oculto para empleados">
+                  <Shield size={12} weight="bold" />
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1 shrink-0 ml-1">
+              {visibleSpaces.some((s) => s.id !== currentSpace.id && isItemUnread(s, 'space', activeMember, authUser?.id)) && (
+                <NewDot title="Nuevos espacios de trabajo disponibles" />
+              )}
+              <CaretDown size={12} className="text-neutral-400 group-hover:text-neutral-700 dark:group-hover:text-neutral-300 transition shrink-0" />
+            </div>
+          </button>
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            className="md:hidden p-1.5 rounded-md text-neutral-400 hover:text-white hover:bg-white/10 transition shrink-0 cursor-pointer"
+            title="Cerrar barra lateral"
+            aria-label="Cerrar barra lateral"
+          >
+            <X size={16} weight="bold" />
+          </button>
+        </div>
 
         {/* Space Switcher Popover Dropdown (Obsidian Vaults Popover) */}
         {showSpaceMenu && (
@@ -2309,7 +2321,7 @@ export function Sidebar({
                               setEditingSpaceId(sp.id)
                               setEditingSpaceName(sp.name)
                             }}
-                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-white/10 text-neutral-400 hover:text-white transition"
+                            className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1 rounded hover:bg-white/10 text-neutral-400 hover:text-white transition"
                             title="Renombrar espacio"
                           >
                             <PencilSimple size={12} weight="bold" />
@@ -2322,7 +2334,7 @@ export function Sidebar({
                               e.stopPropagation()
                               if (onDeleteSpace) onDeleteSpace(sp.id)
                             }}
-                            className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-rose-500/20 text-neutral-400 hover:text-rose-400 transition"
+                            className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1 rounded hover:bg-rose-500/20 text-neutral-400 hover:text-rose-400 transition"
                             title="Eliminar espacio"
                           >
                             <Trash size={12} weight="bold" />
@@ -2615,7 +2627,7 @@ export function Sidebar({
                       </div>
                       <button
                         onClick={(e) => handleToggleFavorite(e, fav)}
-                        className="opacity-0 group-hover:opacity-100 text-amber-500 p-1"
+                        className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-amber-500 p-1"
                         title="Quitar de favoritos"
                       >
                         <Star size={13} weight="fill" className="text-amber-500" />
@@ -2976,7 +2988,7 @@ export function Sidebar({
           e.preventDefault()
           setIsResizing(true)
         }}
-        className={`absolute top-0 right-0 w-2 h-full cursor-col-resize z-50 transition-colors group flex items-center justify-center hover:bg-blue-500/20 active:bg-blue-500/30 ${
+        className={`hidden md:flex absolute top-0 right-0 w-2 h-full cursor-col-resize z-50 transition-colors group items-center justify-center hover:bg-blue-500/20 active:bg-blue-500/30 ${
           isResizing ? 'bg-blue-500/40 w-2.5' : ''
         }`}
         title="Arrastra para redimensionar la barra lateral"
