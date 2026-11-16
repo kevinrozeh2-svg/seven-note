@@ -498,7 +498,7 @@ export function Sidebar({
       // Migrate existing localStorage-only folder order into db.spaces so it syncs across devices
       // Only run once initial workspace/space hydration & sync has completed so stale localStorage
       // never marks a space as pending before pulling remote updates.
-      if (!isWorkspacesLoading && parsed.length > 0 && visibleSpaces.some((s) => s.id === currentSpace.id)) {
+      if (!isLoading && parsed.length > 0 && visibleSpaces.some((s) => s.id === currentSpace.id)) {
         db.spaces
           .update(currentSpace.id, {
             folderOrder: parsed,
@@ -511,7 +511,7 @@ export function Sidebar({
     } catch {
       setFolderOrder([])
     }
-  }, [currentSpace.id, spaceFolderOrder, isWorkspacesLoading])
+  }, [currentSpace.id, spaceFolderOrder, isLoading])
 
   const persistFolderOrder = useCallback(
     (nextOrUpdater: string[] | ((prev: string[]) => string[])) => {
