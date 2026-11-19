@@ -93,8 +93,9 @@ export const FloatingSelectionMenu: React.FC<FloatingSelectionMenuProps> = ({
   const menuRef = useRef<HTMLDivElement | null>(null)
   const subMenuRef = useRef<HTMLDivElement | null>(null)
   const isPointerDownInEditorRef = useRef(false)
-  const dismissedRef = useRef(false)
+  const dismissedSelectionKeyRef = useRef<string | null>(null)
   const rafRef = useRef<number | null>(null)
+  const selectionChangeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const closeAll = useCallback(() => {
     setSelectionRect(null)
@@ -104,7 +105,8 @@ export const FloatingSelectionMenu: React.FC<FloatingSelectionMenuProps> = ({
 
   // Reset when switching workspace or readOnly changes
   useEffect(() => {
-    dismissedRef.current = false
+    dismissedSelectionKeyRef.current = null
+    isPointerDownInEditorRef.current = false
     closeAll()
   }, [workspaceId, readOnly, closeAll])
 
@@ -121,38 +123,45 @@ export const FloatingSelectionMenu: React.FC<FloatingSelectionMenuProps> = ({
     const selectedText = editor.state.doc.textBetween(selection.from, selection.to, ' ').trim()
     if (!selectedText) return null
 
-    // Try ProseMirror coordsAtPos first (more reliable across multi-block / scroll than window.getSelection alone)
+    // 1. Prefer DOM Range bounding rect when selection is inside editor DOM
     try {
       const domSel = window.getSelection()
       if (domSel && domSel.rangeCount > 0 && !domSel.isCollapsed) {
         const range = domSel.getRangeAt(0)
-        // Ensure selection is actually inside this editor's DOM
-        if (!editor.view.dom.contains(range.commonAncestorContainer)) {
-          return null
-        }
-        const rect = range.getBoundingClientRect()
-        if (rect.width > 0 || rect.height > 0) {
-          // Hide if scrolled completely out of visible viewport
-          if (rect.bottom < 46 || rect.top > window.innerHeight - 16) {
-            return null
-          }
-          return {
-            top: rect.top,
-            bottom: rect.bottom,
-            left: rect.left,
-            right: rect.right,
-            width: rect.width
+        const ancestor = range.commonAncestorContainer
+        const isInEditor =
+          editor.view.dom.contains(ancestor) ||
+          (ancestor instanceof Node && ancestor.contains(editor.view.dom))
+
+        if (isInEditor) {
+          const rect = range.getBoundingClientRect()
+          if (rect.width > 0 || rect.height > 0) {
+            if (rect.bottom < 44 || rect.top > window.innerHeight - 12) {
+              return null
+            }
+            return {
+              top: rect.top,
+              bottom: rect.bottom,
+              left: rect.left,
+              right: rect.right,
+              width: Math.max(1, rect.width)
+            }
           }
         }
       }
+    } catch {
+      // Fall through to ProseMirror coordsAtPos
+    }
 
+    // 2. Reliable ProseMirror fallback (works for Ctrl+A, triple-click, multi-block, etc.)
+    try {
       const start = editor.view.coordsAtPos(selection.from)
       const end = editor.view.coordsAtPos(selection.to)
       const top = Math.min(start.top, end.top)
       const bottom = Math.max(start.bottom, end.bottom)
       const left = Math.min(start.left, end.left)
       const right = Math.max(start.right, end.right)
-      if (bottom < 46 || top > window.innerHeight - 16) return null
+      if (bottom < 44 || top > window.innerHeight - 12) return null
       return { top, bottom, left, right, width: Math.max(1, right - left) }
     } catch {
       return null
@@ -160,8 +169,26 @@ export const FloatingSelectionMenu: React.FC<FloatingSelectionMenuProps> = ({
   }, [editor, readOnly])
 
   const syncMenuFromEditor = useCallback(() => {
+    if (!editor) return
     if (isPointerDownInEditorRef.current) return
-    if (dismissedRef.current) return
+
+    const { from, to, empty } = editor.state.selection
+    if (empty) {
+      dismissedSelectionKeyRef.current = null
+      setSelectionRect(null)
+      setOpenSubMenu(null)
+      return
+    }
+
+    const selKey = `${from}:${to}`
+    if (dismissedSelectionKeyRef.current === selKey) {
+      return
+    }
+    // New selection range clears previous dismissal
+    if (dismissedSelectionKeyRef.current && dismissedSelectionKeyRef.current !== selKey) {
+      dismissedSelectionKeyRef.current = null
+    }
+
     const rect = computeSelectionRect()
     if (!rect) {
       setSelectionRect(null)
@@ -170,37 +197,51 @@ export const FloatingSelectionMenu: React.FC<FloatingSelectionMenuProps> = ({
       setSelectionRect(rect)
       forceUpdate((n) => (n + 1) % 100000)
     }
-  }, [computeSelectionRect])
+  }, [editor, computeSelectionRect])
 
-  // Subscribe to TipTap selection/transaction events
+  // Subscribe to TipTap selection/transaction events + DOM selectionchange
   useEffect(() => {
     if (!editor || readOnly) return
 
+    const scheduleSync = () => {
+      if (selectionChangeTimerRef.current) clearTimeout(selectionChangeTimerRef.current)
+      selectionChangeTimerRef.current = setTimeout(() => {
+        if (!isPointerDownInEditorRef.current) {
+          syncMenuFromEditor()
+        }
+      }, 24)
+    }
+
     const onSelectionUpdate = () => {
-      dismissedRef.current = false
       if (isPointerDownInEditorRef.current) {
-        setSelectionRect(null)
         return
       }
       syncMenuFromEditor()
     }
 
     const onTransaction = () => {
-      // Refresh active mark/node button states without closing
-      if (!isPointerDownInEditorRef.current && !dismissedRef.current) {
+      if (!isPointerDownInEditorRef.current) {
         forceUpdate((n) => (n + 1) % 100000)
       }
     }
 
+    const onDomSelectionChange = () => {
+      if (isPointerDownInEditorRef.current) return
+      scheduleSync()
+    }
+
     editor.on('selectionUpdate', onSelectionUpdate)
     editor.on('transaction', onTransaction)
+    document.addEventListener('selectionchange', onDomSelectionChange)
     return () => {
       editor.off('selectionUpdate', onSelectionUpdate)
       editor.off('transaction', onTransaction)
+      document.removeEventListener('selectionchange', onDomSelectionChange)
+      if (selectionChangeTimerRef.current) clearTimeout(selectionChangeTimerRef.current)
     }
   }, [editor, readOnly, syncMenuFromEditor])
 
-  // Pointer drag guard + outside click dismissal + Escape key
+  // Pointer drag guard + outside click dismissal + Escape key + dblclick/keyup reliability
   useEffect(() => {
     if (!editor || readOnly) return
 
@@ -216,7 +257,6 @@ export const FloatingSelectionMenu: React.FC<FloatingSelectionMenuProps> = ({
       // Clicked inside editor -> user might be starting a drag selection
       if (editor.view.dom.contains(target)) {
         isPointerDownInEditorRef.current = true
-        dismissedRef.current = false
         setOpenSubMenu(null)
         return
       }
@@ -224,17 +264,39 @@ export const FloatingSelectionMenu: React.FC<FloatingSelectionMenuProps> = ({
       // Clicked outside both editor and floating menu (and not inside text color popover)
       const isColorPopover = (target as HTMLElement)?.closest?.('[data-text-color-popover]')
       if (!isColorPopover) {
+        isPointerDownInEditorRef.current = false
         closeAll()
       }
     }
 
-    const onPointerUp = () => {
+    const finishPointerInteraction = () => {
       if (isPointerDownInEditorRef.current) {
         isPointerDownInEditorRef.current = false
-        // Wait 1 frame so browser finalizes selection rect
-        requestAnimationFrame(() => {
+      }
+      // Double RAF / short delay ensures double-click & triple-click selections are finalized
+      requestAnimationFrame(() => {
+        syncMenuFromEditor()
+      })
+      setTimeout(() => {
+        if (!isPointerDownInEditorRef.current) {
           syncMenuFromEditor()
-        })
+        }
+      }, 45)
+    }
+
+    const onDblClick = (e: MouseEvent) => {
+      const target = e.target as Node | null
+      if (target && editor.view.dom.contains(target)) {
+        isPointerDownInEditorRef.current = false
+        requestAnimationFrame(() => syncMenuFromEditor())
+        setTimeout(() => syncMenuFromEditor(), 50)
+      }
+    }
+
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift' || e.key.startsWith('Arrow') || (e.ctrlKey && e.key.toLowerCase() === 'a') || (e.metaKey && e.key.toLowerCase() === 'a')) {
+        isPointerDownInEditorRef.current = false
+        requestAnimationFrame(() => syncMenuFromEditor())
       }
     }
 
@@ -243,18 +305,27 @@ export const FloatingSelectionMenu: React.FC<FloatingSelectionMenuProps> = ({
         if (openSubMenu) {
           setOpenSubMenu(null)
         } else if (selectionRect) {
-          dismissedRef.current = true
+          const { from, to } = editor.state.selection
+          dismissedSelectionKeyRef.current = `${from}:${to}`
           closeAll()
         }
       }
     }
 
     document.addEventListener('pointerdown', onPointerDown, true)
-    window.addEventListener('pointerup', onPointerUp, true)
+    window.addEventListener('pointerup', finishPointerInteraction, true)
+    window.addEventListener('pointercancel', finishPointerInteraction, true)
+    window.addEventListener('mouseup', finishPointerInteraction, true)
+    document.addEventListener('dblclick', onDblClick, true)
+    window.addEventListener('keyup', onKeyUp)
     window.addEventListener('keydown', onKeyDown)
     return () => {
       document.removeEventListener('pointerdown', onPointerDown, true)
-      window.removeEventListener('pointerup', onPointerUp, true)
+      window.removeEventListener('pointerup', finishPointerInteraction, true)
+      window.removeEventListener('pointercancel', finishPointerInteraction, true)
+      window.removeEventListener('mouseup', finishPointerInteraction, true)
+      document.removeEventListener('dblclick', onDblClick, true)
+      window.removeEventListener('keyup', onKeyUp)
       window.removeEventListener('keydown', onKeyDown)
     }
   }, [editor, readOnly, openSubMenu, selectionRect, closeAll, syncMenuFromEditor])
@@ -417,10 +488,10 @@ export const FloatingSelectionMenu: React.FC<FloatingSelectionMenuProps> = ({
   const isLinkActive = editor.isActive('link')
 
   const btnCls = (active: boolean) =>
-    `h-7 min-w-7 px-1.5 rounded-lg flex items-center justify-center transition-all duration-100 cursor-pointer shrink-0 ${
+    `h-7 min-w-7 px-1.5 rounded-full flex items-center justify-center transition-all duration-100 cursor-pointer shrink-0 active:scale-95 ${
       active
-        ? 'bg-[#2383E2]/25 text-[#79BDFF] ring-1 ring-[#2383E2]/45'
-        : 'text-zinc-300 hover:text-white hover:bg-white/10'
+        ? 'bg-[#2383E2]/28 text-[#79BDFF] ring-1 ring-[#2383E2]/50'
+        : 'text-zinc-300 hover:text-white hover:bg-white/12'
     }`
 
   return createPortal(
@@ -440,10 +511,10 @@ export const FloatingSelectionMenu: React.FC<FloatingSelectionMenuProps> = ({
           opacity: menuCoords.ready ? 1 : 0,
           transition: 'opacity 100ms ease, left 90ms ease-out, top 90ms ease-out'
         }}
-        className="z-[95] flex items-center gap-0.5 px-1.5 py-1 rounded-xl border border-white/12 bg-[#1B1B1E]/95 backdrop-blur-xl text-white shadow-[0_10px_32px_rgba(0,0,0,0.34),0_2px_8px_rgba(0,0,0,0.22)] max-w-[calc(100vw-24px)] overflow-x-auto no-scrollbar select-none"
+        className="z-[95] pill-capsule-bar flex items-center gap-0.5 px-2 py-1.5 rounded-full text-white max-w-[calc(100vw-24px)] overflow-x-auto no-scrollbar select-none"
       >
-        {/* Split Highlight ("Destacar") Button */}
-        <div className="flex items-center shrink-0 rounded-lg overflow-hidden bg-gradient-to-r from-[#6D4AFF] to-[#5645D4] shadow-xs">
+        {/* Split Highlight ("Destacar") Pill Button */}
+        <div className="flex items-center shrink-0 rounded-full overflow-hidden bg-[#7c5cfc] hover:bg-[#6c4be8] shadow-[0_4px_14px_rgba(124,92,252,0.35)] transition-colors">
           <button
             type="button"
             onMouseDown={(e) => e.preventDefault()}
@@ -452,7 +523,7 @@ export const FloatingSelectionMenu: React.FC<FloatingSelectionMenuProps> = ({
                 .toggleMark('highlight', { color: lastHighlightColor })
                 .run()
             }
-            className={`h-7 pl-2.5 pr-1.5 text-[11.5px] font-semibold flex items-center gap-1 transition cursor-pointer hover:bg-white/10 ${
+            className={`h-7 pl-3 pr-1.5 text-[11.5px] font-semibold flex items-center gap-1 transition cursor-pointer hover:bg-white/10 ${
               isHighlighted ? 'text-amber-200' : 'text-white'
             }`}
             title="Destacar texto seleccionado"
@@ -464,7 +535,7 @@ export const FloatingSelectionMenu: React.FC<FloatingSelectionMenuProps> = ({
             type="button"
             onMouseDown={(e) => e.preventDefault()}
             onClick={(e) => openAnchoredSubMenu('highlight', e.currentTarget, 196)}
-            className="h-7 px-1 border-l border-white/20 hover:bg-white/15 flex items-center justify-center transition cursor-pointer"
+            className="h-7 pl-1 pr-2 border-l border-white/20 hover:bg-white/15 flex items-center justify-center transition cursor-pointer"
             title="Elegir color de resaltado"
           >
             <ChevronDown className="w-3 h-3" />
@@ -478,10 +549,10 @@ export const FloatingSelectionMenu: React.FC<FloatingSelectionMenuProps> = ({
           type="button"
           onMouseDown={(e) => e.preventDefault()}
           onClick={(e) => openAnchoredSubMenu('block', e.currentTarget, 184)}
-          className={`h-7 px-2 rounded-lg text-[11.5px] font-medium flex items-center gap-1 transition cursor-pointer shrink-0 ${
+          className={`h-7 px-2.5 rounded-full text-[11.5px] font-medium flex items-center gap-1 transition cursor-pointer shrink-0 active:scale-95 ${
             openSubMenu === 'block' || activeBlockLabel !== 'Texto'
-              ? 'bg-white/12 text-white'
-              : 'text-zinc-200 hover:text-white hover:bg-white/10'
+              ? 'bg-white/14 text-white'
+              : 'text-zinc-200 hover:text-white hover:bg-white/12'
           }`}
           title="Cambiar tipo de bloque (H1, H2, H3, Lista, Cita)"
         >
@@ -562,10 +633,10 @@ export const FloatingSelectionMenu: React.FC<FloatingSelectionMenuProps> = ({
             setOpenSubMenu(null)
             onToggleColorPicker()
           }}
-          className={`h-7 w-7 rounded-lg flex flex-col items-center justify-center transition cursor-pointer shrink-0 ${
+          className={`h-7 w-7 rounded-full flex flex-col items-center justify-center transition cursor-pointer shrink-0 active:scale-95 ${
             isColorPickerOpen
-              ? 'bg-[#2383E2]/25 text-[#79BDFF] ring-1 ring-[#2383E2]/45'
-              : 'text-zinc-300 hover:text-white hover:bg-white/10'
+              ? 'bg-[#2383E2]/28 text-[#79BDFF] ring-1 ring-[#2383E2]/50'
+              : 'text-zinc-300 hover:text-white hover:bg-white/12'
           }`}
           title="Color de texto"
         >
@@ -583,10 +654,10 @@ export const FloatingSelectionMenu: React.FC<FloatingSelectionMenuProps> = ({
           type="button"
           onMouseDown={(e) => e.preventDefault()}
           onClick={(e) => openAnchoredSubMenu('align', e.currentTarget, 148)}
-          className={`h-7 px-1.5 rounded-lg flex items-center gap-0.5 transition cursor-pointer shrink-0 ${
+          className={`h-7 px-2 rounded-full flex items-center gap-0.5 transition cursor-pointer shrink-0 active:scale-95 ${
             openSubMenu === 'align'
               ? 'bg-white/15 text-white'
-              : 'text-zinc-300 hover:text-white hover:bg-white/10'
+              : 'text-zinc-300 hover:text-white hover:bg-white/12'
           }`}
           title="Alineación de texto"
         >
@@ -599,10 +670,10 @@ export const FloatingSelectionMenu: React.FC<FloatingSelectionMenuProps> = ({
           type="button"
           onMouseDown={(e) => e.preventDefault()}
           onClick={(e) => openAnchoredSubMenu('more', e.currentTarget, 200)}
-          className={`h-7 w-7 rounded-lg flex items-center justify-center transition cursor-pointer shrink-0 ${
+          className={`h-7 w-7 rounded-full flex items-center justify-center transition cursor-pointer shrink-0 active:scale-95 ${
             openSubMenu === 'more'
               ? 'bg-white/15 text-white'
-              : 'text-zinc-300 hover:text-white hover:bg-white/10'
+              : 'text-zinc-300 hover:text-white hover:bg-white/12'
           }`}
           title="Más opciones (Mayúsculas, Superíndice, Copiar, Limpiar formato)"
         >
@@ -614,10 +685,11 @@ export const FloatingSelectionMenu: React.FC<FloatingSelectionMenuProps> = ({
           type="button"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => {
-            dismissedRef.current = true
+            const { from, to } = editor.state.selection
+            dismissedSelectionKeyRef.current = `${from}:${to}`
             closeAll()
           }}
-          className="h-6 w-6 ml-0.5 rounded-md flex items-center justify-center text-zinc-400 hover:text-white hover:bg-white/10 transition cursor-pointer shrink-0"
+          className="btn-pill-circle w-6 h-6 ml-0.5 cursor-pointer shrink-0"
           title="Cerrar barra (Esc)"
         >
           <X className="w-3 h-3" />
@@ -637,7 +709,7 @@ export const FloatingSelectionMenu: React.FC<FloatingSelectionMenuProps> = ({
             top: `${subMenuPos.top}px`,
             left: `${subMenuPos.left}px`
           }}
-          className="z-[110] rounded-xl border border-white/12 bg-[#1E1E22]/96 backdrop-blur-xl text-white shadow-[0_12px_36px_rgba(0,0,0,0.4)] animate-in fade-in zoom-in-95 duration-100 select-none"
+          className="z-[110] rounded-2xl border border-white/12 bg-[#1E1E22]/96 backdrop-blur-xl text-white shadow-[0_12px_36px_rgba(0,0,0,0.4)] animate-in fade-in zoom-in-95 duration-100 select-none"
         >
           {/* HIGHLIGHT COLORS POPOVER */}
           {openSubMenu === 'highlight' && (
