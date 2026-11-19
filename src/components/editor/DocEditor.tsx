@@ -524,7 +524,8 @@ export function DocEditor({
     editorProps: {
       attributes: {
         class:
-          'max-w-none focus:outline-none min-h-[350px] text-[var(--app-text-primary)] font-sans leading-relaxed text-sm selection:bg-blue-600/30'
+          'max-w-none focus:outline-none min-h-[350px] text-[var(--app-text-primary)] font-sans leading-relaxed text-sm selection:bg-blue-600/30',
+        spellcheck: 'false'
       },
       transformPastedHTML: (html) => {
         if (html.includes('data-pm-slice')) return html

@@ -566,6 +566,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
             <div
               ref={contentEditableRef}
               contentEditable
+              spellCheck={false}
               suppressContentEditableWarning
               onBlur={handleContentBlur}
               onInput={(e) => setContent(e.currentTarget.innerHTML)}
@@ -607,6 +608,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
             <div
               ref={contentEditableRef}
               contentEditable
+              spellCheck={false}
               suppressContentEditableWarning
               onBlur={handleContentBlur}
               onInput={(e) => setContent(e.currentTarget.innerHTML)}

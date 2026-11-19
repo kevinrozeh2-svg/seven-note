@@ -382,6 +382,7 @@ export const TextNode = memo(({ id, data, selected }: any) => {
         <div
           ref={contentEditableRef}
           contentEditable
+          spellCheck={false}
           suppressContentEditableWarning
           onBlur={handleBlur}
           onInput={(e) => setContent(e.currentTarget.innerHTML)}
