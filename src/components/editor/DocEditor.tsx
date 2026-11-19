@@ -8,7 +8,7 @@ import TaskItem from '@tiptap/extension-task-item'
 import Placeholder from '@tiptap/extension-placeholder'
 import Underline from '@tiptap/extension-underline'
 import Link from '@tiptap/extension-link'
-import Image from '@tiptap/extension-image'
+import { RichImage } from './RichImageExtension'
 import TextAlign from '@tiptap/extension-text-align'
 import { processAndUploadImage } from '../../lib/imageOptimizer'
 import { DOMParser as PMDOMParser } from '@tiptap/pm/model'
@@ -468,7 +468,7 @@ export function DocEditor({
         const result = await processAndUploadImage(file)
         editor.chain().focus().setImage({ src: result.url, alt: file.name }).run()
       }
-      toast.success('Fotos optimizadas en WebP e insertadas', { id: toastId })
+      toast.success('Foto(s) insertadas — haz clic en la foto para cambiar aspecto, quitar fondo o editar', { id: toastId })
     } catch (err: any) {
       toast.error('Error insertando fotos: ' + (err?.message || 'Error'), { id: toastId })
     }
@@ -508,8 +508,7 @@ export function DocEditor({
         openOnClick: false,
         autolink: true
       }),
-      Image.configure({
-        inline: true,
+      RichImage.configure({
         allowBase64: true
       }),
       TextAlign.configure({

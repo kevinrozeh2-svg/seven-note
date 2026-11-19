@@ -15,6 +15,7 @@ export interface CompressOptions {
   maxWidth?: number
   maxHeight?: number
   quality?: number
+  preserveAlpha?: boolean
 }
 
 const BUCKET_NAME = 'attachments'
@@ -143,17 +144,17 @@ export async function compressImage(
   ctx.imageSmoothingQuality = 'high'
   ctx.drawImage(img, 0, 0, width, height)
 
-  // Intentar exportar en WebP
+  // Intentar exportar en WebP (soporta transparencia alfa y alta compresión)
   let outputFormat: 'image/webp' | 'image/jpeg' | 'image/png' = 'image/webp'
   let compressedBlob: Blob | null = await new Promise((resolve) => {
     canvas.toBlob((b) => resolve(b), 'image/webp', quality)
   })
 
-  // Si el navegador no soporta WebP en toBlob, fallback a JPEG
+  // Si el navegador no soporta WebP en toBlob, fallback a PNG (si hay alfa) o JPEG
   if (!compressedBlob || compressedBlob.type !== 'image/webp') {
-    outputFormat = 'image/jpeg'
+    outputFormat = options.preserveAlpha ? 'image/png' : 'image/jpeg'
     compressedBlob = await new Promise((resolve) => {
-      canvas.toBlob((b) => resolve(b), 'image/jpeg', quality)
+      canvas.toBlob((b) => resolve(b), outputFormat, options.preserveAlpha ? undefined : quality)
     })
   }
 
@@ -251,7 +252,7 @@ export async function processAndUploadImage(
   if (isSupabaseConfigured() && typeof navigator !== 'undefined' && navigator.onLine) {
     try {
       const hash = await computeImageHash(blob)
-      const ext = format === 'image/webp' ? 'webp' : 'jpg'
+      const ext = format === 'image/webp' ? 'webp' : format === 'image/png' ? 'png' : 'jpg'
       const filePath = `images/${hash.slice(0, 20)}.${ext}`
 
       const remoteUrl = await uploadToSupabaseStorage(blob, filePath)
@@ -279,7 +280,8 @@ export async function processAndUploadImage(
       const lighter = await compressImage(blob, {
         maxWidth: Math.min(options.maxWidth || 1200, 1200),
         maxHeight: Math.min(options.maxHeight || 900, 900),
-        quality: 0.65
+        quality: 0.65,
+        preserveAlpha: options.preserveAlpha
       })
       if (lighter.dataUrl.length < safeDataUrl.length) {
         safeDataUrl = lighter.dataUrl

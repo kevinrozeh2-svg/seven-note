@@ -1,11 +1,13 @@
 import { memo, useState, useRef } from 'react'
 import { NodeResizer } from '@xyflow/react'
 import { DeleteIcon, UploadIcon, ImageIcon, EditIcon, LinkIcon } from '@blocksuite/icons/rc'
+import { Sparkles } from 'lucide-react'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
 import { processAndUploadImage, deleteImageFromStorage, formatBytes } from '../../../lib/imageOptimizer'
 import { toast } from 'sonner'
 import { areNodePropsEqual, NodeHandles, SourceNodeBadge } from './nodeUtils'
+import { PhotoEditorModal, type PhotoEditorResult } from '../../editor/PhotoEditorModal'
 
 export const ImageNode = memo(({ id, data, selected }: any) => {
   const [imageUrl, setImageUrl] = useState<string | null>(data.imageUrl ?? null)
@@ -15,6 +17,7 @@ export const ImageNode = memo(({ id, data, selected }: any) => {
   const [width, setWidth] = useState<number>(data.width || 280)
   const [isProcessing, setIsProcessing] = useState(false)
   const [hasImageError, setHasImageError] = useState(false)
+  const [isStudioOpen, setIsStudioOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const isConnectorActive = Boolean(data?.isConnectorActive)
   const isConnectSource = Boolean(data?.isConnectSource)
@@ -138,8 +141,17 @@ export const ImageNode = memo(({ id, data, selected }: any) => {
         >
           <button
             type="button"
+            onClick={() => setIsStudioOpen(true)}
+            className="px-1.5 py-1 rounded text-white hover:bg-white/20 transition flex items-center gap-1 text-[10px] font-medium cursor-pointer"
+            title="Editar foto / Quitar fondo / Recortar"
+          >
+            <Sparkles className="w-3 h-3 text-sky-300" />
+            <span>Editar</span>
+          </button>
+          <button
+            type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="p-1 rounded text-white/80 hover:text-white hover:bg-white/20 transition"
+            className="p-1 rounded text-white/80 hover:text-white hover:bg-white/20 transition cursor-pointer"
             title="Cambiar foto"
           >
             <EditIcon style={{ width: 13, height: 13 }} />
@@ -147,12 +159,29 @@ export const ImageNode = memo(({ id, data, selected }: any) => {
           <button
             type="button"
             onClick={handleDelete}
-            className="p-1 rounded text-rose-400 hover:text-rose-300 hover:bg-rose-500/20 transition"
+            className="p-1 rounded text-rose-400 hover:text-rose-300 hover:bg-rose-500/20 transition cursor-pointer"
             title="Eliminar foto"
           >
             <DeleteIcon style={{ width: 13, height: 13 }} />
           </button>
         </div>
+
+        {isStudioOpen && imageUrl && (
+          <PhotoEditorModal
+            isOpen={isStudioOpen}
+            imageSrc={imageUrl}
+            onClose={() => setIsStudioOpen(false)}
+            onSave={async (result: PhotoEditorResult) => {
+              const oldUrl = imageUrl
+              setImageUrl(result.url)
+              setHasImageError(false)
+              await save({ imageUrl: result.url })
+              if (oldUrl && oldUrl !== result.url) {
+                deleteImageFromStorage(oldUrl).catch(() => {})
+              }
+            }}
+          />
+        )}
 
         <input
           type="file"
