@@ -10,7 +10,7 @@
     --app-ui-base-font: 16px;
 
     /* Typography Stacks */
-    --app-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, "Apple Color Emoji", Arial, sans-serif, "Segoe UI Emoji", "Segoe UI Symbol";
+    --app-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, "Segoe UI Symbol", "Apple Symbols", "Segoe UI Emoji", "Apple Color Emoji", sans-serif;
     --app-font-serif: Lyon-Text, Georgia, YuMincho, "Yu Mincho", "Hiragino Mincho ProN", "Songti TC", serif;
     --app-font-mono: "SFMono-Regular", Menlo, Monaco, "Cascadia Mono", Consolas, "Liberation Mono", "Courier New", monospace;
 

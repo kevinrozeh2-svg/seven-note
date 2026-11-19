@@ -126,6 +126,13 @@ function normalizePdfCharacters(text: string, preserveTabs = true): string {
     .replace(/\r/g, '\n')
     .replace(UNICODE_SPACES_REGEX, ' ')
     .replace(INVISIBLE_CONTROL_REGEX, '')
+    // Map PDF Symbol-font PUA arrows to standard Unicode arrows so they never render as missing glyphs
+    .replace(/\uF0AC/g, '←')
+    .replace(/\uF0AD/g, '↑')
+    .replace(/\uF0AE/g, '→')
+    .replace(/\uF0AF/g, '↓')
+    .replace(/\uF0E1/g, '↑')
+    .replace(/\uF0E2/g, '↓')
     .replace(PUA_BULLET_REGEX, '• ')
   if (!preserveTabs) {
     out = out.replace(/\t/g, ' ')
@@ -856,6 +863,17 @@ export function isLineContinuation(
   // Lists start a new block
   if (BULLET_LINE_START_REGEX.test(curr) || TASK_LINE_START_REGEX.test(curr)) return false
   if (/^(?:\d{1,3}[\.\)]\s+\S|[a-z][\.\)]\s+\S)/u.test(curr)) return false
+
+  // Vertical flow / connector arrow lines (e.g. "↓", "↑", "⇓", "▼", "→ Paso 2") stay on their own lines
+  const STANDALONE_ARROW_LINE_REGEX = /^[↑↓←→↖↗↘↙⇑⇓⇐⇒▲▼◀▶⟶⟵⟹⟸➜➔➤│|]+$/
+  const ARROW_LINE_START_REGEX = /^[↑↓←→↖↗↘↙⇑⇓⇐⇒▲▼◀▶⟶⟵⟹⟸➜➔➤]\s*\S/
+  if (
+    STANDALONE_ARROW_LINE_REGEX.test(curr) ||
+    STANDALONE_ARROW_LINE_REGEX.test(prev) ||
+    ARROW_LINE_START_REGEX.test(curr)
+  ) {
+    return false
+  }
 
   // Markdown blockquotes / headings start a new block
   if (/^(?:>|#{1,6}\s+)/.test(curr)) return false
