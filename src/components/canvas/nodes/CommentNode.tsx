@@ -2,8 +2,8 @@ import { memo, useState } from 'react'
 import { MessageSquare, CornerDownRight, Trash2 } from 'lucide-react'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
-import { notificationService, extractMentions } from '../../../lib/notificationService'
-import { getCurrentMember } from '../../../lib/teamAuth'
+import { notificationService, extractMentions, getMemberIdentifiers } from '../../../lib/notificationService'
+import { getCurrentMember, TEAM_MEMBERS } from '../../../lib/teamAuth'
 import { toast } from 'sonner'
 import { areNodePropsEqual, NodeHandles, SourceNodeBadge } from './nodeUtils'
 import { renderWithAppleEmoji } from '../../ui/AppleEmoji'
@@ -62,24 +62,61 @@ export const CommentNode = memo(({ id, data, selected }: any) => {
     toast.success('Respuesta agregada')
 
     const mentions = extractMentions(trimmed)
-    if (mentions.length > 0) {
-      const node = await db.canvasNodes.get(id)
-      for (const target of mentions) {
+    const selfIds = getMemberIdentifiers(member)
+    const node = await db.canvasNodes.get(id)
+    const ws = node?.workspaceId ? await db.workspaces.get(node.workspaceId) : undefined
+    const wsTitle = ws?.title || 'un tablero'
+
+    for (const target of mentions) {
+      if (target !== 'all' && selfIds.has(target.toLowerCase())) continue
+      void notificationService.notify({
+        type: 'mention',
+        severity: 'info',
+        title: `${member?.name || 'Alguien'} te mencionó en "${wsTitle}"`,
+        message: trimmed.slice(0, 140),
+        workspaceId: node?.workspaceId,
+        spaceId: ws?.spaceId,
+        nodeId: id,
+        actorId: member?.id,
+        actorName: member?.name,
+        recipientId: target,
+        actionLabel: 'Ir al comentario',
+        actionPayload: node?.workspaceId
+          ? { type: 'open_workspace', workspaceId: node.workspaceId, spaceId: ws?.spaceId, nodeId: id }
+          : undefined,
+        dedupeKey: `mention:${id}:${newReply.id}:${target}`
+      })
+    }
+
+    const cleanAuthor = author?.trim()
+    if (cleanAuthor && !selfIds.has(cleanAuthor.toLowerCase())) {
+      const authorMember = TEAM_MEMBERS.find(
+        (m) =>
+          m.id.toLowerCase() === cleanAuthor.toLowerCase() ||
+          m.name.toLowerCase() === cleanAuthor.toLowerCase() ||
+          m.fullName.toLowerCase() === cleanAuthor.toLowerCase()
+      )
+      const alreadyMentioned =
+        mentions.includes('all') ||
+        (authorMember ? mentions.some((t) => t.toLowerCase() === authorMember.id.toLowerCase()) : false)
+
+      if (authorMember && !alreadyMentioned) {
         void notificationService.notify({
-          type: 'mention',
+          type: 'comment',
           severity: 'info',
-          title: `${member?.name || 'Alguien'} te mencionó en un comentario`,
+          title: `${member?.name || 'Alguien'} respondió tu comentario en "${wsTitle}"`,
           message: trimmed.slice(0, 140),
           workspaceId: node?.workspaceId,
+          spaceId: ws?.spaceId,
           nodeId: id,
           actorId: member?.id,
           actorName: member?.name,
-          recipientId: target,
+          recipientId: authorMember.id,
           actionLabel: 'Ir al comentario',
           actionPayload: node?.workspaceId
-            ? { type: 'open_workspace', workspaceId: node.workspaceId, nodeId: id }
+            ? { type: 'open_workspace', workspaceId: node.workspaceId, spaceId: ws?.spaceId, nodeId: id }
             : undefined,
-          dedupeKey: `mention:${id}:${newReply.id}:${target}`
+          dedupeKey: `reply:${id}:${newReply.id}:${authorMember.id}`
         })
       }
     }

@@ -27,7 +27,13 @@ import {
   canUserManageSpace
 } from './teamAuth'
 import { computeImageHash, uploadToSupabaseStorage } from './imageOptimizer'
-import { notificationService } from './notificationService'
+import {
+  notificationService,
+  isSyncableNotificationType,
+  isNotificationForMember,
+  getMemberIdentifiers,
+  resolveActorProfile
+} from './notificationService'
 
 export type NetworkStatus = 'online' | 'offline'
 export type SyncEngineState = 'idle' | 'syncing' | 'synced' | 'error' | 'offline' | 'unconfigured'
@@ -715,6 +721,7 @@ class SyncEngine {
                 journalDate: w.journalDate,
                 templateName: w.templateName,
                 createdBy: w.createdBy,
+                ownerName: w.ownerName,
                 lastEditedBy: w.lastEditedBy,
                 borderlessTheme: w.borderlessTheme,
                 pageWidth: w.pageWidth,
@@ -1040,9 +1047,20 @@ class SyncEngine {
         }
 
         // ==========================================
-        // 6B. PUSH: NOTIFICATIONS (Opcional si tabla existe)
+        // 6B. PUSH: NOTIFICATIONS (Solo menciones/comentarios/asignaciones dirigidas)
         // ==========================================
-        const pendingNotifs = await db.notifications.where('syncStatus').equals('pending').toArray()
+        const allPendingNotifs = await db.notifications.where('syncStatus').equals('pending').toArray()
+        const nonSyncableNotifs = allPendingNotifs.filter(
+          (n) => !isSyncableNotificationType(n.type) || n.dedupeKey?.startsWith('comment-node:')
+        )
+        if (nonSyncableNotifs.length > 0) {
+          await db.notifications.bulkUpdate(
+            nonSyncableNotifs.map((n) => ({ key: n.id, changes: { syncStatus: 'synced' as const } }))
+          )
+        }
+        const pendingNotifs = allPendingNotifs.filter(
+          (n) => isSyncableNotificationType(n.type) && !n.dedupeKey?.startsWith('comment-node:')
+        )
         if (pendingNotifs.length > 0) {
           const payload = pendingNotifs.map((n: NotificationItem) => ({
             id: n.id,
@@ -1359,6 +1377,7 @@ class SyncEngine {
               syncStatus: 'synced',
               isPrivate: Boolean(rw.is_private),
               ownerMember: rw.owner_member || 'kevin',
+              ownerName: meta.ownerName,
               userId: rw.user_id || undefined,
               isPublicShared: Boolean(rw.is_public_shared),
               shareToken: rw.share_token,
@@ -1408,32 +1427,49 @@ class SyncEngine {
         if (wsToPut.length > 0) {
           await db.workspaces.bulkPut(wsToPut)
 
-          // Emit collaborative notifications only on incremental syncs for brand-new notes from other members
+          // Emit collaborative notifications only on incremental syncs for brand-new shared notes from other members
           if (lastSync > 0) {
-            for (const ws of wsToPut) {
+            const maxRecentAgeMs = 7 * 24 * 60 * 60 * 1000
+            const newSharedWorkspaces = wsToPut.filter((ws) => {
               const prev = localWsMap.get(ws.id)
-              const actor = (ws.createdBy || ws.ownerMember || '').toLowerCase()
-              const isSelf =
-                actor === currentMember.id.toLowerCase() ||
-                actor === currentMember.name.toLowerCase() ||
-                (Boolean(currentMember.email) && actor === currentMember.email?.toLowerCase()) ||
-                (Boolean(authUserId) && ws.userId === authUserId)
+              if (prev || ws.isDeleted || ws.isPrivate) return false
+              if (isWorkspaceOwner(ws, currentMember, authUserId)) return false
+              if (nowServer - ws.createdAt > maxRecentAgeMs) return false
+              return true
+            })
 
-              if (!prev && !ws.isDeleted && !isSelf) {
+            if (newSharedWorkspaces.length > 0) {
+              const allSpaces = await db.spaces.toArray()
+              const spacesMap = new Map(allSpaces.map((s) => [s.id, s]))
+              const isBurst = newSharedWorkspaces.length > 2
+
+              for (const ws of newSharedWorkspaces) {
+                const actor = resolveActorProfile(ws.ownerMember || ws.userId, ws.ownerName || ws.createdBy)
+                const spaceName = ws.spaceId ? spacesMap.get(ws.spaceId)?.name : undefined
                 void notificationService.notify({
                   type: 'workspace_update',
                   severity: 'info',
-                  title: 'Nueva nota compartida',
-                  message: `${ws.ownerName || ws.createdBy || 'Un miembro'} creó "${ws.title || 'Sin título'}"`,
+                  title: ws.title || 'Nota sin título',
+                  message: spaceName ? `En ${spaceName}` : 'Nota compartida',
                   workspaceId: ws.id,
                   spaceId: ws.spaceId,
                   actorId: ws.ownerMember || ws.userId,
-                  actorName: ws.ownerName || ws.createdBy,
+                  actorName: actor.name,
                   actionLabel: 'Abrir nota',
-                  actionPayload: { type: 'open_workspace', workspaceId: ws.id },
+                  actionPayload: { type: 'open_workspace', workspaceId: ws.id, spaceId: ws.spaceId },
                   dedupeKey: `new-ws:${ws.id}`,
-                  dedupeWindowMs: 24 * 60 * 60 * 1000
+                  dedupeWindowMs: 24 * 60 * 60 * 1000,
+                  localOnly: true,
+                  silent: isBurst
                 })
+              }
+
+              if (isBurst) {
+                const firstTitle = newSharedWorkspaces[0].title || 'Nota sin título'
+                notificationService.dispatchBatchSummaryToast(
+                  newSharedWorkspaces.length,
+                  `Incluye "${firstTitle}" y ${newSharedWorkspaces.length - 1} más`
+                )
               }
             }
           }
@@ -1580,25 +1616,26 @@ class SyncEngine {
           await db.canvasNodes.bulkPut(nodesToPut)
 
           if (lastSync > 0) {
+            const selfIds = getMemberIdentifiers(currentMember, authUserId)
             for (const node of nodesToPut) {
               if (node.type === 'comment' && !localNodeMap.has(node.id) && !node.isDeleted) {
-                const author = String(node.data?.commentAuthor || 'Un compañero')
-                const isSelf =
-                  author.toLowerCase() === currentMember.name.toLowerCase() ||
-                  author.toLowerCase() === currentMember.id.toLowerCase()
+                const rawAuthor = String(node.data?.commentAuthor || '').trim()
+                const isSelf = rawAuthor ? selfIds.has(rawAuthor.toLowerCase()) : false
                 if (!isSelf) {
+                  const actor = resolveActorProfile(undefined, rawAuthor)
                   void notificationService.notify({
                     type: 'comment',
                     severity: 'info',
-                    title: `Nuevo comentario de ${author}`,
+                    title: `Nuevo comentario de ${actor.name}`,
                     message: String(node.data?.commentText || 'Comentó en un tablero').slice(0, 120),
                     workspaceId: node.workspaceId,
                     nodeId: node.id,
-                    actorName: author,
+                    actorName: actor.name,
                     actionLabel: 'Ver tablero',
                     actionPayload: { type: 'open_workspace', workspaceId: node.workspaceId, nodeId: node.id },
                     dedupeKey: `comment-node:${node.id}`,
-                    dedupeWindowMs: 24 * 60 * 60 * 1000
+                    dedupeWindowMs: 24 * 60 * 60 * 1000,
+                    localOnly: true
                   })
                 }
               }
@@ -1834,7 +1871,7 @@ class SyncEngine {
         }
       }
 
-      // Pull Notifications (Opcional si la tabla existe en Supabase)
+      // Pull Notifications (Solo tipos colaborativos sincronizables)
       try {
         const { data: remoteNotifs, error: notifPullErr } = await supabase
           .from('seven_notifications')
@@ -1842,45 +1879,73 @@ class SyncEngine {
           .gt('updated_at', lastSync)
 
         if (!notifPullErr && remoteNotifs && remoteNotifs.length > 0) {
-          const localNotifRows = await db.notifications.bulkGet(remoteNotifs.map((rn: any) => rn.id))
-          const localNotifMap = new Map(
-            localNotifRows.filter((n): n is NotificationItem => Boolean(n)).map((n) => [n.id, n])
-          )
-          const notifsToPut: NotificationItem[] = []
+          const syncableRemote = remoteNotifs.filter((rn: any) => isSyncableNotificationType(rn.type))
+          if (syncableRemote.length > 0) {
+            const localNotifRows = await db.notifications.bulkGet(syncableRemote.map((rn: any) => rn.id))
+            const localNotifMap = new Map(
+              localNotifRows.filter((n): n is NotificationItem => Boolean(n)).map((n) => [n.id, n])
+            )
+            const notifsToPut: NotificationItem[] = []
+            const newlyPulledAlerts: NotificationItem[] = []
 
-          for (const rn of remoteNotifs) {
-            const local = localNotifMap.get(rn.id)
-            const remoteUpdated = this.clampTimestamp(Number(rn.updated_at) || 0, nowServer)
-            if (this.shouldApplyRemote(local, remoteUpdated, nowServer)) {
-              notifsToPut.push({
-                id: rn.id,
-                type: rn.type,
-                severity: rn.severity,
-                title: rn.title,
-                message: rn.message,
-                workspaceId: rn.workspace_id || undefined,
-                spaceId: rn.space_id || undefined,
-                nodeId: rn.node_id || undefined,
-                actorId: rn.actor_id || undefined,
-                actorName: rn.actor_name || undefined,
-                recipientId: rn.recipient_id || 'all',
-                actionLabel: rn.action_label || undefined,
-                actionPayload: rn.action_payload || undefined,
-                dedupeKey: rn.dedupe_key || undefined,
-                isRead: Boolean(rn.is_read),
-                isArchived: Boolean(rn.is_archived),
-                snoozedUntil: rn.snoozed_until ? Number(rn.snoozed_until) : undefined,
-                createdAt: this.clampTimestamp(Number(rn.created_at) || Date.now(), nowServer),
-                updatedAt: remoteUpdated,
-                readAt: rn.read_at ? Number(rn.read_at) : undefined,
-                syncStatus: 'synced'
-              })
+            for (const rn of syncableRemote) {
+              const local = localNotifMap.get(rn.id)
+              const remoteUpdated = this.clampTimestamp(Number(rn.updated_at) || 0, nowServer)
+              if (this.shouldApplyRemote(local, remoteUpdated, nowServer)) {
+                const recipientId = rn.recipient_id || 'all'
+                const isSharedBroadcastUpdate = Boolean(local && recipientId === 'all')
+                const item: NotificationItem = {
+                  id: rn.id,
+                  type: rn.type,
+                  severity: rn.severity,
+                  title: rn.title,
+                  message: rn.message,
+                  workspaceId: rn.workspace_id || undefined,
+                  spaceId: rn.space_id || undefined,
+                  nodeId: rn.node_id || undefined,
+                  actorId: rn.actor_id || undefined,
+                  actorName: rn.actor_name || undefined,
+                  recipientId,
+                  actionLabel: rn.action_label || undefined,
+                  actionPayload: rn.action_payload || undefined,
+                  dedupeKey: rn.dedupe_key || undefined,
+                  isRead: isSharedBroadcastUpdate ? local!.isRead : Boolean(rn.is_read),
+                  isArchived: isSharedBroadcastUpdate ? local!.isArchived : Boolean(rn.is_archived),
+                  snoozedUntil: isSharedBroadcastUpdate
+                    ? local!.snoozedUntil
+                    : rn.snoozed_until
+                    ? Number(rn.snoozed_until)
+                    : undefined,
+                  createdAt: this.clampTimestamp(Number(rn.created_at) || Date.now(), nowServer),
+                  updatedAt: remoteUpdated,
+                  readAt: isSharedBroadcastUpdate
+                    ? local!.readAt
+                    : rn.read_at
+                    ? Number(rn.read_at)
+                    : undefined,
+                  syncStatus: 'synced'
+                }
+                notifsToPut.push(item)
+
+                if (
+                  !local &&
+                  !item.isRead &&
+                  !item.isArchived &&
+                  nowServer - item.createdAt < 15 * 60_000 &&
+                  isNotificationForMember(item, currentMember, authUserId)
+                ) {
+                  newlyPulledAlerts.push(item)
+                }
+              }
             }
-          }
 
-          if (notifsToPut.length > 0) {
-            await db.notifications.bulkPut(notifsToPut)
-            window.dispatchEvent(new CustomEvent('seven_note_notification_changed'))
+            if (notifsToPut.length > 0) {
+              await db.notifications.bulkPut(notifsToPut)
+              window.dispatchEvent(new CustomEvent('seven_note_notification_changed'))
+              for (const alert of newlyPulledAlerts) {
+                notificationService.deliverPulledNotification(alert)
+              }
+            }
           }
         }
       } catch {
@@ -1921,7 +1986,8 @@ class SyncEngine {
         actionLabel: 'Reintentar',
         actionPayload: { type: 'retry_sync' },
         dedupeKey: 'sync-error',
-        dedupeWindowMs: 10 * 60 * 1000
+        dedupeWindowMs: 10 * 60 * 1000,
+        localOnly: true
       })
       return { success: false, message: this.errorMessage || 'Error' }
     } finally {

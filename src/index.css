@@ -1519,6 +1519,37 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
   }
 }
 
+/* ==========================================================================
+   Viewport-Aware Anchored Popovers (Native Popover API + CSS Anchor)
+   ========================================================================== */
+[popover].sn-anchored-popover {
+  background: var(--app-bg-overlay);
+  color: var(--app-text-primary);
+  border: 1px solid var(--app-border-strong);
+  border-radius: 10px;
+  box-shadow: var(--app-shadow-popover);
+  padding: 4px;
+}
+
+[popover].sn-anchored-popover:is(:popover-open, .\:popover-open) {
+  display: block;
+}
+
+.sn-anchored-popover.sn-anchored-popover--js {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+}
+
+@supports (position-area: block-end) {
+  [popover].sn-anchored-popover {
+    inset: auto;
+    margin: 4px 0 0 0;
+    position-area: block-end span-inline-start;
+    position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+  }
+}
+
 
 
 

@@ -11,6 +11,7 @@ import {
   ResetIcon,
   SettingsIcon
 } from '@blocksuite/icons/rc'
+import { Check } from '@phosphor-icons/react'
 import {
   getStoredSupabaseConfig,
   saveSupabaseConfig,
@@ -353,7 +354,7 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
                     onChange={(e) =>
                       notificationService.updatePreferences({ [item.key]: e.target.checked })
                     }
-                    className="accent-purple-500 cursor-pointer"
+                    className="accent-[var(--app-accent)] cursor-pointer"
                   />
                 </label>
               ))}
@@ -410,7 +411,7 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
                   onChange={(e) =>
                     notificationService.updatePreferences({ desktopEnabled: e.target.checked })
                   }
-                  className="accent-purple-500 cursor-pointer"
+                  className="accent-[var(--app-accent)] cursor-pointer"
                 />
               ) : desktopPerm === 'default' ? (
                 <button
@@ -419,7 +420,7 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
                     const res = await notificationService.requestDesktopPermission()
                     setDesktopPerm(res)
                   }}
-                  className="px-2.5 py-1 rounded text-[11px] font-medium bg-purple-500/15 text-purple-400 hover:bg-purple-500/25 border border-purple-500/30 transition cursor-pointer"
+                  className="px-2.5 py-1 rounded text-[11px] font-medium bg-[var(--app-accent-soft)] text-[var(--app-accent)] hover:opacity-90 border border-[var(--app-accent)]/30 transition cursor-pointer"
                 >
                   Activar
                 </button>
@@ -459,8 +460,8 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
                     }}
                     className={`px-2.5 py-1 rounded text-[11px] font-medium border transition cursor-pointer disabled:opacity-50 ${
                       webPushStatus.subscribed
-                        ? 'border-rose-500/30 bg-rose-500/10 text-rose-400 hover:bg-rose-500/20'
-                        : 'border-purple-500/30 bg-purple-500/15 text-purple-400 hover:bg-purple-500/25'
+                        ? 'border-rose-500/30 bg-rose-500/10 text-rose-500 dark:text-rose-400 hover:bg-rose-500/20'
+                        : 'border-[var(--app-accent)]/30 bg-[var(--app-accent-soft)] text-[var(--app-accent)] hover:opacity-90'
                     }`}
                   >
                     {pushLoading
@@ -492,8 +493,9 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
             <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
               {(
                 [
-                  { id: 'collaboration', label: 'Menciones y Comentarios' },
-                  { id: 'reminders', label: 'Recordatorios de Tareas' },
+                  { id: 'collaboration', label: 'Menciones y comentarios' },
+                  { id: 'activity', label: 'Nuevas notas del equipo' },
+                  { id: 'reminders', label: 'Recordatorios de tareas' },
                   { id: 'sync', label: 'Sincronización' },
                   { id: 'system', label: 'Sistema' }
                 ] as const
@@ -508,14 +510,14 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
                         categories: { ...notifPrefs.categories, [cat.id]: !active }
                       })
                     }
-                    className={`px-2 py-1 rounded-md text-[10px] font-medium border transition cursor-pointer ${
+                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium border transition cursor-pointer ${
                       active
-                        ? 'border-purple-500/40 bg-purple-500/15 text-purple-400'
-                        : 'border-[var(--app-border)] bg-[var(--app-bg-primary)] text-[var(--app-text-muted)]'
+                        ? 'border-[var(--app-accent)]/40 bg-[var(--app-accent-soft)] text-[var(--app-accent)]'
+                        : 'border-[var(--app-border)] bg-[var(--app-bg-primary)] text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)]'
                     }`}
                   >
-                    {active ? '✓ ' : ''}
-                    {cat.label}
+                    {active && <Check size={11} weight="bold" />}
+                    <span>{cat.label}</span>
                   </button>
                 )
               })}

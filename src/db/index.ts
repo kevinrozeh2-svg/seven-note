@@ -395,7 +395,7 @@ export type NotificationType =
 export type NotificationSeverity = 'info' | 'success' | 'warning' | 'error'
 
 export interface NotificationActionPayload {
-  type: 'open_workspace' | 'open_settings' | 'retry_sync' | 'apply_update' | 'custom'
+  type: 'open_workspace' | 'open_settings' | 'open_notifications' | 'retry_sync' | 'apply_update' | 'custom'
   workspaceId?: string
   spaceId?: string
   nodeId?: string

@@ -85,8 +85,11 @@ import { NotificationCenter } from './components/notifications/NotificationCente
 import {
   notificationService,
   NOTIFICATION_ACTION_EVENT,
+  NOTIFICATION_CHANGED_EVENT,
+  partitionMemberNotifications,
   type NotificationPreferences
 } from './lib/notificationService'
+import { type NotificationActionPayload } from './db'
 import { useAppStore } from './store/useAppStore'
 
 // Lazy-loaded heavy components for instant initial load (code-splitting)
@@ -130,31 +133,38 @@ function MainApp() {
   const [notifPrefs, setNotifPrefs] = useState<NotificationPreferences>(() =>
     notificationService.getPreferences()
   )
+  const [notifTick, setNotifTick] = useState(0)
 
   useEffect(() => {
     return notificationService.subscribeToPreferences(setNotifPrefs)
   }, [])
 
+  useEffect(() => {
+    const bump = () => setNotifTick((t) => t + 1)
+    window.addEventListener(NOTIFICATION_CHANGED_EVENT, bump)
+    const interval = setInterval(bump, 60_000)
+    return () => {
+      window.removeEventListener(NOTIFICATION_CHANGED_EVENT, bump)
+      clearInterval(interval)
+    }
+  }, [])
+
   const unreadNotificationsCount =
     useLiveQuery(async () => {
-      const now = Date.now()
-      const memberId = currentMember?.id?.toLowerCase()
-      return db.notifications
-        .filter((n) => {
-          if (n.isArchived || n.isRead) return false
-          if (n.snoozedUntil && n.snoozedUntil > now) return false
-          if (
-            n.recipientId &&
-            n.recipientId !== 'all' &&
-            memberId &&
-            n.recipientId.toLowerCase() !== memberId
-          ) {
-            return false
-          }
-          return true
-        })
-        .count()
-    }, [currentMember?.id]) || 0
+      const [rows, wsRows] = await Promise.all([
+        db.notifications.orderBy('createdAt').reverse().toArray(),
+        db.workspaces.toArray()
+      ])
+      const wsMap = new Map(wsRows.map((w) => [w.id, w]))
+      const { active } = partitionMemberNotifications(
+        rows,
+        wsMap,
+        currentMember,
+        authUser?.id,
+        Date.now()
+      )
+      return active.filter((n) => !n.isRead).length
+    }, [currentMember, authUser?.id, notifTick]) || 0
 
   useEffect(() => {
     if (!authUser) return
@@ -520,11 +530,38 @@ function MainApp() {
 
   useEffect(() => {
     const handleNotificationAction = (e: Event) => {
-      const detail = (e as CustomEvent<{ payload?: { type?: string; workspaceId?: string; spaceId?: string } }>).detail
+      const detail = (e as CustomEvent<{ payload?: NotificationActionPayload }>).detail
       const payload = detail?.payload
       if (!payload) return
-      if (payload.type === 'open_workspace' && payload.workspaceId) {
-        void selectWorkspaceWithTab(payload.workspaceId, payload.spaceId)
+
+      if (payload.type === 'open_notifications') {
+        setNotificationCenterOpen(true)
+      } else if (payload.type === 'open_workspace' && payload.workspaceId) {
+        void (async () => {
+          const targetWs = await db.workspaces.get(payload.workspaceId!)
+          if (!targetWs || targetWs.isDeleted) {
+            toast.error('Esta nota fue eliminada o movida a la papelera')
+            return
+          }
+          await selectWorkspaceWithTab(
+            payload.workspaceId!,
+            payload.spaceId || targetWs.spaceId,
+            targetWs
+          )
+          if (payload.nodeId && targetWs.viewMode === 'doc') {
+            const canSyncMode = canUserEditWorkspace(targetWs, currentMember, authUser?.id)
+            await db.workspaces.update(targetWs.id, {
+              viewMode: 'canvas',
+              documentMode: 'Sin bordes',
+              ...(canSyncMode
+                ? { updatedAt: Date.now(), syncStatus: 'pending' as const }
+                : { syncStatus: targetWs.syncStatus || 'synced' })
+            })
+            if (canSyncMode) {
+              syncEngine.scheduleSync(1000)
+            }
+          }
+        })()
       } else if (payload.type === 'open_settings') {
         setIsSettingsOpen(true)
       } else if (payload.type === 'retry_sync') {
@@ -2687,7 +2724,8 @@ function MainApp() {
         isOpen={isNotificationCenterOpen}
         onClose={() => setNotificationCenterOpen(false)}
         onOpenSettings={() => setIsSettingsOpen(true)}
-        currentMemberId={currentMember?.id}
+        currentMember={currentMember}
+        authUserId={authUser?.id}
       />
 
       {/* 7. Pro Sonner Notification Toaster */}

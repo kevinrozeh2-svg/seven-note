@@ -227,10 +227,22 @@ export function ObsidianRibbon({
         {/* Centro de Notificaciones */}
         {onToggleNotifications && (
           <button
+            type="button"
             onClick={onToggleNotifications}
+            aria-label={
+              notificationsDnd
+                ? 'Notificaciones (No Molestar activo)'
+                : unreadNotificationsCount > 0
+                ? `Notificaciones (${unreadNotificationsCount} sin leer)`
+                : 'Notificaciones'
+            }
+            aria-expanded={notificationsOpen}
+            aria-controls="seven-notification-center"
             className={`relative w-8 h-8 rounded-md flex items-center justify-center transition cursor-pointer ${
               notificationsOpen
-                ? 'text-purple-400 bg-purple-500/15'
+                ? 'text-[var(--app-accent)] bg-[var(--app-accent-soft)]'
+                : notificationsDnd
+                ? 'text-amber-400 hover:bg-white/5'
                 : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5'
             }`}
             title={
@@ -246,10 +258,17 @@ export function ObsidianRibbon({
             ) : (
               <Bell size={17} weight={notificationsOpen ? 'fill' : 'regular'} />
             )}
-            {unreadNotificationsCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-1 rounded-full bg-purple-500 text-white text-[9px] font-bold flex items-center justify-center leading-none shadow-sm">
-                {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
-              </span>
+            {notificationsDnd ? (
+              <span
+                className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400 ring-2 ring-[var(--obsidian-ribbon-bg,#141414)]"
+                aria-hidden="true"
+              />
+            ) : (
+              unreadNotificationsCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-1 rounded-full bg-[var(--app-accent)] text-white text-[9px] font-bold tabular-nums flex items-center justify-center leading-none shadow-sm">
+                  {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
+                </span>
+              )
             )}
           </button>
         )}

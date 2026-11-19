@@ -93,6 +93,7 @@ const SHORTCUT_CATEGORIES: ShortcutCategory[] = [
       { keys: ['Ctrl', 'K'], description: 'Búsqueda global y Paleta de Comandos', tag: 'Navegación' },
       { keys: ['Ctrl', 'F'], description: 'Buscar texto dentro de la página', tag: 'Búsqueda' },
       { keys: ['Alt', 'N'], description: 'Captura Rápida (Quick Scratchpad)', tag: 'Productividad' },
+      { keys: ['Ctrl', 'Shift', 'N'], description: 'Abrir o cerrar Centro de Notificaciones', tag: 'Navegación' },
       { keys: ['Alt', 'A'], description: 'Asistente de IA inteligente (BYOK)', tag: 'IA' },
       { keys: ['Ctrl', '\\'], description: 'Mostrar u ocultar barra lateral', tag: 'Navegación' },
       { keys: ['Ctrl', '+'], description: 'Aumentar tamaño y escala de interfaz', tag: 'Interfaz' },

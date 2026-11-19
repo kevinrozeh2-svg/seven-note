@@ -463,6 +463,41 @@ export function Sidebar({
     color: '#1e96eb'
   }
 
+  // Per-user pinned spaces (stored only locally for the active user)
+  const pinnedSpacesUserKey = authUser?.id || activeMember?.id || 'local'
+  const pinnedSpacesStorageKey = `seven_note_pinned_spaces_${pinnedSpacesUserKey}`
+  const [pinnedSpaceOverrides, setPinnedSpaceOverrides] = useState<Record<string, string[]>>({})
+  const readPinnedSpacesFromStorage = (storageKey: string): string[] => {
+    try {
+      const raw = localStorage.getItem(storageKey)
+      if (!raw) return []
+      const parsed = JSON.parse(raw)
+      return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : []
+    } catch {
+      return []
+    }
+  }
+  const pinnedSpaceIds =
+    pinnedSpaceOverrides[pinnedSpacesStorageKey] ?? readPinnedSpacesFromStorage(pinnedSpacesStorageKey)
+
+  const togglePinSpace = (spaceId: string) => {
+    const currentIds =
+      pinnedSpaceOverrides[pinnedSpacesStorageKey] ?? readPinnedSpacesFromStorage(pinnedSpacesStorageKey)
+    const isPinned = currentIds.includes(spaceId)
+    const nextIds = isPinned
+      ? currentIds.filter((id) => id !== spaceId)
+      : [...currentIds, spaceId]
+    try {
+      localStorage.setItem(pinnedSpacesStorageKey, JSON.stringify(nextIds))
+    } catch {}
+    setPinnedSpaceOverrides((prev) => ({ ...prev, [pinnedSpacesStorageKey]: nextIds }))
+    toast.success(isPinned ? 'Espacio desanclado' : 'Espacio anclado solo para ti')
+  }
+
+  const pinnedSpaces = pinnedSpaceIds
+    .map((id) => visibleSpaces.find((s) => s.id === id))
+    .filter((s): s is SpaceItem => Boolean(s))
+
   const isCurrentSpacePrivate = Boolean(currentSpace.isPrivate)
 
   // Drag and Drop state & refs (direct grab & move)
@@ -2604,10 +2639,10 @@ export function Sidebar({
               }}
             />
             <div
-              className="absolute left-3 right-3 top-10 z-50 bg-[#252525] dark:bg-[#202020] text-neutral-200 border border-black/20 dark:border-white/10 rounded-lg shadow-xl p-1 animate-in fade-in zoom-in-95 duration-100 flex flex-col max-h-[60vh] overflow-y-auto custom-scrollbar"
+              className="absolute left-3 right-3 top-10 z-50 bg-[#252525] dark:bg-[#202020] text-neutral-200 border border-black/20 dark:border-white/10 rounded-lg shadow-xl p-1 animate-in fade-in zoom-in-95 duration-100 flex flex-col max-h-[calc(100vh-5rem)] overflow-y-auto custom-scrollbar"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="space-y-0.5 max-h-48 overflow-y-auto custom-scrollbar">
+              <div className="space-y-0.5">
                 {visibleSpaces.map((sp) => {
                   const isSelected = sp.id === currentSpace.id
                   const isEditingThis = editingSpaceId === sp.id
@@ -2689,6 +2724,21 @@ export function Sidebar({
 
                       <div className="flex items-center gap-1.5 shrink-0 ml-2">
                         {isSelected && <Check size={14} weight="bold" className="text-white shrink-0" />}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            togglePinSpace(sp.id)
+                          }}
+                          className={`p-1 rounded hover:bg-white/10 transition ${
+                            pinnedSpaceIds.includes(sp.id)
+                              ? 'opacity-100 text-blue-400 hover:text-blue-300'
+                              : 'opacity-100 md:opacity-0 md:group-hover:opacity-100 text-neutral-400 hover:text-white'
+                          }`}
+                          title={pinnedSpaceIds.includes(sp.id) ? 'Desanclar espacio' : 'Anclar espacio (solo para ti)'}
+                        >
+                          <PushPin size={12} weight={pinnedSpaceIds.includes(sp.id) ? 'fill' : 'regular'} />
+                        </button>
                         {canUserManageSpace(sp, activeMember, authUser?.id) && (
                           <button
                             type="button"
@@ -2753,6 +2803,67 @@ export function Sidebar({
           </>
         )}
       </div>
+
+      {/* 1.5 Pinned Spaces (Per-user quick-switch icon tiles, Dia style) */}
+      {pinnedSpaces.length > 0 && (
+        <div
+          className={`px-3 pt-1.5 pb-1 grid gap-1.5 shrink-0 ${
+            pinnedSpaces.length <= 3 ? 'grid-cols-3' : 'grid-cols-4'
+          }`}
+        >
+          {pinnedSpaces.map((sp) => {
+            const isSelected = sp.id === currentSpace.id
+            const hasUnread = !isSelected && isItemUnread(sp, 'space', activeMember, authUser?.id)
+            return (
+              <div key={`pinned-space-${sp.id}`} className="relative group">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (onSelectSpace) onSelectSpace(sp.id)
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    togglePinSpace(sp.id)
+                  }}
+                  title={`${sp.name} (clic derecho para desanclar)`}
+                  aria-label={`Cambiar al espacio ${sp.name}`}
+                  className={`w-full h-10 rounded-xl flex items-center justify-center border transition cursor-pointer ${
+                    isSelected
+                      ? 'bg-white dark:bg-[#2a2a2e] border-black/15 dark:border-white/20 shadow-sm ring-1 ring-black/5 dark:ring-white/10'
+                      : 'bg-black/[0.04] dark:bg-white/[0.06] border-black/[0.06] dark:border-white/[0.08] hover:bg-black/[0.07] dark:hover:bg-white/[0.11] hover:border-black/10 dark:hover:border-white/15'
+                  }`}
+                >
+                  {sp.icon && isEmoji(sp.icon) ? (
+                    <AppleEmoji emoji={sp.icon} size={20} className="shrink-0" />
+                  ) : sp.icon ? (
+                    <span className="text-[17px] leading-none select-none">{sp.icon}</span>
+                  ) : (
+                    <AppleEmoji emoji="💼" size={20} className="shrink-0" />
+                  )}
+                </button>
+                {hasUnread && (
+                  <span className="absolute top-1.5 right-1.5 pointer-events-none">
+                    <NewDot title="Novedades en este espacio" />
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    togglePinSpace(sp.id)
+                  }}
+                  title="Desanclar espacio"
+                  aria-label={`Desanclar ${sp.name}`}
+                  className="opacity-0 group-hover:opacity-100 focus:opacity-100 absolute -top-1 -right-1 w-4 h-4 rounded-full bg-neutral-800 dark:bg-neutral-200 text-white dark:text-neutral-900 flex items-center justify-center shadow-sm transition cursor-pointer"
+                >
+                  <X size={9} weight="bold" />
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* 2. Obsidian Action Toolbar (agrupado en el medio justo debajo de los espacios) */}
       <div className="px-3 py-1 flex items-center justify-center border-b border-black/[0.04] dark:border-white/[0.04] shrink-0 mb-1 relative">
@@ -2950,21 +3061,24 @@ export function Sidebar({
         <div>
           <div
             onClick={() => setFavoritesOpen(!favoritesOpen)}
-            className="flex items-center justify-between px-2.5 py-1 text-[12px] font-medium text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 cursor-pointer transition group"
+            className="flex items-center justify-between px-2.5 py-1.5 pb-2 mb-1.5 border-b border-black/[0.06] dark:border-white/[0.08] text-[13px] font-semibold tracking-tight text-neutral-800 dark:text-neutral-200 hover:text-neutral-950 dark:hover:text-white cursor-pointer transition group"
           >
-            <div className="flex items-center gap-1.5">
-              {favoritesOpen ? (
-                <CaretDown size={13} className="text-neutral-400 transition-transform" />
-              ) : (
-                <CaretRight size={13} className="text-neutral-400 transition-transform" />
-              )}
+            <div className="flex items-center gap-2">
+              <Star size={15} weight="duotone" className="text-neutral-500 dark:text-neutral-400 shrink-0" />
               <span>Favoritos</span>
             </div>
-            {favorites.length > 0 && (
-              <span className="text-[10px] font-mono text-neutral-400">
-                {favorites.length}
-              </span>
-            )}
+            <div className="flex items-center gap-1.5">
+              {favorites.length > 0 && (
+                <span className="text-[10px] font-mono font-normal text-neutral-400">
+                  {favorites.length}
+                </span>
+              )}
+              {favoritesOpen ? (
+                <CaretDown size={12} className="text-neutral-400 opacity-60 group-hover:opacity-100 transition" />
+              ) : (
+                <CaretRight size={12} className="text-neutral-400 opacity-60 group-hover:opacity-100 transition" />
+              )}
+            </div>
           </div>
 
           {favoritesOpen && (
@@ -3032,20 +3146,18 @@ export function Sidebar({
         <div>
           <div
             onClick={() => setPrivateNotesOpen(!privateNotesOpen)}
-            className="flex items-center justify-between px-2.5 py-1 text-[12px] font-medium text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 cursor-pointer transition group"
+            className="flex items-center justify-between px-2.5 py-1.5 pb-2 mb-1.5 border-b border-black/[0.06] dark:border-white/[0.08] text-[13px] font-semibold tracking-tight text-neutral-800 dark:text-neutral-200 hover:text-neutral-950 dark:hover:text-white cursor-pointer transition group"
           >
-            <div className="flex items-center gap-1.5">
-              {privateNotesOpen ? (
-                <CaretDown size={13} className="text-neutral-400 transition-transform" />
-              ) : (
-                <CaretRight size={13} className="text-neutral-400 transition-transform" />
-              )}
-              <span>Mis Notas Privadas</span>
+            <div className="flex items-center gap-2">
+              <Lock size={15} weight="duotone" className="text-neutral-500 dark:text-neutral-400 shrink-0" />
+              <span>Privado</span>
             </div>
-            <div className="flex items-center gap-1">
-              <span className="text-[10px] font-mono text-neutral-400">
-                {privateDocs.length}
-              </span>
+            <div className="flex items-center gap-1.5">
+              {privateDocs.length > 0 && (
+                <span className="text-[10px] font-mono font-normal text-neutral-400">
+                  {privateDocs.length}
+                </span>
+              )}
               <button
                 onClick={(e) => {
                   e.stopPropagation()
@@ -3056,6 +3168,11 @@ export function Sidebar({
               >
                 <Plus size={13} />
               </button>
+              {privateNotesOpen ? (
+                <CaretDown size={12} className="text-neutral-400 opacity-60 group-hover:opacity-100 transition" />
+              ) : (
+                <CaretRight size={12} className="text-neutral-400 opacity-60 group-hover:opacity-100 transition" />
+              )}
             </div>
           </div>
 
@@ -3174,20 +3291,16 @@ export function Sidebar({
             onClick={() => setPagesOpen(!pagesOpen)}
             onDragOver={handleRootHeaderDragOver}
             onDrop={handleRootHeaderDrop}
-            className={`flex items-center justify-between px-2.5 py-1 text-[12px] font-medium text-neutral-400 dark:text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300 cursor-pointer transition group rounded-lg ${
+            className={`flex items-center justify-between px-2.5 py-1.5 pb-2 mb-1.5 border-b border-black/[0.06] dark:border-white/[0.08] text-[13px] font-semibold tracking-tight text-neutral-800 dark:text-neutral-200 hover:text-neutral-950 dark:hover:text-white cursor-pointer transition group ${
               dropTarget?.type === 'root'
-                ? 'bg-blue-500/15 dark:bg-blue-500/25 ring-1 ring-blue-500/50 text-blue-600 dark:text-blue-400'
+                ? 'bg-blue-500/15 dark:bg-blue-500/25 ring-1 ring-blue-500/50 text-blue-600 dark:text-blue-400 rounded-lg border-transparent'
                 : ''
             }`}
-            title="Arrastra una nota aquí para sacarla a la raíz"
+            title="Documentos de equipo (arrastra una nota aquí para sacarla a la raíz)"
           >
-            <div className="flex items-center gap-1.5">
-              {pagesOpen ? (
-                <CaretDown size={13} className="text-neutral-400 transition-transform" />
-              ) : (
-                <CaretRight size={13} className="text-neutral-400 transition-transform" />
-              )}
-              <span>Documentos (Equipo)</span>
+            <div className="flex items-center gap-2">
+              <NotePencil size={15} weight="duotone" className="text-neutral-500 dark:text-neutral-400 shrink-0" />
+              <span>Documentos</span>
               {dropTarget?.type === 'root' && (
                 <span className="text-[9px] bg-blue-500 text-white px-1.5 py-0.2 rounded-full font-medium ml-1">
                   Mover a raíz
@@ -3216,6 +3329,11 @@ export function Sidebar({
               >
                 <Plus size={13} />
               </button>
+              {pagesOpen ? (
+                <CaretDown size={12} className="text-neutral-400 opacity-60 group-hover:opacity-100 transition ml-0.5" />
+              ) : (
+                <CaretRight size={12} className="text-neutral-400 opacity-60 group-hover:opacity-100 transition ml-0.5" />
+              )}
             </div>
           </div>
 
