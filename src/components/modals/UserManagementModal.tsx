@@ -20,6 +20,7 @@ import {
   type TeamInvitation
 } from '../../lib/supabase'
 import { type UserProfile, type UserRole, type UserStatus } from '../../lib/teamAuth'
+import { UserAvatar } from '../ui/UserAvatar'
 import { toast } from 'sonner'
 
 interface UserManagementModalProps {
@@ -279,12 +280,14 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
                         }`}
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <div
-                            className="w-8 h-8 rounded-md flex items-center justify-center text-white font-semibold text-xs shrink-0"
-                            style={{ backgroundColor: p.color || '#7c3aed' }}
-                          >
-                            {p.initial || p.fullName.charAt(0).toUpperCase()}
-                          </div>
+                          <UserAvatar
+                            name={p.fullName || p.email || 'Usuario'}
+                            avatarUrl={p.avatarUrl}
+                            color={p.color || '#7c3aed'}
+                            size="md"
+                            shape="rounded"
+                            className="w-8 h-8"
+                          />
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
                               <span className="font-medium truncate max-w-[170px] text-[var(--app-text-primary)]">

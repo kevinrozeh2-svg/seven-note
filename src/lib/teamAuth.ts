@@ -268,14 +268,21 @@ export function mapSupabaseUserToMember(user: any, profile?: Partial<UserProfile
   const role: UserRole = isAuthorized ? 'admin' : (profile?.role || 'member')
   const status: UserStatus = profile?.status || 'active'
 
-  const rawAvatar =
-    profile?.avatarUrl ||
-    user.user_metadata?.avatar_url ||
-    user.user_metadata?.picture ||
-    user.user_metadata?.avatar ||
-    (user.identities && user.identities[0]?.identity_data?.avatar_url) ||
-    (user.identities && user.identities[0]?.identity_data?.picture) ||
-    (email ? `https://unavatar.io/${encodeURIComponent(email)}?fallback=false` : undefined)
+  // Si el usuario tiene un perfil guardado en BD, respetarlo (incluyendo '' cuando eligió quitar su foto)
+  const hasExplicitProfileAvatar = profile !== undefined && profile !== null && typeof profile.avatarUrl === 'string'
+  const profileAvatarTrimmed = hasExplicitProfileAvatar ? profile.avatarUrl!.trim() : ''
+  const isLegacyUnavatar = /^https?:\/\/unavatar\.io\//i.test(profileAvatarTrimmed)
+
+  const rawAvatar = hasExplicitProfileAvatar
+    ? (profileAvatarTrimmed && !isLegacyUnavatar ? profileAvatarTrimmed : undefined)
+    : (
+        user.user_metadata?.avatar_url ||
+        user.user_metadata?.picture ||
+        user.user_metadata?.avatar ||
+        (user.identities && user.identities[0]?.identity_data?.avatar_url) ||
+        (user.identities && user.identities[0]?.identity_data?.picture) ||
+        undefined
+      )
 
   const matchedPreset = TEAM_MEMBERS.find((tm) => tm.email && tm.email.toLowerCase() === email.toLowerCase())
   const fallbackId = matchedPreset ? matchedPreset.id : (email.includes('maikol') || email === 'badmaik60@gmail.com' ? 'maikol' : 'kevin')

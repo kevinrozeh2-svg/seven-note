@@ -239,31 +239,82 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
 
 export async function updateUserProfile(
   userId: string,
-  updates: { fullName?: string; color?: string; avatarUrl?: string }
+  updates: { fullName?: string; color?: string; avatarUrl?: string | null; email?: string }
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = getSupabaseClient()
   if (!supabase || !userId) return { success: false, error: 'No conectado' }
 
   try {
-    const payload: any = {
-      updated_at: Date.now()
+    const now = Date.now()
+    const payload: Record<string, any> = {
+      updated_at: now
     }
     if (updates.fullName !== undefined) payload.full_name = updates.fullName
     if (updates.color !== undefined) payload.color = updates.color
-    if (updates.avatarUrl !== undefined) payload.avatar_url = updates.avatarUrl
+    if (updates.avatarUrl !== undefined) payload.avatar_url = updates.avatarUrl ?? ''
 
-    const { error } = await supabase
+    // Verificar que realmente se actualizó una fila (evita fallos silenciosos cuando falta la fila en user_profiles)
+    const { data: updatedRows, error: updateError } = await supabase
       .from('user_profiles')
       .update(payload)
       .eq('id', userId)
+      .select('id')
 
-    if (error) throw error
+    if (updateError) throw updateError
 
-    // Also update Supabase auth metadata if fullName changed
+    if (!updatedRows || updatedRows.length === 0) {
+      const authUser = await getAuthUser()
+      const resolvedEmail = (updates.email || authUser?.email || '').trim().toLowerCase()
+      if (!resolvedEmail) {
+        return {
+          success: false,
+          error: 'No se encontró tu registro de perfil en Supabase. Cierra sesión y vuelve a entrar.'
+        }
+      }
+
+      const { data: upsertedRows, error: upsertError } = await supabase
+        .from('user_profiles')
+        .upsert(
+          {
+            id: userId,
+            email: resolvedEmail,
+            full_name: updates.fullName ?? authUser?.user_metadata?.full_name ?? resolvedEmail.split('@')[0],
+            color: updates.color ?? '#2563eb',
+            avatar_url: updates.avatarUrl ?? '',
+            updated_at: now
+          },
+          { onConflict: 'id' }
+        )
+        .select('id')
+
+      if (upsertError) throw upsertError
+      if (!upsertedRows || upsertedRows.length === 0) {
+        return {
+          success: false,
+          error: 'No se pudo guardar el perfil por permisos de base de datos (RLS).'
+        }
+      }
+    }
+
+    // Sincronizar metadatos ligeros en Supabase Auth (nunca guardar data: URIs grandes en el JWT)
+    const authData: Record<string, any> = {}
     if (updates.fullName !== undefined) {
-      await supabase.auth.updateUser({
-        data: { full_name: updates.fullName }
-      })
+      authData.full_name = updates.fullName
+    }
+    if (updates.avatarUrl !== undefined) {
+      const url = (updates.avatarUrl || '').trim()
+      if (!url) {
+        authData.avatar_url = null
+      } else if (/^https?:\/\//i.test(url) && url.length <= 512) {
+        authData.avatar_url = url
+      }
+    }
+
+    if (Object.keys(authData).length > 0) {
+      const { error: authErr } = await supabase.auth.updateUser({ data: authData })
+      if (authErr) {
+        console.warn('No se pudieron sincronizar metadatos de auth (perfil guardado en BD):', authErr)
+      }
     }
 
     return { success: true }

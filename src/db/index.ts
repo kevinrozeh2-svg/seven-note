@@ -112,6 +112,30 @@ export function normalizeFolderPath(path?: string | null): string | null {
   return segments.length > 0 ? segments.join('/') : null
 }
 
+export function normalizeFolderColorsMap(raw: unknown): Record<string, number> | undefined {
+  let parsed = raw
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed)
+    } catch {
+      return undefined
+    }
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return undefined
+  }
+  const result: Record<string, number> = {}
+  for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+    const normalizedKey = normalizeFolderPath(key)
+    if (!normalizedKey) continue
+    const num = typeof value === 'number' ? value : Number(value)
+    if (Number.isInteger(num) && num >= 0) {
+      result[normalizedKey] = num
+    }
+  }
+  return result
+}
+
 export interface SpaceItem {
   id: string
   name: string
@@ -125,6 +149,7 @@ export interface SpaceItem {
   adminOnly?: boolean
   sortOrder?: number
   folderOrder?: string[]
+  folderColors?: Record<string, number>
   ownerMember?: string
   ownerName?: string
   userId?: string
@@ -1233,6 +1258,7 @@ export async function deleteSpace(id: string): Promise<void> {
   try {
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem(`seven_note_folder_order_${id}`)
+      localStorage.removeItem(`seven_note_folder_colors_${id}`)
     }
   } catch {
     // ignore
@@ -1409,7 +1435,12 @@ export async function clearLocalUserData(): Promise<void> {
       const keysToRemove: string[] = []
       for (let i = 0; i < localStorage.length; i++) {
         const key = localStorage.key(i)
-        if (key && (key.startsWith('seven_note_folder_order_') || key.startsWith('seven_note_viewed_'))) {
+        if (
+          key &&
+          (key.startsWith('seven_note_folder_order_') ||
+            key.startsWith('seven_note_folder_colors_') ||
+            key.startsWith('seven_note_viewed_'))
+        ) {
           keysToRemove.push(key)
         }
       }

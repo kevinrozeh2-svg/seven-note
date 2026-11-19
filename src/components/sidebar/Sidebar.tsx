@@ -45,6 +45,7 @@ import {
   DEFAULT_SPACE_ID,
   updateSpace,
   normalizeFolderPath,
+  normalizeFolderColorsMap,
   getSafeTimestamp
 } from '../../db'
 import { isItemUnread, NewBadge, NewDot, useUnreadTrigger } from '../../lib/unreadTracker'
@@ -56,8 +57,7 @@ import {
   PastelFileIcon,
   FOLDER_PALETTE,
   folderColorIndex,
-  setFolderColor,
-  useFolderColors
+  getLegacyFolderColors
 } from '../ui/PastelIcons'
 import {
   getCurrentMember,
@@ -299,7 +299,7 @@ export function Sidebar({
   onOpenTemplates: _onOpenTemplates,
   onOpenShortcuts: _onOpenShortcuts,
   onOpenKnowledgeGraph: _onOpenKnowledgeGraph,
-  syncStatus: _syncStatus,
+  syncStatus,
   isLoading = false,
   darkMode: _darkMode,
   onToggleDarkMode: _onToggleDarkMode,
@@ -311,7 +311,6 @@ export function Sidebar({
   const [privateNotesOpen, setPrivateNotesOpen] = useState(true)
   const [pagesOpen, setPagesOpen] = useState(true)
   const [folderOpenMap, setFolderOpenMap] = useState<Record<string, boolean>>({ 'First Folder': true })
-  const folderColors = useFolderColors()
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
   const [creatingSubfolderParent, setCreatingSubfolderParent] = useState<string | null>(null)
@@ -579,6 +578,144 @@ export function Sidebar({
       }
     },
     [currentSpace.id, folderOrder, visibleSpaces, activeMember, authUser?.id]
+  )
+
+  // Persisted folder colors for current space (synced via db.spaces + Supabase)
+  const spaceFolderColors = (currentSpace as SpaceItem).folderColors
+  const [localFallbackFolderColors, setLocalFallbackFolderColors] = useState<Record<string, number>>(() => {
+    try {
+      const saved = localStorage.getItem(`seven_note_folder_colors_${currentSpace.id}`)
+      if (saved) {
+        return normalizeFolderColorsMap(saved) || {}
+      }
+      return normalizeFolderColorsMap(getLegacyFolderColors()) || {}
+    } catch {
+      return {}
+    }
+  })
+
+  const folderColors = useMemo(() => {
+    if (spaceFolderColors && typeof spaceFolderColors === 'object') {
+      return normalizeFolderColorsMap(spaceFolderColors) || {}
+    }
+    return localFallbackFolderColors
+  }, [spaceFolderColors, localFallbackFolderColors])
+
+  useEffect(() => {
+    if (spaceFolderColors && typeof spaceFolderColors === 'object') {
+      const normalized = normalizeFolderColorsMap(spaceFolderColors) || {}
+      try {
+        localStorage.setItem(`seven_note_folder_colors_${currentSpace.id}`, JSON.stringify(normalized))
+      } catch {}
+      return
+    }
+
+    try {
+      const saved = localStorage.getItem(`seven_note_folder_colors_${currentSpace.id}`)
+      if (saved) {
+        setLocalFallbackFolderColors(normalizeFolderColorsMap(saved) || {})
+      } else {
+        setLocalFallbackFolderColors(normalizeFolderColorsMap(getLegacyFolderColors()) || {})
+      }
+    } catch {
+      setLocalFallbackFolderColors({})
+    }
+  }, [currentSpace.id, spaceFolderColors])
+
+  const migratedLegacyColorsRef = useRef<Set<string>>(new Set())
+
+  // Migrate pre-existing local-only folder colors (from PC localStorage) into synced db.spaces.folderColors
+  useEffect(() => {
+    if (syncStatus?.state === 'syncing') return
+    const legacyColors = normalizeFolderColorsMap(getLegacyFolderColors())
+    if (!legacyColors || Object.keys(legacyColors).length === 0) return
+
+    const spacesToMigrate = visibleSpaces.filter(
+      (sp) =>
+        sp.folderColors === undefined &&
+        !migratedLegacyColorsRef.current.has(sp.id) &&
+        canUserManageSpace(sp, activeMember, authUser?.id)
+    )
+    if (spacesToMigrate.length === 0) return
+
+    let didUpdate = false
+    const run = async () => {
+      for (const sp of spacesToMigrate) {
+        const spaceFolders = new Set<string>()
+        if (Array.isArray(sp.folderOrder)) {
+          for (const f of sp.folderOrder) {
+            const norm = normalizeFolderPath(f)
+            if (norm) {
+              const parts = norm.split('/')
+              for (let i = 1; i <= parts.length; i++) {
+                spaceFolders.add(parts.slice(0, i).join('/'))
+              }
+            }
+          }
+        }
+        for (const w of workspaces) {
+          if ((w.spaceId || DEFAULT_SPACE_ID) !== sp.id || w.isDeleted) continue
+          const norm = normalizeFolderPath(w.folder)
+          if (norm) {
+            const parts = norm.split('/')
+            for (let i = 1; i <= parts.length; i++) {
+              spaceFolders.add(parts.slice(0, i).join('/'))
+            }
+          }
+        }
+
+        const matched: Record<string, number> = {}
+        for (const folderPath of spaceFolders) {
+          if (legacyColors[folderPath] !== undefined) {
+            matched[folderPath] = legacyColors[folderPath]
+          }
+        }
+
+        migratedLegacyColorsRef.current.add(sp.id)
+        if (Object.keys(matched).length > 0) {
+          try {
+            localStorage.setItem(`seven_note_folder_colors_${sp.id}`, JSON.stringify(matched))
+          } catch {}
+          await db.spaces
+            .update(sp.id, {
+              folderColors: matched,
+              updatedAt: getSafeTimestamp(sp.updatedAt),
+              syncStatus: 'pending'
+            })
+            .catch(() => {})
+          didUpdate = true
+        }
+      }
+      if (didUpdate) {
+        syncEngine.scheduleSync(150)
+      }
+    }
+    void run()
+  }, [visibleSpaces, workspaces, activeMember, authUser?.id, syncStatus?.state, syncStatus?.lastSyncTime])
+
+  const persistFolderColors = useCallback(
+    (nextOrUpdater: Record<string, number> | ((prev: Record<string, number>) => Record<string, number>)) => {
+      const rawNext = typeof nextOrUpdater === 'function' ? nextOrUpdater(folderColors) : nextOrUpdater
+      const next = normalizeFolderColorsMap(rawNext) || {}
+      setLocalFallbackFolderColors(next)
+      try {
+        localStorage.setItem(`seven_note_folder_colors_${currentSpace.id}`, JSON.stringify(next))
+      } catch (err) {
+        console.warn('Error saving folder colors', err)
+      }
+      const spObj = visibleSpaces.find((s) => s.id === currentSpace.id)
+      if (spObj && canUserManageSpace(spObj, activeMember, authUser?.id)) {
+        db.spaces
+          .update(currentSpace.id, {
+            folderColors: next,
+            updatedAt: getSafeTimestamp(spObj.updatedAt),
+            syncStatus: 'pending'
+          })
+          .then(() => syncEngine.scheduleSync(50))
+          .catch((err) => console.warn('Error syncing folder colors', err))
+      }
+    },
+    [currentSpace.id, folderColors, visibleSpaces, activeMember, authUser?.id]
   )
 
 
@@ -1224,6 +1361,26 @@ export function Sidebar({
       }
       return next
     })
+
+    // Update folderColors in state, localStorage, and synced space
+    const hasAffectedColors = Object.keys(folderColors).some(
+      (k) => k === oldPath || k.startsWith(oldPath + '/')
+    )
+    if (hasAffectedColors) {
+      persistFolderColors((prev) => {
+        const next: Record<string, number> = {}
+        for (const [key, val] of Object.entries(prev)) {
+          if (key === oldPath) {
+            next[newPath] = val
+          } else if (key.startsWith(oldPath + '/')) {
+            next[`${newPath}${key.slice(oldPath.length)}`] = val
+          } else {
+            next[key] = val
+          }
+        }
+        return next
+      })
+    }
 
     // Update folderOpenMap
     setFolderOpenMap((prev) => {
@@ -2051,9 +2208,28 @@ export function Sidebar({
         await db.workspaces.bulkUpdate(updates)
       }
 
-      // Preservar color personalizado de carpeta si la ruta cambió
-      if (folderColors[cleanPath] !== undefined && destRootPath !== cleanPath) {
-        setFolderColor(destRootPath, folderColors[cleanPath])
+      // Preservar colores personalizados de carpeta (y subcarpetas) al mover de espacio
+      const movedColors: Record<string, number> = {}
+      const hasMovedColors = Object.keys(folderColors).some(
+        (k) => k === cleanPath || k.startsWith(cleanPath + '/')
+      )
+      if (hasMovedColors) {
+        for (const [k, v] of Object.entries(folderColors)) {
+          if (k === cleanPath) {
+            movedColors[destRootPath] = v
+          } else if (k.startsWith(cleanPath + '/')) {
+            movedColors[`${destRootPath}${k.slice(cleanPath.length)}`] = v
+          }
+        }
+        persistFolderColors((prev) => {
+          const next: Record<string, number> = {}
+          for (const [k, v] of Object.entries(prev)) {
+            if (k !== cleanPath && !k.startsWith(cleanPath + '/')) {
+              next[k] = v
+            }
+          }
+          return next
+        })
       }
 
       // Actualizar folderOrder del espacio origen
@@ -2061,7 +2237,7 @@ export function Sidebar({
         prev.filter((f) => f !== cleanPath && !f.startsWith(cleanPath + '/'))
       )
 
-      // Actualizar folderOrder del espacio destino
+      // Actualizar folderOrder y folderColors del espacio destino
       const sourceSubfoldersInOrder = folderOrder
         .filter((f) => f === cleanPath || f.startsWith(cleanPath + '/'))
         .map((f) => (f === cleanPath ? destRootPath : `${destRootPath}${f.slice(cleanPath.length)}`))
@@ -2072,13 +2248,20 @@ export function Sidebar({
         : []
       const nextTargetOrder = Array.from(new Set([...prevTargetOrder, ...destNewPaths]))
 
+      const prevTargetColors = normalizeFolderColorsMap(targetSpace.folderColors) || {}
+      const nextTargetColors = hasMovedColors ? { ...prevTargetColors, ...movedColors } : undefined
+
       try {
         localStorage.setItem(`seven_note_folder_order_${targetSpaceId}`, JSON.stringify(nextTargetOrder))
+        if (nextTargetColors) {
+          localStorage.setItem(`seven_note_folder_colors_${targetSpaceId}`, JSON.stringify(nextTargetColors))
+        }
       } catch {}
 
       if (canUserManageSpace(targetSpace, activeMember, authUser?.id)) {
         await db.spaces.update(targetSpaceId, {
           folderOrder: nextTargetOrder,
+          ...(nextTargetColors ? { folderColors: nextTargetColors } : {}),
           updatedAt: getSafeTimestamp(targetSpace.updatedAt),
           syncStatus: 'pending'
         })
@@ -2394,7 +2577,12 @@ export function Sidebar({
               weight="bold"
               className={`text-neutral-400 shrink-0 transition-transform duration-200 ${isFolderOpen ? 'rotate-90' : ''}`}
             />
-            <PastelFolderIcon name={folderPath} size={19} open={isFolderOpen} />
+            <PastelFolderIcon
+              name={folderPath}
+              colorIndex={folderColors[folderPath]}
+              size={19}
+              open={isFolderOpen}
+            />
             <span className="truncate text-[13px] font-medium text-neutral-800 dark:text-neutral-200 select-none pointer-events-none">{leafName}</span>
             {folderDocs.some((d) => isItemUnread(d, 'workspace', activeMember, authUser?.id)) && !isFolderOpen && (
               <NewBadge className="ml-1" />
@@ -3621,14 +3809,16 @@ export function Sidebar({
                 <div className="text-[10px] text-white/40 mb-1.5">Color de carpeta</div>
                 <div className="grid grid-cols-9 gap-1">
                   {FOLDER_PALETTE.map((c, i) => {
-                    const path = activeItemMenu.path || ''
+                    const path = normalizeFolderPath(activeItemMenu.path) || activeItemMenu.path || ''
                     const current = folderColors[path] ?? folderColorIndex(path)
                     return (
                       <button
                         key={c.label}
                         title={c.label}
                         onClick={() => {
-                          if (activeItemMenu.path) setFolderColor(activeItemMenu.path, i)
+                          if (path) {
+                            persistFolderColors((prev) => ({ ...prev, [path]: i }))
+                          }
                         }}
                         className={`w-4 h-4 rounded-full border transition hover:scale-110 cursor-pointer ${
                           current === i ? 'ring-2 ring-white/80 ring-offset-1 ring-offset-[#252525]' : ''

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, Shield, LogOut, Key, User, Users, Lock } from 'lucide-react'
 import { type TeamMember, isUserAdmin } from '../../lib/teamAuth'
+import { UserAvatar } from '../ui/UserAvatar'
 
 interface TeamMemberSwitcherProps {
   currentMember: TeamMember
@@ -54,22 +55,11 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
   const displayEmail = currentMember.email || authUser?.email
   const isAdmin = isUserAdmin(currentMember)
 
-  const [imgError, setImgError] = useState(false)
-
-  // Reset img error if user changes
-  useEffect(() => {
-    setImgError(false)
-  }, [displayEmail, currentMember.avatarUrl])
-
-  const effectiveAvatar = !imgError ? (
-    currentMember.avatarUrl ||
-    authUser?.user_metadata?.avatar_url ||
-    authUser?.user_metadata?.picture ||
-    authUser?.user_metadata?.avatar ||
-    (authUser?.identities && authUser.identities[0]?.identity_data?.avatar_url) ||
-    (authUser?.identities && authUser.identities[0]?.identity_data?.picture) ||
-    (displayEmail ? `https://unavatar.io/${encodeURIComponent(displayEmail)}?fallback=false` : undefined)
-  ) : undefined
+  // Respetar el avatar guardado en currentMember (evitando sobrescribir con unavatar.io o metadatos antiguos)
+  const effectiveAvatar =
+    currentMember.avatarUrl && !/^https?:\/\/unavatar\.io\//i.test(currentMember.avatarUrl)
+      ? currentMember.avatarUrl
+      : undefined
 
   const roleLabel =
     currentMember.role === 'admin'
@@ -85,19 +75,16 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
           ref={buttonRef}
           type="button"
           onClick={handleToggle}
-          className="relative w-7 h-7 rounded-full flex items-center justify-center font-semibold text-xs transition-colors cursor-pointer bg-black/[0.06] dark:bg-white/[0.08] hover:bg-black/[0.1] dark:hover:bg-white/[0.14] text-[var(--app-text-primary)] border border-black/[0.08] dark:border-white/[0.12] overflow-hidden"
+          className="relative rounded-full flex items-center justify-center transition-transform hover:scale-105 cursor-pointer"
           title={`Mi Cuenta: ${displayName} (${roleLabel})`}
         >
-          {effectiveAvatar ? (
-            <img
-              src={effectiveAvatar}
-              alt={displayName}
-              onError={() => setImgError(true)}
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <span>{displayName.charAt(0).toUpperCase()}</span>
-          )}
+          <UserAvatar
+            name={displayName}
+            avatarUrl={effectiveAvatar}
+            color={currentMember.color}
+            size="md"
+            shape="circle"
+          />
         </button>
       ) : (
         <button
@@ -108,21 +95,14 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
           title="Opciones de cuenta y usuario"
         >
           <div className="flex items-center gap-2 min-w-0">
-            <div
-              className="w-6 h-6 rounded-lg flex items-center justify-center text-white font-bold text-xs shrink-0 shadow-2xs transition-transform group-hover:scale-105 overflow-hidden"
-              style={{ backgroundColor: currentMember.color || '#2563eb' }}
-            >
-              {effectiveAvatar ? (
-                <img
-                  src={effectiveAvatar}
-                  alt={displayName}
-                  onError={() => setImgError(true)}
-                  className="w-full h-full object-cover"
-                />
-              ) : (
-                displayName.charAt(0).toUpperCase()
-              )}
-            </div>
+            <UserAvatar
+              name={displayName}
+              avatarUrl={effectiveAvatar}
+              color={currentMember.color}
+              size="sm"
+              shape="rounded"
+              className="shadow-2xs transition-transform group-hover:scale-105"
+            />
             <div className="min-w-0 flex-1 leading-tight">
               <div className="flex items-center gap-1.5">
                 <span className="font-semibold text-neutral-900 dark:text-neutral-100 text-xs truncate">
@@ -169,21 +149,14 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
           >
             {/* Account Header */}
             <div className="px-2 py-2 flex items-center gap-2.5 border-b border-[var(--app-divider)]">
-              <div
-                className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-semibold text-xs shrink-0 overflow-hidden"
-                style={{ backgroundColor: currentMember.color || '#2563eb' }}
-              >
-                {effectiveAvatar ? (
-                  <img
-                    src={effectiveAvatar}
-                    alt={displayName}
-                    onError={() => setImgError(true)}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  displayName.charAt(0).toUpperCase()
-                )}
-              </div>
+              <UserAvatar
+                name={displayName}
+                avatarUrl={effectiveAvatar}
+                color={currentMember.color}
+                size="md"
+                shape="rounded"
+                className="w-8 h-8"
+              />
               <div className="min-w-0 flex-1 leading-tight">
                 <div className="flex items-center justify-between gap-1.5">
                   <span className="font-semibold text-[var(--app-text-primary)] text-xs truncate">

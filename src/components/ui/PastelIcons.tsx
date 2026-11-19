@@ -10,6 +10,10 @@ let folderColors: Record<string, number> = (() => {
 })()
 const listeners = new Set<() => void>()
 
+export function getLegacyFolderColors(): Record<string, number> {
+  return folderColors
+}
+
 export function setFolderColor(path: string, index: number) {
   folderColors = { ...folderColors, [path]: index }
   try {
@@ -55,17 +59,20 @@ export function folderColorIndex(name: string): number {
 
 export function PastelFolderIcon({
   name = '',
+  colorIndex,
   size = 18,
   open = false,
   className = ''
 }: {
   name?: string
+  colorIndex?: number
   size?: number
   open?: boolean
   className?: string
 }) {
   const colors = useFolderColors()
-  const c = FOLDER_PALETTE[colors[name] ?? folderColorIndex(name)] ?? FOLDER_PALETTE[0]
+  const resolvedIdx = typeof colorIndex === 'number' ? colorIndex : (colors[name] ?? folderColorIndex(name))
+  const c = FOLDER_PALETTE[resolvedIdx] ?? FOLDER_PALETTE[0]
   const gid = useId().replace(/:/g, '')
   return (
     <svg

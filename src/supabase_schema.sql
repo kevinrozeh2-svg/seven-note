@@ -196,6 +196,7 @@ create table if not exists public.seven_spaces (
   admin_only boolean not null default false,
   sort_order double precision,
   folder_order jsonb,
+  folder_colors jsonb,
   owner_member text
 );
 
@@ -203,6 +204,7 @@ alter table public.seven_spaces add column if not exists is_private boolean not 
 alter table public.seven_spaces add column if not exists admin_only boolean not null default false;
 alter table public.seven_spaces add column if not exists sort_order double precision;
 alter table public.seven_spaces add column if not exists folder_order jsonb;
+alter table public.seven_spaces add column if not exists folder_colors jsonb;
 alter table public.seven_spaces add column if not exists owner_member text;
 alter table public.seven_spaces add column if not exists viewed_by text[];
 
@@ -345,6 +347,11 @@ drop policy if exists "Actualizacion propia de perfil" on public.user_profiles;
 create policy "Actualizacion propia de perfil" on public.user_profiles
   for update to authenticated
   using (auth.uid() = id)
+  with check (auth.uid() = id);
+
+drop policy if exists "Insercion propia de perfil" on public.user_profiles;
+create policy "Insercion propia de perfil" on public.user_profiles
+  for insert to authenticated
   with check (auth.uid() = id);
 
 -- Trigger de seguridad para evitar escalación de privilegios en user_profiles

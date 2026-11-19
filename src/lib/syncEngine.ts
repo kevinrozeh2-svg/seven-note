@@ -13,6 +13,7 @@ import {
   clearPendingHardDeletes,
   markAccountSeeded,
   normalizeFolderPath,
+  normalizeFolderColorsMap,
   seedInitialData,
   setServerClockOffset,
   isValidUuid
@@ -603,6 +604,9 @@ class SyncEngine {
               if (Array.isArray(s.folderOrder)) {
                 row.folder_order = s.folderOrder
               }
+              if (s.folderColors && typeof s.folderColors === 'object') {
+                row.folder_colors = s.folderColors
+              }
               return row
             })
             let { error: spError } = await supabase.from('seven_spaces').upsert(payload, { onConflict: 'id' })
@@ -611,13 +615,14 @@ class SyncEngine {
               (spError.message?.includes('admin_only') ||
                 spError.message?.includes('sort_order') ||
                 spError.message?.includes('folder_order') ||
+                spError.message?.includes('folder_colors') ||
                 spError.message?.includes('is_private') ||
                 spError.message?.includes('owner_member') ||
                 spError.message?.includes('schema cache'))
             ) {
               // Respaldo progresivo si alguna columna opcional aún no existe en Supabase
               const fallbackPayload = payload.map(
-                ({ admin_only: _a, sort_order: _s, folder_order: _f, ...rest }) => rest
+                ({ admin_only: _a, sort_order: _s, folder_order: _f, folder_colors: _fc, ...rest }) => rest
               )
               const retry = await supabase.from('seven_spaces').upsert(fallbackPayload, { onConflict: 'id' })
               spError = retry.error
@@ -634,7 +639,8 @@ class SyncEngine {
                     current.updatedAt === s.updatedAt &&
                     current.name === s.name &&
                     Boolean(current.isDeleted) === Boolean(s.isDeleted) &&
-                    JSON.stringify(current.folderOrder || null) === JSON.stringify(s.folderOrder || null)
+                    JSON.stringify(current.folderOrder || null) === JSON.stringify(s.folderOrder || null) &&
+                    JSON.stringify(current.folderColors || null) === JSON.stringify(s.folderColors || null)
                   ) {
                     await db.spaces.update(s.id, { syncStatus: 'synced', updatedAt: clampedUpdated })
                   }
@@ -1185,14 +1191,19 @@ class SyncEngine {
           const normalizedFolderOrder = Array.isArray(rawFolderOrder)
             ? (rawFolderOrder as string[]).map((f) => normalizeFolderPath(f)).filter(Boolean) as string[]
             : undefined
+          const normalizedFolderColors = normalizeFolderColorsMap(rs.folder_colors)
           const missingLocalFolderOrder =
             Boolean(local && local.syncStatus === 'synced') &&
             (!Array.isArray(local?.folderOrder) || local.folderOrder.length === 0) &&
             Array.isArray(normalizedFolderOrder) &&
             normalizedFolderOrder.length > 0
+          const missingLocalFolderColors =
+            Boolean(local && local.syncStatus === 'synced') &&
+            (!local?.folderColors || Object.keys(local.folderColors).length === 0) &&
+            Boolean(normalizedFolderColors && Object.keys(normalizedFolderColors).length > 0)
 
           const shouldApply = this.shouldApplyRemote(local, remoteSpaceUpdated, nowServer)
-          if (shouldApply || missingLocalFolderOrder) {
+          if (shouldApply || missingLocalFolderOrder || missingLocalFolderColors) {
             await db.spaces.put({
               id: rs.id,
               name: rs.name,
@@ -1205,6 +1216,7 @@ class SyncEngine {
               adminOnly: Boolean(rs.admin_only),
               sortOrder: typeof rs.sort_order === 'number' ? rs.sort_order : rs.created_at,
               folderOrder: normalizedFolderOrder,
+              folderColors: normalizedFolderColors,
               ownerMember: rs.owner_member,
               userId: rs.user_id,
               viewedBy: local?.viewedBy,
@@ -1224,6 +1236,7 @@ class SyncEngine {
               await db.spaces.delete(ls.id).catch(() => {})
               try {
                 localStorage.removeItem(`seven_note_folder_order_${ls.id}`)
+                localStorage.removeItem(`seven_note_folder_colors_${ls.id}`)
               } catch {}
             }
           }

@@ -10,6 +10,7 @@ import {
   formatExactReadTime,
   type DocumentReadEntry
 } from '../../lib/documentReads'
+import { UserAvatar } from './UserAvatar'
 
 interface DocumentReadersBadgeProps {
   workspace: WorkspaceItem
@@ -37,28 +38,15 @@ function UserMiniAvatar({
   avatarUrl?: string
   size?: 'xs' | 'md'
 }) {
-  const [imgFailed, setImgFailed] = useState(false)
-  const initial = (name || 'U').trim().charAt(0).toUpperCase() || 'U'
-  const dims = size === 'xs' ? 'w-4 h-4 text-[9px]' : 'w-7 h-7 text-[11px]'
-
-  if (avatarUrl && !imgFailed) {
-    return (
-      <img
-        src={avatarUrl}
-        alt={name}
-        onError={() => setImgFailed(true)}
-        className={`${dims} rounded-full object-cover shrink-0 ring-1 ring-white/80 dark:ring-[#1e1e1e]`}
-      />
-    )
-  }
-
   return (
-    <span
-      className={`${dims} rounded-full flex items-center justify-center font-semibold text-white shrink-0 ring-1 ring-white/80 dark:ring-[#1e1e1e] select-none`}
-      style={{ backgroundColor: color || '#2563eb' }}
-    >
-      {initial}
-    </span>
+    <UserAvatar
+      name={name}
+      color={color}
+      avatarUrl={avatarUrl}
+      size={size}
+      shape="circle"
+      className="ring-1 ring-white/80 dark:ring-[#1e1e1e]"
+    />
   )
 }
 

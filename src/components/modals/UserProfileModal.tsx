@@ -12,7 +12,9 @@ import {
   AlertCircle,
   CheckCircle2,
   Upload,
-  X
+  X,
+  Shuffle,
+  Camera
 } from 'lucide-react'
 import {
   updateUserProfile,
@@ -24,7 +26,15 @@ import {
   setCurrentMember,
   type TeamMember
 } from '../../lib/teamAuth'
-import { PRESET_AVATARS, resizeAvatarFile } from '../../lib/avatars'
+import {
+  AVATAR_CATEGORIES,
+  PRESET_AVATARS,
+  generateRandomAvatarUrl,
+  resizeAvatarFile,
+  type AvatarCategoryId
+} from '../../lib/avatars'
+import { invalidateDocumentReadsProfileCache } from '../../lib/documentReads'
+import { UserAvatar } from '../ui/UserAvatar'
 import { clearLocalUserData } from '../../db'
 import { toast } from 'sonner'
 
@@ -58,6 +68,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [fullName, setFullName] = useState('')
   const [color, setColor] = useState('#2563eb')
   const [avatarUrl, setAvatarUrl] = useState<string>('')
+  const [avatarCategory, setAvatarCategory] = useState<AvatarCategoryId>('editorial')
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [savingProfile, setSavingProfile] = useState(false)
   const avatarInputRef = useRef<HTMLInputElement>(null)
 
@@ -75,7 +87,15 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     if (isOpen) {
       setFullName(currentMember.fullName || currentMember.name || '')
       setColor(currentMember.color || '#2563eb')
-      setAvatarUrl(currentMember.avatarUrl || '')
+      const cleanAvatar =
+        currentMember.avatarUrl && !/^https?:\/\/unavatar\.io\//i.test(currentMember.avatarUrl)
+          ? currentMember.avatarUrl
+          : ''
+      setAvatarUrl(cleanAvatar)
+      const matchedPreset = PRESET_AVATARS.find((a) => a.url === cleanAvatar)
+      if (matchedPreset) {
+        setAvatarCategory(matchedPreset.category)
+      }
       setNewPassword('')
       setConfirmPassword('')
       setPasswordError(null)
@@ -88,14 +108,22 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    setUploadingAvatar(true)
     try {
       const dataUrl = await resizeAvatarFile(file)
       setAvatarUrl(dataUrl)
-    } catch {
-      toast.error('No se pudo procesar la imagen seleccionada.')
+      toast.success('Foto lista. Pulsa «Guardar cambios» para aplicarla.')
+    } catch (err: any) {
+      toast.error(err?.message || 'No se pudo procesar la imagen seleccionada.')
     } finally {
+      setUploadingAvatar(false)
       e.target.value = ''
     }
+  }
+
+  const handleRandomAvatar = () => {
+    const cat = AVATAR_CATEGORIES.find((c) => c.id === avatarCategory)
+    setAvatarUrl(generateRandomAvatarUrl(cat?.defaultStyle || 'notionists'))
   }
 
   const handleCopyUserId = async () => {
@@ -120,7 +148,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         const res = await updateUserProfile(user.id, {
           fullName: fullName.trim(),
           color: color,
-          avatarUrl: avatarUrl
+          avatarUrl: avatarUrl,
+          email: user.email || currentMember.email
         })
         if (!res.success) throw new Error(res.error)
       }
@@ -134,6 +163,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         initial: fullName.trim().charAt(0).toUpperCase()
       }
 
+      invalidateDocumentReadsProfileCache()
       setCurrentMember(updated)
       onProfileUpdated?.(updated)
       toast.success('¡Perfil actualizado con éxito!')
@@ -209,16 +239,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--app-divider)]">
           <div className="flex items-center gap-3 min-w-0">
-            <div
-              className="w-9 h-9 rounded-lg flex items-center justify-center text-white font-semibold text-sm shrink-0 overflow-hidden"
-              style={{ backgroundColor: avatarUrl ? 'transparent' : color }}
-            >
-              {avatarUrl ? (
-                <img src={avatarUrl} alt={fullName || currentMember.name} className="w-full h-full object-cover" />
-              ) : (
-                (fullName || currentMember.name || 'U').charAt(0).toUpperCase()
-              )}
-            </div>
+            <UserAvatar
+              name={fullName || currentMember.name}
+              avatarUrl={avatarUrl}
+              color={color}
+              size="lg"
+              shape="rounded"
+            />
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h2 className="text-sm font-semibold truncate max-w-[160px] sm:max-w-[200px]">
@@ -288,42 +315,113 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 />
               </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-2">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
                   <label className="text-[11px] font-medium text-[var(--app-text-secondary)]">
-                    Avatar
+                    Foto de perfil y avatar
                   </label>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      ref={avatarInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleAvatarFileChange}
-                      className="hidden"
+                  <input
+                    ref={avatarInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    onChange={handleAvatarFileChange}
+                    className="hidden"
+                  />
+                </div>
+
+                {/* Vista previa interactiva + acciones rápidas */}
+                <div className="flex items-center gap-3.5 p-3 rounded-lg bg-[var(--app-bg-secondary)] border border-[var(--app-border)]">
+                  <button
+                    type="button"
+                    onClick={() => avatarInputRef.current?.click()}
+                    disabled={uploadingAvatar}
+                    className="relative group shrink-0 rounded-xl cursor-pointer focus:outline-none focus:ring-2 focus:ring-[var(--app-accent)]"
+                    title="Cambiar foto de perfil"
+                  >
+                    <UserAvatar
+                      name={fullName || currentMember.name}
+                      avatarUrl={avatarUrl}
+                      color={color}
+                      size="xl"
+                      shape="rounded"
                     />
-                    <button
-                      type="button"
-                      onClick={() => avatarInputRef.current?.click()}
-                      className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-[11px] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] transition-colors cursor-pointer"
-                    >
-                      <Upload className="w-3 h-3" />
-                      <span>Subir imagen</span>
-                    </button>
-                    {avatarUrl && (
+                    <span className="absolute inset-0 rounded-xl bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                      {uploadingAvatar ? (
+                        <RefreshCw className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Camera className="w-4 h-4" />
+                      )}
+                    </span>
+                  </button>
+
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="text-[11px] text-[var(--app-text-secondary)] leading-snug">
+                      Sube una foto propia o elige un avatar ilustrado para tu perfil.
+                    </div>
+                    <div className="flex items-center flex-wrap gap-1.5">
                       <button
                         type="button"
-                        onClick={() => setAvatarUrl('')}
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-[var(--app-border)] hover:bg-[var(--app-hover)] text-[11px] text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] transition-colors cursor-pointer"
-                        title="Usar inicial"
+                        onClick={() => avatarInputRef.current?.click()}
+                        disabled={uploadingAvatar}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[11px] font-medium text-[var(--app-text-primary)] transition-colors cursor-pointer disabled:opacity-50"
                       >
-                        <X className="w-3 h-3" />
-                        <span>Quitar</span>
+                        {uploadingAvatar ? (
+                          <RefreshCw className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <Upload className="w-3 h-3" />
+                        )}
+                        <span>{uploadingAvatar ? 'Procesando...' : 'Subir foto'}</span>
                       </button>
-                    )}
+
+                      <button
+                        type="button"
+                        onClick={handleRandomAvatar}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[11px] font-medium text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] transition-colors cursor-pointer"
+                        title="Generar avatar aleatorio en este estilo"
+                      >
+                        <Shuffle className="w-3 h-3" />
+                        <span>Aleatorio</span>
+                      </button>
+
+                      {avatarUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setAvatarUrl('')}
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-[var(--app-border)] hover:bg-[var(--app-hover)] text-[11px] text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] transition-colors cursor-pointer"
+                          title="Usar inicial"
+                        >
+                          <X className="w-3 h-3" />
+                          <span>Usar inicial</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div className="grid grid-cols-6 sm:grid-cols-9 gap-2">
-                  {PRESET_AVATARS.map((av) => {
+
+                {/* Selector de categoría de avatares */}
+                <div className="flex items-center gap-1 p-1 rounded-lg bg-[var(--app-bg-secondary)] border border-[var(--app-border)]">
+                  {AVATAR_CATEGORIES.map((cat) => {
+                    const active = avatarCategory === cat.id
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setAvatarCategory(cat.id)}
+                        className={`flex-1 py-1 px-2 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
+                          active
+                            ? 'bg-[var(--app-bg-overlay)] text-[var(--app-text-primary)] shadow-2xs border border-[var(--app-border)]'
+                            : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)]'
+                        }`}
+                      >
+                        {cat.label}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Cuadrícula de avatares externos */}
+                <div className="grid grid-cols-4 sm:grid-cols-8 gap-2">
+                  {PRESET_AVATARS.filter((av) => av.category === avatarCategory).map((av) => {
                     const isSelected = avatarUrl === av.url
                     return (
                       <button
@@ -331,13 +429,25 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                         type="button"
                         onClick={() => setAvatarUrl(av.url)}
                         title={av.label}
-                        className={`aspect-square rounded-lg overflow-hidden border transition-all cursor-pointer ${
+                        className={`relative aspect-square rounded-lg overflow-hidden border bg-[var(--app-bg-secondary)] transition-all cursor-pointer ${
                           isSelected
-                            ? 'border-[var(--app-accent)] ring-2 ring-[var(--app-accent)] ring-offset-2 ring-offset-[var(--app-bg-overlay)]'
-                            : 'border-[var(--app-border)] hover:border-[var(--app-border-strong)] opacity-85 hover:opacity-100'
+                            ? 'border-[var(--app-accent)] ring-2 ring-[var(--app-accent)] ring-offset-2 ring-offset-[var(--app-bg-overlay)] scale-[1.03]'
+                            : 'border-[var(--app-border)] hover:border-[var(--app-border-strong)] hover:scale-[1.04]'
                         }`}
                       >
-                        <img src={av.url} alt={av.label} className="w-full h-full object-cover" />
+                        <img
+                          src={av.url}
+                          alt={av.label}
+                          loading="lazy"
+                          decoding="async"
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover"
+                        />
+                        {isSelected && (
+                          <span className="absolute bottom-0.5 right-0.5 w-3.5 h-3.5 rounded-full bg-[var(--app-accent)] text-white flex items-center justify-center shadow-xs">
+                            <Check className="w-2.5 h-2.5 stroke-[3]" />
+                          </span>
+                        )}
                       </button>
                     )
                   })}

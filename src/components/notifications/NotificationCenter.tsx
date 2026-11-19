@@ -9,6 +9,7 @@ import {
 import { useLiveQuery } from 'dexie-react-hooks'
 import { AnimatePresence, motion } from 'motion/react'
 import { toast } from 'sonner'
+import { UserAvatar } from '../ui/UserAvatar'
 import {
   Archive,
   ArrowLeft,
@@ -338,27 +339,16 @@ function ActorAvatar({
   badgeType?: NotificationItem['type']
   size?: 'sm' | 'md'
 }) {
-  const dim = size === 'sm' ? 'w-5 h-5 text-[9px]' : 'w-7 h-7 text-[11px]'
   return (
     <div className="relative shrink-0">
-      {actor.avatarUrl ? (
-        <img
-          src={actor.avatarUrl}
-          alt={actor.name}
-          className={`${dim} rounded-full object-cover border border-[var(--app-border-strong)] bg-[var(--app-bg-secondary)]`}
-        />
-      ) : (
-        <div
-          className={`${dim} rounded-full flex items-center justify-center font-semibold border border-[var(--app-border)]`}
-          style={{
-            backgroundColor: `${actor.color}20`,
-            color: actor.color
-          }}
-          aria-hidden="true"
-        >
-          {actor.initial}
-        </div>
-      )}
+      <UserAvatar
+        name={actor.name}
+        avatarUrl={actor.avatarUrl}
+        color={actor.color}
+        size={size === 'sm' ? 'sm' : 'md'}
+        shape="circle"
+        className={size === 'sm' ? 'w-5 h-5 text-[9px]' : undefined}
+      />
       {badgeType && size === 'md' && (
         <span
           className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-[var(--app-bg-primary)] border border-[var(--app-border-strong)] flex items-center justify-center shadow-2xs"

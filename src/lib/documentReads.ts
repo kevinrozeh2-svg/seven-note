@@ -36,6 +36,10 @@ type LocalReadsStore = Record<string, DocumentReadEntry[]>
 const recentRecordTimestamps = new Map<string, number>()
 let cachedProfiles: { items: UserProfile[]; fetchedAt: number } | null = null
 
+export function invalidateDocumentReadsProfileCache(): void {
+  cachedProfiles = null
+}
+
 function readLocalStore(): LocalReadsStore {
   if (typeof window === 'undefined') return {}
   try {
@@ -256,7 +260,10 @@ export async function fetchDocumentReads(
       userName: profile?.fullName || raw.userName || raw.userEmail?.split('@')[0] || 'Usuario',
       userEmail: profile?.email || raw.userEmail,
       userColor: profile?.color || raw.userColor || '#2563eb',
-      userAvatarUrl: profile?.avatarUrl || raw.userAvatarUrl,
+      userAvatarUrl:
+        profile && typeof profile.avatarUrl === 'string'
+          ? (profile.avatarUrl.trim() || undefined)
+          : (profile?.avatarUrl || raw.userAvatarUrl),
       role: profile?.role || raw.role
     }
 
