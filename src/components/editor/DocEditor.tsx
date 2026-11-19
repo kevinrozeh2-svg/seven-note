@@ -9,6 +9,7 @@ import Placeholder from '@tiptap/extension-placeholder'
 import Underline from '@tiptap/extension-underline'
 import Link from '@tiptap/extension-link'
 import { RichImage } from './RichImageExtension'
+import { FloatingSelectionMenu } from './FloatingSelectionMenu'
 import TextAlign from '@tiptap/extension-text-align'
 import { processAndUploadImage } from '../../lib/imageOptimizer'
 import { DOMParser as PMDOMParser } from '@tiptap/pm/model'
@@ -44,9 +45,7 @@ import {
   Palette,
   Edit3,
   Trash2,
-  Smile,
-  Sparkles,
-  X
+  Smile
 } from 'lucide-react'
 import { CoverPickerPopover, type CoverConfig } from './CoverPickerPopover'
 import { NoteIconPickerModal, renderNoteIcon } from './NoteIconPickerModal'
@@ -394,9 +393,6 @@ export function DocEditor({
   const [slashMenuPos, setSlashMenuPos] = useState<{ x: number; y: number } | null>(null)
   const [selectedSlashIdx, setSelectedSlashIdx] = useState(0)
 
-  // Floating text selection menu state
-  const [floatingMenuPos, setFloatingMenuPos] = useState<{ x: number; y: number } | null>(null)
-
   // Text color picker popover state
   const [textColorMenuAnchor, setTextColorMenuAnchor] = useState<'toolbar' | 'floating' | null>(null)
   const [textColorPopoverPos, setTextColorPopoverPos] = useState<{ top: number; left: number } | null>(null)
@@ -700,23 +696,6 @@ export function DocEditor({
           }
         }
         return false
-      }
-    },
-    onSelectionUpdate: ({ editor }) => {
-      const { from, to } = editor.state.selection
-      if (from !== to) {
-        // Text is selected, position floating toolbar
-        const domSelection = window.getSelection()
-        if (domSelection && domSelection.rangeCount > 0) {
-          const range = domSelection.getRangeAt(0)
-          const rect = range.getBoundingClientRect()
-          setFloatingMenuPos({
-            x: rect.left + rect.width / 2,
-            y: rect.top - 45
-          })
-        }
-      } else {
-        setFloatingMenuPos(null)
       }
     },
     onUpdate: ({ editor }) => {
@@ -1906,155 +1885,17 @@ export function DocEditor({
         </div>
       )}
 
-      {/* Floating Text Selection Bubble Toolbar (Tactile Pill Style) */}
-      {floatingMenuPos && (
-        <div
-          style={{
-            position: 'fixed',
-            left: `${typeof window !== 'undefined' && window.innerWidth < 640 ? Math.max(140, Math.min(window.innerWidth - 140, floatingMenuPos.x)) : floatingMenuPos.x}px`,
-            top: `${typeof window !== 'undefined' && window.innerWidth < 640 ? Math.max(54, floatingMenuPos.y) : floatingMenuPos.y}px`,
-            transform: 'translateX(-50%)'
-          }}
-          className="z-50 flex items-center gap-1 sm:gap-1.5 px-2 py-1.5 pill-capsule-bar text-white animate-in fade-in zoom-in-95 duration-100 max-w-[calc(100vw-24px)] overflow-x-auto select-none"
-        >
-          {/* Standout Purple Pill: Destacar / Highlight */}
-          <button
-            onClick={() => (editor.chain().focus() as any).toggleMark('highlight', { color: '#fef08a' }).run()}
-            className="btn-pill-purple px-3 py-1 text-xs flex items-center gap-1 cursor-pointer font-semibold shrink-0"
-            title="Destacar texto / Resaltar"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Destacar</span>
-          </button>
-
-          <div className="w-[1px] h-3.5 bg-white/15 mx-0.5 shrink-0" />
-
-          {/* Jerarquía de encabezados: H1, H2, H3 */}
-          <button
-            onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('heading', { level: 1 }) ? 'bg-white text-neutral-900 shadow-xs font-semibold' : 'text-zinc-300 hover:text-white hover:bg-white/15'}`}
-            title="Título principal H1 (Ctrl+Alt+1)"
-          >
-            <Heading1Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('heading', { level: 2 }) ? 'bg-white text-neutral-900 shadow-xs font-semibold' : 'text-zinc-300 hover:text-white hover:bg-white/15'}`}
-            title="Subtítulo H2 (Ctrl+Alt+2)"
-          >
-            <Heading2Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('heading', { level: 3 }) ? 'bg-white text-neutral-900 shadow-xs font-semibold' : 'text-zinc-300 hover:text-white hover:bg-white/15'}`}
-            title="Subtítulo menor H3 (Ctrl+Alt+3)"
-          >
-            <Heading3Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          </button>
-
-          <div className="w-[1px] h-3.5 bg-white/15 mx-0.5 shrink-0" />
-
-          <button
-            onClick={() => editor.chain().focus().toggleBold().run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('bold') ? 'bg-white text-neutral-900 shadow-xs font-semibold' : 'text-zinc-300 hover:text-white hover:bg-white/15'}`}
-            title="Negrita (Ctrl+B)"
-          >
-            <BoldIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().toggleItalic().run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('italic') ? 'bg-white text-neutral-900 shadow-xs font-semibold' : 'text-zinc-300 hover:text-white hover:bg-white/15'}`}
-            title="Cursiva (Ctrl+I)"
-          >
-            <ItalicIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().toggleUnderline().run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('underline') ? 'bg-white text-neutral-900 shadow-xs font-semibold' : 'text-zinc-300 hover:text-white hover:bg-white/15'}`}
-            title="Subrayado (Ctrl+U)"
-          >
-            <UnderLineIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().toggleCode().run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive('code') ? 'bg-white text-neutral-900 shadow-xs font-semibold' : 'text-zinc-300 hover:text-white hover:bg-white/15'}`}
-            title="Código en línea (Ctrl+E)"
-          >
-            <CodeIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          </button>
-          <button
-            ref={floatingColorBtnRef}
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => toggleTextColorMenu('floating')}
-            className={`w-7 h-7 rounded-full flex flex-col items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${
-              textColorMenuAnchor === 'floating'
-                ? 'bg-white text-neutral-900 shadow-xs'
-                : 'text-zinc-300 hover:text-white hover:bg-white/15'
-            }`}
-            title="Color de texto"
-          >
-            <span className="text-[11px] font-bold leading-none">A</span>
-            <span
-              className="w-3.5 h-[2.5px] rounded-full mt-0.5"
-              style={{
-                backgroundColor:
-                  activeTextColor ||
-                  (textColorMenuAnchor === 'floating' ? '#18181b' : '#ffffff')
-              }}
-            />
-          </button>
-
-          <div className="w-[1px] h-3.5 bg-white/15 mx-0.5 shrink-0" />
-
-          {/* Alineación de texto en menú flotante al seleccionar */}
-          <button
-            onClick={() => editor.chain().focus().setTextAlign('left').run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive({ textAlign: 'left' }) ? 'bg-white text-neutral-900 shadow-xs font-semibold' : 'text-zinc-300 hover:text-white hover:bg-white/15'}`}
-            title="Alinear a la izquierda"
-          >
-            <AlignLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().setTextAlign('center').run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive({ textAlign: 'center' }) ? 'bg-white text-neutral-900 shadow-xs font-semibold' : 'text-zinc-300 hover:text-white hover:bg-white/15'}`}
-            title="Centrar texto"
-          >
-            <AlignCenter className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().setTextAlign('right').run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive({ textAlign: 'right' }) ? 'bg-white text-neutral-900 shadow-xs font-semibold' : 'text-zinc-300 hover:text-white hover:bg-white/15'}`}
-            title="Alinear a la derecha"
-          >
-            <AlignRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          </button>
-          <button
-            onClick={() => editor.chain().focus().setTextAlign('justify').run()}
-            className={`p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 ${editor.isActive({ textAlign: 'justify' }) ? 'bg-white text-neutral-900 shadow-xs font-semibold' : 'text-zinc-300 hover:text-white hover:bg-white/15'}`}
-            title="Justificar texto"
-          >
-            <AlignJustify className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          </button>
-
-          <div className="w-[1px] h-3.5 bg-white/15 mx-0.5 shrink-0" />
-          <button
-            onClick={() => setIsBodyEmojiPickerOpen(true)}
-            className="p-1 sm:p-1.5 rounded-full transition cursor-pointer active:scale-95 text-zinc-300 hover:text-white hover:bg-white/15"
-            title="Insertar Emoji Apple en la nota"
-          >
-            <AppleEmoji emoji="✨" size={14} />
-          </button>
-
-          {/* Close / Dismiss Floating Bubble */}
-          <button
-            onClick={() => setFloatingMenuPos(null)}
-            className="btn-pill-circle w-6 h-6 cursor-pointer ml-0.5 shrink-0"
-            title="Cerrar barra"
-          >
-            <X className="w-3 h-3" />
-          </button>
-        </div>
-      )}
+      {/* Floating Text Selection Bubble Toolbar (Responsive, Auto-Flip, Zero-Stuck) */}
+      <FloatingSelectionMenu
+        editor={editor}
+        workspaceId={workspace.id}
+        readOnly={readOnly}
+        activeTextColor={activeTextColor}
+        isColorPickerOpen={textColorMenuAnchor === 'floating'}
+        colorBtnRef={floatingColorBtnRef}
+        onToggleColorPicker={() => toggleTextColorMenu('floating')}
+        onOpenEmojiPicker={() => setIsBodyEmojiPickerOpen(true)}
+      />
 
       {/* Text Color Picker Popover */}
       {textColorMenuAnchor &&
@@ -2063,6 +1904,7 @@ export function DocEditor({
         createPortal(
           <div
             ref={textColorPopoverRef}
+            data-text-color-popover="true"
             style={{
               position: 'fixed',
               top: `${textColorPopoverPos.top}px`,

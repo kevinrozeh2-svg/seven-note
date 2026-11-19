@@ -79,7 +79,8 @@ import {
   copyAsPlainText,
   printDocument
 } from './lib/exportUtils'
-import { Toaster, toast } from 'sonner'
+import { toast } from 'sonner'
+import { AppToaster } from './components/ui/AppToaster'
 import { NotificationCenter } from './components/notifications/NotificationCenter'
 import {
   notificationService,
@@ -1464,7 +1465,7 @@ function MainApp() {
   if (!authUser) {
     return (
       <div className="relative flex h-screen w-screen items-center justify-center bg-[#f8f9fa] dark:bg-[#121214] text-neutral-900 dark:text-neutral-100 font-sans select-none overflow-hidden">
-        <Toaster position="top-right" richColors closeButton />
+        <AppToaster position="top-right" theme={darkMode ? 'dark' : 'light'} />
         <AuthModal
           isOpen={true}
           canDismiss={false}
@@ -2690,7 +2691,7 @@ function MainApp() {
       />
 
       {/* 7. Pro Sonner Notification Toaster */}
-      <Toaster richColors position="bottom-right" closeButton theme={darkMode ? 'dark' : 'light'} />
+      <AppToaster position="bottom-right" theme={darkMode ? 'dark' : 'light'} />
     </div>
     </MotionConfig>
   )
