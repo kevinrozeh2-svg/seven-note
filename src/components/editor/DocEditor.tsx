@@ -158,6 +158,19 @@ const TextStyle = Mark.create({
   }
 })
 
+const TEXT_COLOR_PALETTE = [
+  { id: 'slate', label: 'Gris', hex: '#71717a' },
+  { id: 'red', label: 'Rojo', hex: '#ef4444' },
+  { id: 'orange', label: 'Naranja', hex: '#f97316' },
+  { id: 'amber', label: 'Ámbar', hex: '#eab308' },
+  { id: 'green', label: 'Verde', hex: '#22c55e' },
+  { id: 'teal', label: 'Turquesa', hex: '#14b8a6' },
+  { id: 'blue', label: 'Azul', hex: '#3b82f6' },
+  { id: 'indigo', label: 'Índigo', hex: '#6366f1' },
+  { id: 'purple', label: 'Morado', hex: '#a855f7' },
+  { id: 'pink', label: 'Rosa', hex: '#ec4899' }
+] as const
+
 const ColorMark = Mark.create({
   name: 'color',
   addOptions() {
@@ -170,13 +183,16 @@ const ColorMark = Mark.create({
       color: {
         default: null,
         parseHTML: (element) => {
+          const isUserColor = element.hasAttribute('data-user-color')
           const color = element.style.color || element.getAttribute('color')
-          return color && !isNeutralTextColor(color) ? color : null
+          if (!color) return null
+          return isUserColor || !isNeutralTextColor(color) ? color : null
         },
         renderHTML: (attributes) => {
           if (!attributes.color) return {}
           return {
-            style: `color: ${attributes.color}`
+            style: `color: ${attributes.color}`,
+            'data-user-color': 'true'
           }
         }
       }
@@ -187,15 +203,19 @@ const ColorMark = Mark.create({
       {
         tag: 'span[style*=color]',
         getAttrs: (element) => {
-          const color = (element as HTMLElement).style.color
-          return color && !isNeutralTextColor(color) ? { color } : false
+          const el = element as HTMLElement
+          const color = el.style.color
+          if (!color) return false
+          return el.hasAttribute('data-user-color') || !isNeutralTextColor(color) ? { color } : false
         }
       },
       {
         tag: 'font[color]',
         getAttrs: (element) => {
-          const color = (element as HTMLElement).getAttribute('color')
-          return color && !isNeutralTextColor(color) ? { color } : false
+          const el = element as HTMLElement
+          const color = el.getAttribute('color')
+          if (!color) return false
+          return el.hasAttribute('data-user-color') || !isNeutralTextColor(color) ? { color } : false
         }
       }
     ]
@@ -376,6 +396,13 @@ export function DocEditor({
 
   // Floating text selection menu state
   const [floatingMenuPos, setFloatingMenuPos] = useState<{ x: number; y: number } | null>(null)
+
+  // Text color picker popover state
+  const [textColorMenuAnchor, setTextColorMenuAnchor] = useState<'toolbar' | 'floating' | null>(null)
+  const [textColorPopoverPos, setTextColorPopoverPos] = useState<{ top: number; left: number } | null>(null)
+  const toolbarColorBtnRef = useRef<HTMLButtonElement | null>(null)
+  const floatingColorBtnRef = useRef<HTMLButtonElement | null>(null)
+  const textColorPopoverRef = useRef<HTMLDivElement | null>(null)
 
   // Bookmark modal state
   const [isBookmarkModalOpen, setIsBookmarkModalOpen] = useState(false)
@@ -738,6 +765,69 @@ export function DocEditor({
   })
 
   editorRef.current = editor
+
+  const activeTextColor = (editor?.getAttributes('color')?.color as string | undefined) || null
+
+  const toggleTextColorMenu = useCallback(
+    (anchor: 'toolbar' | 'floating') => {
+      if (textColorMenuAnchor === anchor) {
+        setTextColorMenuAnchor(null)
+        return
+      }
+      const btn = anchor === 'toolbar' ? toolbarColorBtnRef.current : floatingColorBtnRef.current
+      if (!btn || typeof window === 'undefined') return
+      const rect = btn.getBoundingClientRect()
+      const popoverWidth = 216
+      const popoverHeight = 164
+      const left = Math.max(12, Math.min(window.innerWidth - popoverWidth - 12, rect.left))
+      const top =
+        rect.bottom + popoverHeight + 12 > window.innerHeight
+          ? Math.max(12, rect.top - popoverHeight - 8)
+          : rect.bottom + 8
+      setTextColorPopoverPos({ top, left })
+      setTextColorMenuAnchor(anchor)
+    },
+    [textColorMenuAnchor]
+  )
+
+  const applyTextColor = useCallback(
+    (hex: string) => {
+      if (!editor) return
+      editor.chain().focus().setMark('color', { color: hex }).run()
+      setTextColorMenuAnchor(null)
+    },
+    [editor]
+  )
+
+  const resetTextColor = useCallback(() => {
+    if (!editor) return
+    editor.chain().focus().unsetMark('color').run()
+    setTextColorMenuAnchor(null)
+  }, [editor])
+
+  useEffect(() => {
+    if (!textColorMenuAnchor) return
+    const handlePointerDown = (e: MouseEvent) => {
+      const target = e.target as Node
+      if (
+        textColorPopoverRef.current?.contains(target) ||
+        toolbarColorBtnRef.current?.contains(target) ||
+        floatingColorBtnRef.current?.contains(target)
+      ) {
+        return
+      }
+      setTextColorMenuAnchor(null)
+    }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setTextColorMenuAnchor(null)
+    }
+    document.addEventListener('mousedown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [textColorMenuAnchor])
 
   // Flush any pending debounced content save on unmount or page hide so rapid navigation never loses edits
   useEffect(() => {
@@ -1505,6 +1595,27 @@ export function DocEditor({
               >
                 <CodeIcon className="w-3.5 h-3.5" />
               </button>
+              <button
+                ref={toolbarColorBtnRef}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => toggleTextColorMenu('toolbar')}
+                className={`w-7 h-7 rounded-full flex flex-col items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${
+                  textColorMenuAnchor === 'toolbar'
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'text-neutral-600 hover:text-neutral-900 dark:text-zinc-300 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
+                }`}
+                title="Color de texto"
+              >
+                <span className="text-[11px] font-bold leading-none">A</span>
+                <span
+                  className="w-3.5 h-[2.5px] rounded-full mt-0.5"
+                  style={{
+                    backgroundColor:
+                      activeTextColor ||
+                      (textColorMenuAnchor === 'toolbar' ? '#ffffff' : 'currentColor')
+                  }}
+                />
+              </button>
             </div>
 
             {/* Alineación de texto: Izquierda, Centro, Derecha, Justificado */}
@@ -1872,6 +1983,27 @@ export function DocEditor({
           >
             <CodeIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </button>
+          <button
+            ref={floatingColorBtnRef}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => toggleTextColorMenu('floating')}
+            className={`w-7 h-7 rounded-full flex flex-col items-center justify-center transition cursor-pointer active:scale-95 shrink-0 ${
+              textColorMenuAnchor === 'floating'
+                ? 'bg-white text-neutral-900 shadow-xs'
+                : 'text-zinc-300 hover:text-white hover:bg-white/15'
+            }`}
+            title="Color de texto"
+          >
+            <span className="text-[11px] font-bold leading-none">A</span>
+            <span
+              className="w-3.5 h-[2.5px] rounded-full mt-0.5"
+              style={{
+                backgroundColor:
+                  activeTextColor ||
+                  (textColorMenuAnchor === 'floating' ? '#18181b' : '#ffffff')
+              }}
+            />
+          </button>
 
           <div className="w-[1px] h-3.5 bg-white/15 mx-0.5 shrink-0" />
 
@@ -1924,6 +2056,79 @@ export function DocEditor({
           </button>
         </div>
       )}
+
+      {/* Text Color Picker Popover */}
+      {textColorMenuAnchor &&
+        textColorPopoverPos &&
+        typeof document !== 'undefined' &&
+        createPortal(
+          <div
+            ref={textColorPopoverRef}
+            style={{
+              position: 'fixed',
+              top: `${textColorPopoverPos.top}px`,
+              left: `${textColorPopoverPos.left}px`
+            }}
+            className="z-[120] w-[216px] p-2.5 rounded-2xl border border-black/10 dark:border-white/15 bg-white/95 dark:bg-[#1e1f24]/95 backdrop-blur-xl shadow-xl animate-in fade-in zoom-in-95 duration-100 select-none"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-semibold text-neutral-600 dark:text-zinc-300">
+                Color de texto
+              </span>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={resetTextColor}
+                className="text-[10.5px] font-medium px-2 py-0.5 rounded-full text-neutral-600 hover:text-neutral-900 dark:text-zinc-300 dark:hover:text-white bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 transition cursor-pointer"
+                title="Volver al color predeterminado"
+              >
+                Predeterminado
+              </button>
+            </div>
+
+            <div className="grid grid-cols-5 gap-2 mb-2.5">
+              {TEXT_COLOR_PALETTE.map((c) => {
+                const isActive = activeTextColor?.toLowerCase() === c.hex.toLowerCase()
+                return (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => applyTextColor(c.hex)}
+                    className={`w-7 h-7 rounded-full transition-transform hover:scale-110 active:scale-95 cursor-pointer border border-black/10 dark:border-white/15 ${
+                      isActive ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-white dark:ring-offset-[#1e1f24]' : ''
+                    }`}
+                    style={{ backgroundColor: c.hex }}
+                    title={c.label}
+                  />
+                )
+              })}
+            </div>
+
+            <label className="flex items-center justify-between gap-2 pt-2 border-t border-black/8 dark:border-white/10 cursor-pointer group">
+              <span className="text-[11px] font-medium text-neutral-600 dark:text-zinc-300 group-hover:text-neutral-900 dark:group-hover:text-white transition">
+                Personalizado
+              </span>
+              <div className="flex items-center gap-1.5">
+                {activeTextColor && (
+                  <span className="text-[10px] font-mono text-neutral-500 dark:text-zinc-400 uppercase">
+                    {activeTextColor}
+                  </span>
+                )}
+                <input
+                  type="color"
+                  value={activeTextColor && /^#[0-9a-f]{6}$/i.test(activeTextColor) ? activeTextColor : '#3b82f6'}
+                  onChange={(e) => {
+                    editor?.chain().focus().setMark('color', { color: e.target.value }).run()
+                  }}
+                  className="w-6 h-6 rounded-full cursor-pointer border-0 bg-transparent p-0"
+                  title="Elegir color personalizado"
+                />
+              </div>
+            </label>
+          </div>,
+          document.body
+        )}
 
       {/* Body Emoji Picker Modal */}
       {isBodyEmojiPickerOpen && typeof document !== 'undefined' && createPortal(
