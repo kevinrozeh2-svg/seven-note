@@ -9,6 +9,7 @@ import Placeholder from '@tiptap/extension-placeholder'
 import Underline from '@tiptap/extension-underline'
 import Link from '@tiptap/extension-link'
 import { RichImage } from './RichImageExtension'
+import { MathBlock, MathInline } from './MathExtensions'
 import { FloatingSelectionMenu } from './FloatingSelectionMenu'
 import TextAlign from '@tiptap/extension-text-align'
 import { processAndUploadImage } from '../../lib/imageOptimizer'
@@ -507,6 +508,8 @@ export function DocEditor({
       RichImage.configure({
         allowBase64: true
       }),
+      MathBlock,
+      MathInline,
       TextAlign.configure({
         types: ['heading', 'paragraph', 'blockquote'],
         alignments: ['left', 'center', 'right', 'justify'],
@@ -549,6 +552,57 @@ export function DocEditor({
         // 1. Internal Seven Note / ProseMirror copy-paste -> handle natively untouched
         if (prepared.kind === 'internal') {
           return false
+        }
+
+        // 1b. Standalone ASCII / Unicode box-drawing diagram -> insert as plaintext codeBlock
+        // directly so every space, arrow, and box character keeps exact monospace alignment
+        if (prepared.kind === 'diagram' && prepared.text) {
+          const targetEditor = editorRef.current || editor
+          if (targetEditor) {
+            targetEditor
+              .chain()
+              .focus()
+              .insertContent({
+                type: 'codeBlock',
+                attrs: { language: 'plaintext' },
+                content: [{ type: 'text', text: prepared.text }]
+              })
+              .run()
+          } else {
+            const codeBlockType = view.state.schema.nodes.codeBlock
+            if (codeBlockType) {
+              const node = codeBlockType.create(
+                { language: 'plaintext' },
+                view.state.schema.text(prepared.text)
+              )
+              view.dispatch(view.state.tr.replaceSelectionWith(node))
+            }
+          }
+          toast.success('Diagrama pegado conservando alineación')
+          return true
+        }
+
+        // 1c. Standalone LaTeX math formula ($$...$$ or \[...\]) -> insert formatted KaTeX mathBlock
+        if (prepared.kind === 'math' && prepared.text) {
+          const targetEditor = editorRef.current || editor
+          if (targetEditor) {
+            targetEditor
+              .chain()
+              .focus()
+              .insertContent([
+                { type: 'mathBlock', attrs: { latex: prepared.text } },
+                { type: 'paragraph' }
+              ])
+              .run()
+          } else {
+            const mathBlockType = view.state.schema.nodes.mathBlock
+            if (mathBlockType) {
+              const node = mathBlockType.create({ latex: prepared.text })
+              view.dispatch(view.state.tr.replaceSelectionWith(node))
+            }
+          }
+          toast.success('Fórmula matemática pegada con formato')
+          return true
         }
 
         // 2. PDF paste (browser PDF viewer, Acrobat, Preview, Foxit, etc.)
@@ -1396,17 +1450,15 @@ export function DocEditor({
 
   const handleInsertMath = () => {
     if (!editor || readOnly) return
-    const formula = escapeHtml(mathFormula.trim() || 'E = mc^2')
-    const html = `
-      <div class="my-4 p-3.5 rounded-2xl bg-zinc-900/90 border border-zinc-700/60 font-mono text-xs text-indigo-300 flex items-center justify-between shadow-sm select-none" contenteditable="false">
-        <div class="flex items-center gap-2">
-          <span class="text-base select-none">∑</span>
-          <span class="text-sm font-semibold text-indigo-200">$$ ${formula} $$</span>
-        </div>
-        <span class="text-[10px] text-zinc-500 uppercase tracking-wider font-sans">LaTeX</span>
-      </div><p></p>
-    `
-    editor.commands.insertContent(html)
+    const formula = mathFormula.trim() || 'E = mc^2'
+    editor
+      .chain()
+      .focus()
+      .insertContent([
+        { type: 'mathBlock', attrs: { latex: formula } },
+        { type: 'paragraph' }
+      ])
+      .run()
     setIsMathModalOpen(false)
     toast.success('Fórmula LaTeX insertada')
   }

@@ -1509,16 +1509,39 @@ function CanvasBoardInner({
       const richHtml =
         prepared.kind === 'internal'
           ? cleanPastedHtml(prepared.html)
-          : prepared.kind === 'pdf' || prepared.kind === 'rich-html'
+          : prepared.kind === 'diagram' || prepared.kind === 'math' || prepared.kind === 'pdf' || prepared.kind === 'rich-html'
             ? prepared.html
             : ''
 
       if (richHtml && richHtml.trim()) {
+        const smartWidth =
+          prepared.kind === 'diagram' && prepared.text
+            ? Math.min(
+                680,
+                Math.max(
+                  360,
+                  Math.round(
+                    Math.max(...prepared.text.split('\n').map((l) => l.length), 36) * 8.2 + 64
+                  )
+                )
+              )
+            : prepared.kind === 'math'
+              ? 460
+              : undefined
         await addNewNode('note', {
           content: richHtml,
-          hasHtmlHighlight: true
+          hasHtmlHighlight: true,
+          ...(smartWidth ? { width: smartWidth } : {})
         })
-        toast.success(prepared.kind === 'pdf' ? 'Nota creada desde PDF con formato' : 'Nota creada con el formato copiado')
+        toast.success(
+          prepared.kind === 'diagram'
+            ? 'Nota creada con diagrama alineado'
+            : prepared.kind === 'math'
+              ? 'Nota creada con fórmula matemática'
+              : prepared.kind === 'pdf'
+                ? 'Nota creada desde PDF con formato'
+                : 'Nota creada con el formato copiado'
+        )
       } else if (prepared.text && prepared.text.trim()) {
         await addNewNode('note', {
           content: prepared.text

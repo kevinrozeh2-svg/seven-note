@@ -1,5 +1,12 @@
 import DOMPurify from 'dompurify'
 import {
+  containsLatexMath,
+  createMathBlockHtml,
+  createMathInlineHtml,
+  extractStandaloneLatex,
+  splitInlineLatexSegments
+} from './mathUtils'
+import {
   applyStylesheetRules,
   computeElementFormatting,
   DEFAULT_FORMATTING_STATE,
@@ -22,7 +29,7 @@ export {
 }
 
 export interface ClipboardPasteResult {
-  kind: 'internal' | 'pdf' | 'rich-html' | 'plain-text'
+  kind: 'internal' | 'diagram' | 'math' | 'pdf' | 'rich-html' | 'plain-text'
   html: string
   text: string
 }
@@ -124,6 +131,236 @@ function normalizePdfCharacters(text: string, preserveTabs = true): string {
     out = out.replace(/\t/g, ' ')
   }
   return out
+}
+
+const BOX_DRAWING_CHAR_REGEX = /[\u2500-\u257F]/
+const BOX_DRAWING_CHAR_GLOBAL_REGEX = /[\u2500-\u257F]/g
+const DIAGRAM_VERTICAL_OR_DIAG_ARROW_REGEX = /[↑↓↖↗↘↙⇑⇓▲▼]/
+const DIAGRAM_ANY_ARROW_REGEX = /[↑↓←→↖↗↘↙⇑⇓⇐⇒⟶⟵▲▼◀▶]|(?:-{2,}>|<[-]{2,}|={2,}>|<={2,})/
+const ASCII_BOX_BORDER_REGEX = /\+[-=]{2,}\+/
+const RICH_SEMANTIC_HTML_TAG_REGEX =
+  /<\s*(?:b|strong|i|em|u|s|strike|del|mark|h[1-6]|ul|ol|li|a|table|thead|tbody|tr|td|th|blockquote|pre|code|sub|sup|hr|img)\b[^>]*>/i
+
+/**
+ * Normalizes an ASCII / Unicode box-drawing diagram while strictly preserving
+ * column alignment (never collapsing internal spaces or trimming line-1 indent).
+ */
+export function normalizeAsciiDiagramText(text: string): string {
+  if (!text || typeof text !== 'string') return ''
+  const rawLines = text
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(UNICODE_SPACES_REGEX, ' ')
+    .replace(INVISIBLE_CONTROL_REGEX, '')
+    .split('\n')
+    .map((line) => line.replace(/\t/g, '    ').replace(/[ ]+$/, ''))
+
+  // Strip only leading/trailing completely empty lines
+  let start = 0
+  while (start < rawLines.length && rawLines[start].trim() === '') start++
+  let end = rawLines.length - 1
+  while (end >= start && rawLines[end].trim() === '') end--
+  if (start > end) return ''
+
+  const sliced = rawLines.slice(start, end + 1)
+
+  // Strip only the common minimum leading indent shared by ALL non-empty lines
+  let minIndent = Infinity
+  for (const line of sliced) {
+    if (line.trim() === '') continue
+    const leading = line.match(/^[ ]*/)?.[0].length || 0
+    if (leading < minIndent) minIndent = leading
+  }
+  if (!Number.isFinite(minIndent) || minIndent <= 0) {
+    return sliced.join('\n')
+  }
+  return sliced.map((line) => (line.trim() === '' ? '' : line.slice(minIndent))).join('\n')
+}
+
+function isPlainProseBoundaryLine(line: string): boolean {
+  const leading = line.match(/^[ ]*/)?.[0].length || 0
+  if (leading >= 2) return false
+  const trimmed = line.trim()
+  if (!trimmed) return false
+  if (
+    BOX_DRAWING_CHAR_REGEX.test(trimmed) ||
+    DIAGRAM_ANY_ARROW_REGEX.test(trimmed) ||
+    ASCII_BOX_BORDER_REGEX.test(trimmed)
+  ) {
+    return false
+  }
+  // If the line has intentional internal column alignment gaps, keep it in the diagram
+  if (/\S[ ]{2,}\S/.test(trimmed)) return false
+  // Short or sentence-like prose ending in ':' or '.' (e.g. "Aquí tienes el diagrama:")
+  return /[.?!:]$/.test(trimmed) || trimmed.length >= 42
+}
+
+/**
+ * Checks whether a contiguous block of lines is an ASCII / Unicode box-drawing diagram.
+ */
+function isAsciiDiagramBlock(lines: string[]): boolean {
+  const nonEmpty = lines.filter((l) => l.trim().length > 0)
+  if (nonEmpty.length < 2) return false
+
+  let boxDrawingLines = 0
+  let totalBoxDrawingChars = 0
+  let asciiBorderLines = 0
+  let pipeBoxLines = 0
+  let verticalArrowLines = 0
+  let anyArrowLines = 0
+  let alignedSpaceLines = 0
+
+  for (const line of nonEmpty) {
+    const normalizedLine = line.replace(/\t/g, '    ')
+    const boxMatches = normalizedLine.match(BOX_DRAWING_CHAR_GLOBAL_REGEX)
+    if (boxMatches && boxMatches.length > 0) {
+      boxDrawingLines++
+      totalBoxDrawingChars += boxMatches.length
+    }
+    if (ASCII_BOX_BORDER_REGEX.test(normalizedLine)) {
+      asciiBorderLines++
+    }
+    if (/\|[^|\n]+\|/.test(normalizedLine)) {
+      pipeBoxLines++
+    }
+    if (DIAGRAM_VERTICAL_OR_DIAG_ARROW_REGEX.test(normalizedLine)) {
+      verticalArrowLines++
+    }
+    if (DIAGRAM_ANY_ARROW_REGEX.test(normalizedLine)) {
+      anyArrowLines++
+    }
+    const leading = normalizedLine.match(/^[ ]*/)?.[0].length || 0
+    if (leading >= 3 || /\S[ ]{2,}\S/.test(normalizedLine.trim())) {
+      alignedSpaceLines++
+    }
+  }
+
+  // 1. Unicode box-drawing diagrams (flowcharts, trees, org charts, mindmaps)
+  if (boxDrawingLines >= 2) return true
+  if (boxDrawingLines >= 1 && totalBoxDrawingChars >= 3 && (anyArrowLines >= 1 || alignedSpaceLines >= 1)) {
+    return true
+  }
+
+  // 2. Classic ASCII +---+ / |...| box art
+  if (asciiBorderLines >= 2) return true
+  if (asciiBorderLines >= 1 && (pipeBoxLines >= 1 || anyArrowLines >= 1)) return true
+
+  // 3. Spatial arrow diagrams (vertical/diagonal arrows + positional indentation/spacing)
+  if (verticalArrowLines >= 1 && anyArrowLines >= 2 && alignedSpaceLines >= 2) {
+    return true
+  }
+
+  return false
+}
+
+/**
+ * Finds line index ranges [start -> end] corresponding to ASCII/Unicode diagram blocks.
+ */
+function findAsciiDiagramRanges(rawLines: string[]): Map<number, number> {
+  const ranges = new Map<number, number>()
+  let inFenced = false
+  let i = 0
+
+  while (i < rawLines.length) {
+    const trimmed = rawLines[i].trim()
+    if (/^```/.test(trimmed)) {
+      inFenced = !inFenced
+      i++
+      continue
+    }
+    if (inFenced || !trimmed) {
+      i++
+      continue
+    }
+
+    // Collect contiguous non-empty lines until next blank line or fenced code block
+    const blockStart = i
+    while (i < rawLines.length && rawLines[i].trim() !== '' && !/^```/.test(rawLines[i].trim())) {
+      i++
+    }
+    const blockEnd = i - 1
+    const blockLines = rawLines.slice(blockStart, blockEnd + 1)
+
+    if (isAsciiDiagramBlock(blockLines)) {
+      // Trim detached plain-prose intro/outro lines that were pasted without a blank line
+      let dStart = blockStart
+      let dEnd = blockEnd
+      while (dStart < dEnd && isPlainProseBoundaryLine(rawLines[dStart])) {
+        dStart++
+      }
+      while (dEnd > dStart && isPlainProseBoundaryLine(rawLines[dEnd])) {
+        dEnd--
+      }
+      if (isAsciiDiagramBlock(rawLines.slice(dStart, dEnd + 1))) {
+        ranges.set(dStart, dEnd)
+      }
+    }
+  }
+
+  return ranges
+}
+
+/**
+ * Returns true if the text contains at least one ASCII/Unicode box-drawing or spatial diagram block.
+ */
+export function containsAsciiDiagram(text: string): boolean {
+  if (!text || typeof text !== 'string') return false
+  const normalized = text
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(UNICODE_SPACES_REGEX, ' ')
+    .replace(INVISIBLE_CONTROL_REGEX, '')
+  const lines = normalized.split('\n')
+  return findAsciiDiagramRanges(lines).size > 0
+}
+
+/**
+ * Backward-friendly alias for checking whether a text block is an ASCII/Unicode diagram.
+ */
+export function isAsciiDiagramText(text: string): boolean {
+  if (!text || typeof text !== 'string') return false
+  const normalized = text
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(UNICODE_SPACES_REGEX, ' ')
+    .replace(INVISIBLE_CONTROL_REGEX, '')
+  return isAsciiDiagramBlock(normalized.split('\n'))
+}
+
+/**
+ * Returns true if the entire pasted text is a standalone ASCII/Unicode diagram
+ * (with no surrounding prose paragraphs).
+ */
+export function isStandaloneAsciiDiagram(text: string): boolean {
+  if (!text || typeof text !== 'string') return false
+  const normalized = normalizeAsciiDiagramText(text)
+  if (!normalized) return false
+  const lines = normalized.split('\n')
+  const ranges = findAsciiDiagramRanges(lines)
+  if (ranges.size === 0) return false
+
+  // Verify every non-empty line belongs to a detected diagram range
+  for (let idx = 0; idx < lines.length; idx++) {
+    if (lines[idx].trim() === '') continue
+    let covered = false
+    for (const [start, end] of ranges.entries()) {
+      if (idx >= start && idx <= end) {
+        covered = true
+        break
+      }
+    }
+    if (!covered) return false
+  }
+  return true
+}
+
+/**
+ * Formats an ASCII/Unicode diagram into a monospace pre/code HTML block with plaintext language
+ * so TipTap/Lowlight and Canvas cards preserve every space without false syntax highlighting.
+ */
+export function formatAsciiDiagramToHtml(text: string): string {
+  const normalized = normalizeAsciiDiagramText(text)
+  return `<pre class="seven-ascii-diagram"><code class="language-plaintext">${escapeHtml(normalized)}</code></pre>`
 }
 
 /**
@@ -2431,11 +2668,19 @@ function formatInlineMarkdownSafe(escapedText: string): string {
 }
 
 function formatPlainTextLineToHtml(rawSegment: string): string {
-  const normalized = normalizeSpacingAndPunctuation(rawSegment, true)
-  const escaped = escapeHtml(normalized)
-  const withMath = convertMathematicalBoldToHtml(escaped)
-  const withMd = formatInlineMarkdownSafe(withMath)
-  return linkifyEscapedText(withMd)
+  const segments = splitInlineLatexSegments(rawSegment)
+  return segments
+    .map((seg) => {
+      if (seg.type === 'math-inline') {
+        return createMathInlineHtml(seg.value)
+      }
+      const normalized = normalizeSpacingAndPunctuation(seg.value, true)
+      const escaped = escapeHtml(normalized)
+      const withMath = convertMathematicalBoldToHtml(escaped)
+      const withMd = formatInlineMarkdownSafe(withMath)
+      return linkifyEscapedText(withMd)
+    })
+    .join('')
 }
 
 /**
@@ -2480,6 +2725,7 @@ export function processPdfPlainText(rawText: string, sourceHtml?: string): strin
   }
 
   const rawLines = normalized.split('\n')
+  const diagramRangeByStart = findAsciiDiagramRanges(rawLines)
 
   // 5. Analyze document geometry (typical line wrap width, base indent, first-line indent pattern)
   const nonEmptyTrimmedLens: number[] = []
@@ -2652,6 +2898,51 @@ export function processPdfPlainText(rawText: string, sourceHtml?: string): strin
     if (inFencedCode) {
       fencedCodeLines.push(rawLine)
       continue
+    }
+
+    // Preserve ASCII / Unicode box-drawing diagrams verbatim inside monospace plaintext code blocks
+    if (diagramRangeByStart.has(i)) {
+      const endIdx = diagramRangeByStart.get(i)!
+      flushAll()
+      const diagramBlockText = rawLines.slice(i, endIdx + 1).join('\n')
+      htmlParts.push(formatAsciiDiagramToHtml(diagramBlockText))
+      consecutiveBlankLines = 0
+      i = endIdx
+      continue
+    }
+
+    // Display LaTeX math blocks: $$ ... $$ or \[ ... \] (single-line or multi-line)
+    const standaloneLineMath = extractStandaloneLatex(trimmed)
+    if (standaloneLineMath) {
+      flushAll()
+      htmlParts.push(createMathBlockHtml(standaloneLineMath))
+      consecutiveBlankLines = 0
+      continue
+    }
+    if (trimmed.startsWith('$$') || trimmed.startsWith('\\[')) {
+      const closeDelim = trimmed.startsWith('$$') ? '$$' : '\\]'
+      const openLen = 2
+      const firstBody = trimmed.slice(openLen)
+      let endIdx = -1
+      const mathLines: string[] = firstBody ? [firstBody] : []
+      for (let j = i + 1; j < rawLines.length; j++) {
+        const lineJ = rawLines[j]
+        const closePos = lineJ.indexOf(closeDelim)
+        if (closePos !== -1) {
+          const beforeClose = lineJ.slice(0, closePos).trim()
+          if (beforeClose) mathLines.push(beforeClose)
+          endIdx = j
+          break
+        }
+        mathLines.push(lineJ)
+      }
+      if (endIdx !== -1 && mathLines.join('\n').trim()) {
+        flushAll()
+        htmlParts.push(createMathBlockHtml(mathLines.join('\n')))
+        consecutiveBlankLines = 0
+        i = endIdx
+        continue
+      }
     }
 
     // Blank lines: preserve multi-line vertical gaps cleanly
@@ -3080,6 +3371,36 @@ export function cleanPastedHtml(html: string): string {
         }
       }
 
+      // Normalize <pre> blocks containing ASCII / Unicode diagrams so alignment is never broken
+      // by stray syntax-highlight spans or missing plaintext language class
+      doc.querySelectorAll('pre').forEach((preEl) => {
+        const rawPreText = preEl.textContent || ''
+        if (isAsciiDiagramText(rawPreText)) {
+          preEl.classList.add('seven-ascii-diagram')
+          const codeEl = doc.createElement('code')
+          codeEl.className = 'language-plaintext'
+          codeEl.textContent = normalizeAsciiDiagramText(rawPreText)
+          preEl.innerHTML = ''
+          preEl.appendChild(codeEl)
+        }
+      })
+
+      // Convert copied KaTeX / MathML elements (e.g. from ChatGPT, Wikipedia) into native math nodes
+      doc.querySelectorAll('.katex-display, .katex').forEach((katexEl) => {
+        if (!katexEl.isConnected) return
+        const annotation = katexEl.querySelector('annotation[encoding="application/x-tex"]')
+        const latex = annotation?.textContent?.trim()
+        if (!latex) return
+        const isDisplay =
+          katexEl.classList.contains('katex-display') || Boolean(katexEl.closest('.katex-display'))
+        const target = isDisplay ? katexEl.closest('.katex-display') || katexEl : katexEl
+        const wrapper = doc.createElement(isDisplay ? 'div' : 'span')
+        wrapper.setAttribute('data-type', isDisplay ? 'math-block' : 'math-inline')
+        wrapper.setAttribute('data-latex', latex)
+        wrapper.className = isDisplay ? 'seven-math-block' : 'seven-math-inline'
+        target.replaceWith(wrapper)
+      })
+
       cleaned = doc.body.innerHTML
     } catch {
       // fallback
@@ -3097,29 +3418,43 @@ export function cleanPastedHtml(html: string): string {
  */
 export function cleanPastedText(text: string): string {
   if (!text || typeof text !== 'string') return ''
+  // Never collapse multi-space alignment inside ASCII / Unicode diagrams
+  if (isStandaloneAsciiDiagram(text)) {
+    return normalizeAsciiDiagramText(text)
+  }
+
   let cleaned = normalizePdfCharacters(text, true)
   cleaned = normalizeLigatures(cleaned)
   cleaned = fixHyphenatedLinebreaks(cleaned)
 
   // Clean each line's spacing/punctuation without flattening intentional multi-line plain text
-  cleaned = cleaned
-    .split('\n')
-    .map((line) => {
-      const leading = line.match(/^[ \t]*/)?.[0] || ''
-      const rest = line.slice(leading.length)
-      if (!rest.trim()) return ''
-      return leading + normalizeSpacingAndPunctuation(rest, true)
-    })
-    .join('\n')
-    .trim()
+  const rawLines = cleaned.split('\n')
+  const diagramRanges = findAsciiDiagramRanges(rawLines)
+  const outLines: string[] = []
+  for (let i = 0; i < rawLines.length; i++) {
+    if (diagramRanges.has(i)) {
+      const endIdx = diagramRanges.get(i)!
+      outLines.push(normalizeAsciiDiagramText(rawLines.slice(i, endIdx + 1).join('\n')))
+      i = endIdx
+      continue
+    }
+    const line = rawLines[i]
+    const leading = line.match(/^[ \t]*/)?.[0] || ''
+    const rest = line.slice(leading.length)
+    if (!rest.trim()) {
+      outLines.push('')
+      continue
+    }
+    outLines.push(leading + normalizeSpacingAndPunctuation(rest, true))
+  }
 
-  return cleaned
+  return outLines.join('\n').replace(/^\n+|\n+$/g, '')
 }
 
 /**
  * Unified entry point for all clipboard paste events (DocEditor, CanvasBoard, NoteNode, TextNode).
- * Properly classifies internal ProseMirror slices, PDF HTML, PDF plain text, rich HTML (Word/Docs/Web),
- * and simple plain text so each takes the optimal lossless path.
+ * Properly classifies internal ProseMirror slices, ASCII/Unicode diagrams, PDF HTML, PDF plain text,
+ * rich HTML (Word/Docs/Web), and simple plain text so each takes the optimal lossless path.
  */
 export function prepareClipboardPaste(html: string, text: string): ClipboardPasteResult {
   const safeHtml = typeof html === 'string' ? html : ''
@@ -3130,21 +3465,58 @@ export function prepareClipboardPaste(html: string, text: string): ClipboardPast
     return { kind: 'internal', html: safeHtml, text: safeText }
   }
 
-  // 2. Explicit PDF HTML (PDF.js, pdf2htmlEX, Apple Preview, positioned spans, PDF fonts)
+  // 2. Standalone ASCII / Unicode box-drawing diagram (from any app: chat, browser, editor, PDF)
+  if (safeText.trim() && isStandaloneAsciiDiagram(safeText)) {
+    const normalizedDiagram = normalizeAsciiDiagramText(safeText)
+    return {
+      kind: 'diagram',
+      html: formatAsciiDiagramToHtml(normalizedDiagram),
+      text: normalizedDiagram
+    }
+  }
+
+  // 2b. Standalone LaTeX display formula ($$...$$ or \[...\])
+  const standaloneLatex = safeText.trim() ? extractStandaloneLatex(safeText) : null
+  if (standaloneLatex) {
+    return {
+      kind: 'math',
+      html: createMathBlockHtml(standaloneLatex),
+      text: standaloneLatex
+    }
+  }
+
+  // 3. Explicit PDF HTML (PDF.js, pdf2htmlEX, Apple Preview, positioned spans, PDF fonts)
   if (safeHtml && isPdfHtml(safeHtml)) {
     const outHtml = processPdfHtml(safeHtml, safeText)
     return { kind: 'pdf', html: outHtml, text: safeText }
   }
 
-  // 3. Rich non-PDF HTML (Word, Google Docs, Notion, web pages with actual formatting/structure)
+  // 4. Plain-div/br wrapped HTML that contains an embedded ASCII diagram or LaTeX math (e.g. WhatsApp/Notion/chat)
+  if (
+    safeHtml &&
+    safeText.trim() &&
+    !/<\s*pre\b/i.test(safeHtml) &&
+    !RICH_SEMANTIC_HTML_TAG_REGEX.test(safeHtml) &&
+    (containsAsciiDiagram(safeText) || containsLatexMath(safeText))
+  ) {
+    const outHtml = processPdfPlainText(safeText)
+    return { kind: 'pdf', html: outHtml, text: cleanPastedText(safeText) }
+  }
+
+  // 5. Rich non-PDF HTML (Word, Google Docs, Notion, web pages with actual formatting/structure)
   if (safeHtml && hasHtmlFormatting(safeHtml)) {
     const outHtml = cleanPastedHtml(safeHtml)
     return { kind: 'rich-html', html: outHtml, text: safeText }
   }
 
-  // 4. Plain text (or trivial single-span browser wrapper HTML) -> check PDF/structured heuristics
+  // 6. Plain text (or trivial single-span browser wrapper HTML) -> check PDF/structured/diagram/math heuristics
   if (safeText.trim()) {
-    if (isPdfOrStructuredText(safeText) || isLegalContractOrPdfText(safeText)) {
+    if (
+      isPdfOrStructuredText(safeText) ||
+      isLegalContractOrPdfText(safeText) ||
+      containsAsciiDiagram(safeText) ||
+      containsLatexMath(safeText)
+    ) {
       const outHtml = processPdfPlainText(safeText)
       return { kind: 'pdf', html: outHtml, text: cleanPastedText(safeText) }
     }

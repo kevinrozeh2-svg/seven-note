@@ -12,6 +12,7 @@ import {
   sanitizeHtmlContent,
   prepareClipboardPaste
 } from '../../../lib/pasteUtils'
+import { renderMathNodesInHtml } from '../../../lib/mathUtils'
 
 interface ColorScheme {
   cardBorder: string
@@ -143,7 +144,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
     if (isEditingContent && contentEditableRef.current) {
       const el = contentEditableRef.current
       if (hasStoredHtmlMarkup(content) || data.hasHtmlHighlight) {
-        el.innerHTML = sanitizeHtmlContent(content)
+        el.innerHTML = renderMathNodesInHtml(sanitizeHtmlContent(content))
       } else if (content) {
         el.innerText = content
       } else {
@@ -185,7 +186,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
       const richHtml =
         prepared.kind === 'internal'
           ? cleanPastedHtml(prepared.html)
-          : prepared.kind === 'pdf' || prepared.kind === 'rich-html'
+          : prepared.kind === 'diagram' || prepared.kind === 'math' || prepared.kind === 'pdf' || prepared.kind === 'rich-html'
             ? prepared.html
             : ''
 
@@ -204,7 +205,15 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
         const updated = baseHtml ? `${baseHtml}<br/>${richHtml}` : richHtml
         setContent(updated)
         save({ content: updated, hasHtmlHighlight: true })
-        toast.success(prepared.kind === 'pdf' ? 'Texto de PDF pegado con formato' : 'Formato de texto conservado en la nota')
+        toast.success(
+          prepared.kind === 'diagram'
+            ? 'Diagrama pegado conservando alineación'
+            : prepared.kind === 'math'
+              ? 'Fórmula matemática pegada con formato'
+              : prepared.kind === 'pdf'
+                ? 'Texto de PDF pegado con formato'
+                : 'Formato de texto conservado en la nota'
+        )
       } else if (prepared.text && prepared.text.trim()) {
         e.preventDefault()
         if (existingIsHtml && content && content.trim()) {
@@ -232,12 +241,12 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
     const richHtml =
       prepared.kind === 'internal'
         ? cleanPastedHtml(prepared.html)
-        : prepared.kind === 'pdf' || prepared.kind === 'rich-html'
+        : prepared.kind === 'diagram' || prepared.kind === 'math' || prepared.kind === 'pdf' || prepared.kind === 'rich-html'
           ? prepared.html
           : ''
 
     if (richHtml && richHtml.trim()) {
-      document.execCommand('insertHTML', false, richHtml)
+      document.execCommand('insertHTML', false, renderMathNodesInHtml(richHtml))
     } else if (prepared.text) {
       document.execCommand('insertText', false, prepared.text)
     }
@@ -247,7 +256,11 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
       setContent(htmlVal)
       save({
         content: htmlVal,
-        hasHtmlHighlight: hasStoredHtmlMarkup(htmlVal) || prepared.kind === 'pdf'
+        hasHtmlHighlight:
+          hasStoredHtmlMarkup(htmlVal) ||
+          prepared.kind === 'pdf' ||
+          prepared.kind === 'diagram' ||
+          prepared.kind === 'math'
       })
     }
   }
@@ -570,7 +583,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
             >
               {content ? (
                 hasStoredHtmlMarkup(content) || data.hasHtmlHighlight ? (
-                  <div dangerouslySetInnerHTML={{ __html: sanitizeHtmlContent(content) }} />
+                  <div dangerouslySetInnerHTML={{ __html: renderMathNodesInHtml(sanitizeHtmlContent(content)) }} />
                 ) : (
                   <div className="whitespace-pre-wrap">{renderWithAppleEmoji(content)}</div>
                 )
@@ -619,7 +632,7 @@ export const NoteNode = memo(({ id, data, selected }: any) => {
                     <AppleEmoji emoji={content.trim()} size={56} className="drop-shadow-md hover:scale-110 transition-transform duration-150 cursor-pointer" />
                   </div>
                 ) : hasStoredHtmlMarkup(content) || data.hasHtmlHighlight ? (
-                  <div dangerouslySetInnerHTML={{ __html: sanitizeHtmlContent(content) }} />
+                  <div dangerouslySetInnerHTML={{ __html: renderMathNodesInHtml(sanitizeHtmlContent(content)) }} />
                 ) : (
                   <div className="whitespace-pre-wrap">{renderWithAppleEmoji(content)}</div>
                 )
