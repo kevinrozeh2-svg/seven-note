@@ -3064,7 +3064,7 @@ export function Sidebar({
             className="flex items-center justify-between px-2.5 py-1.5 pb-2 mb-1.5 border-b border-black/[0.06] dark:border-white/[0.08] text-[13px] font-semibold tracking-tight text-neutral-800 dark:text-neutral-200 hover:text-neutral-950 dark:hover:text-white cursor-pointer transition group"
           >
             <div className="flex items-center gap-2">
-              <Star size={15} weight="duotone" className="text-neutral-500 dark:text-neutral-400 shrink-0" />
+              <Star size={15} className="text-neutral-500 dark:text-neutral-400 shrink-0" />
               <span>Favoritos</span>
             </div>
             <div className="flex items-center gap-1.5">
@@ -3149,7 +3149,7 @@ export function Sidebar({
             className="flex items-center justify-between px-2.5 py-1.5 pb-2 mb-1.5 border-b border-black/[0.06] dark:border-white/[0.08] text-[13px] font-semibold tracking-tight text-neutral-800 dark:text-neutral-200 hover:text-neutral-950 dark:hover:text-white cursor-pointer transition group"
           >
             <div className="flex items-center gap-2">
-              <Lock size={15} weight="duotone" className="text-neutral-500 dark:text-neutral-400 shrink-0" />
+              <Lock size={15} className="text-neutral-500 dark:text-neutral-400 shrink-0" />
               <span>Privado</span>
             </div>
             <div className="flex items-center gap-1.5">
@@ -3299,7 +3299,7 @@ export function Sidebar({
             title="Documentos de equipo (arrastra una nota aquí para sacarla a la raíz)"
           >
             <div className="flex items-center gap-2">
-              <NotePencil size={15} weight="duotone" className="text-neutral-500 dark:text-neutral-400 shrink-0" />
+              <NotePencil size={15} className="text-neutral-500 dark:text-neutral-400 shrink-0" />
               <span>Documentos</span>
               {dropTarget?.type === 'root' && (
                 <span className="text-[9px] bg-blue-500 text-white px-1.5 py-0.2 rounded-full font-medium ml-1">

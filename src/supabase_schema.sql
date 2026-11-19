@@ -921,3 +921,163 @@ create policy "Users manage their own push subscriptions"
   to authenticated
   using (user_id = auth.uid())
   with check (user_id = auth.uid());
+
+-- ========================================================
+-- 16. REGISTRO DE LECTURAS DE DOCUMENTOS (seven_document_reads)
+-- Permite a los administradores ver qué personas han leído cada documento.
+-- Con solo entrar al documento se registra automáticamente la lectura.
+-- ========================================================
+create table if not exists public.seven_document_reads (
+  workspace_id text not null,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  user_name text not null default '',
+  user_email text,
+  user_color text not null default '#2563eb',
+  user_avatar_url text,
+  first_read_at bigint not null default (extract(epoch from now()) * 1000)::bigint,
+  last_read_at bigint not null default (extract(epoch from now()) * 1000)::bigint,
+  read_count integer not null default 1,
+  primary key (workspace_id, user_id)
+);
+
+create index if not exists idx_seven_document_reads_workspace_last
+  on public.seven_document_reads (workspace_id, last_read_at desc);
+
+create index if not exists idx_seven_document_reads_user
+  on public.seven_document_reads (user_id);
+
+alter table public.seven_document_reads enable row level security;
+
+drop policy if exists "Admins and self can view document reads" on public.seven_document_reads;
+create policy "Admins and self can view document reads"
+  on public.seven_document_reads for select
+  to authenticated
+  using (
+    public.is_user_active((select auth.uid()))
+    and (
+      user_id = (select auth.uid())
+      or (
+        public.is_admin((select auth.uid()))
+        and not exists (
+          select 1 from public.seven_workspaces w
+          where w.id = seven_document_reads.workspace_id
+            and w.is_private = true
+            and w.user_id is distinct from (select auth.uid())
+        )
+      )
+    )
+  );
+
+drop policy if exists "Users can insert own document reads" on public.seven_document_reads;
+create policy "Users can insert own document reads"
+  on public.seven_document_reads for insert
+  to authenticated
+  with check (
+    public.is_user_active((select auth.uid()))
+    and user_id = (select auth.uid())
+  );
+
+drop policy if exists "Users can update own document reads" on public.seven_document_reads;
+create policy "Users can update own document reads"
+  on public.seven_document_reads for update
+  to authenticated
+  using (
+    public.is_user_active((select auth.uid()))
+    and user_id = (select auth.uid())
+  )
+  with check (
+    public.is_user_active((select auth.uid()))
+    and user_id = (select auth.uid())
+  );
+
+create or replace function public.record_document_read(p_workspace_id text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_now_ms bigint := (extract(epoch from now()) * 1000)::bigint;
+  v_name text;
+  v_email text;
+  v_color text;
+  v_avatar text;
+begin
+  if v_uid is null or p_workspace_id is null or length(trim(p_workspace_id)) = 0 then
+    return;
+  end if;
+
+  if not public.is_user_active(v_uid) then
+    return;
+  end if;
+
+  -- Respetar privacidad: no registrar lectura sobre notas privadas ajenas
+  if exists (
+    select 1 from public.seven_workspaces w
+    where w.id = p_workspace_id
+      and w.is_private = true
+      and w.user_id is distinct from v_uid
+  ) then
+    return;
+  end if;
+
+  select
+    coalesce(nullif(trim(up.full_name), ''), split_part(up.email, '@', 1), 'Usuario'),
+    up.email,
+    coalesce(nullif(trim(up.color), ''), '#2563eb'),
+    up.avatar_url
+  into v_name, v_email, v_color, v_avatar
+  from public.user_profiles up
+  where up.id = v_uid
+  limit 1;
+
+  if v_name is null then
+    v_name := 'Usuario';
+    v_color := '#2563eb';
+  end if;
+
+  insert into public.seven_document_reads (
+    workspace_id,
+    user_id,
+    user_name,
+    user_email,
+    user_color,
+    user_avatar_url,
+    first_read_at,
+    last_read_at,
+    read_count
+  ) values (
+    p_workspace_id,
+    v_uid,
+    v_name,
+    v_email,
+    v_color,
+    v_avatar,
+    v_now_ms,
+    v_now_ms,
+    1
+  )
+  on conflict (workspace_id, user_id) do update set
+    user_name = excluded.user_name,
+    user_email = coalesce(excluded.user_email, seven_document_reads.user_email),
+    user_color = excluded.user_color,
+    user_avatar_url = coalesce(excluded.user_avatar_url, seven_document_reads.user_avatar_url),
+    last_read_at = v_now_ms,
+    read_count = seven_document_reads.read_count + 1;
+end;
+$$;
+
+grant execute on function public.record_document_read(text) to authenticated;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'seven_document_reads'
+  ) then
+    alter publication supabase_realtime add table public.seven_document_reads;
+  end if;
+exception when others then
+  null;
+end $$;

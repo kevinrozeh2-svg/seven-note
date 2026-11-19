@@ -40,6 +40,8 @@ import {
   getSafeTimestamp
 } from './db'
 import { markItemAsRead } from './lib/unreadTracker'
+import { recordDocumentRead } from './lib/documentReads'
+import { DocumentReadersBadge } from './components/ui/DocumentReadersBadge'
 import { syncEngine, type SyncEngineStatus } from './lib/syncEngine'
 import { ObsidianRibbon } from './components/sidebar/ObsidianRibbon'
 import { Sidebar } from './components/sidebar/Sidebar'
@@ -345,7 +347,7 @@ function MainApp() {
   const [isFindInPageOpen, setIsFindInPageOpen] = useState(false)
   const [isQuickCaptureOpen, setIsQuickCaptureOpen] = useState(false)
 
-  const [activeDropdown, setActiveDropdown] = useState<'info' | 'more' | 'export' | null>(null)
+  const [activeDropdown, setActiveDropdown] = useState<'info' | 'more' | 'export' | 'readers' | null>(null)
   const [focusMode, setFocusMode] = useState(false)
 
   // Workbench tabs state (Browser-grade tab management)
@@ -406,13 +408,16 @@ function MainApp() {
 
   // Mark currently open note and space as read for the active member
   useEffect(() => {
-    if (currentWorkspaceId) {
+    const currentTab = tabsRef.current.find((t) => t.id === activeTabId)
+    const isSpecialView = Boolean(currentTab?.viewType && currentTab.viewType !== 'doc')
+    if (currentWorkspaceId && !isSpecialView) {
       markItemAsRead(currentWorkspaceId, 'workspace', currentMember, authUser?.id)
+      void recordDocumentRead(currentWorkspaceId, currentMember, authUser?.id)
     }
     if (currentSpaceId) {
       markItemAsRead(currentSpaceId, 'space', currentMember, authUser?.id)
     }
-  }, [currentWorkspaceId, currentSpaceId, currentMember, authUser?.id])
+  }, [currentWorkspaceId, currentSpaceId, activeTabId, currentMember, authUser?.id])
 
   // Synchronize and deduplicate tabs whenever workspaces are loaded or changed
   useEffect(() => {
@@ -507,6 +512,7 @@ function MainApp() {
     }
     setCurrentWorkspaceId(wsId)
     markItemAsRead(wsId, 'workspace', currentMember, authUser?.id)
+    void recordDocumentRead(wsId, currentMember, authUser?.id)
 
     setTabs((prev) => {
       const existing = prev.find((t) => t.workspaceId === wsId && (!t.viewType || t.viewType === 'doc'))
@@ -1764,6 +1770,19 @@ function MainApp() {
                 <Sparkle size={13} />
                 <span className="hidden md:inline">Rápida</span>
               </button>
+
+              {/* Admin-only Read Receipts: "Leído por X persona" */}
+              {isUserAdmin(currentMember) && currentWorkspace && (
+                <DocumentReadersBadge
+                  workspace={currentWorkspace}
+                  currentMember={currentMember}
+                  authUserId={authUser?.id}
+                  isOpen={activeDropdown === 'readers'}
+                  onToggle={() =>
+                    setActiveDropdown(activeDropdown === 'readers' ? null : 'readers')
+                  }
+                />
+              )}
 
               {/* Info Button ⓘ */}
               <div className="relative hidden sm:block">

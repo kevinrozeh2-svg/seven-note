@@ -290,7 +290,7 @@ export function ObsidianRibbon({
             }
           >
             {syncStatus.state === 'syncing' ? (
-              <ArrowsClockwise size={17} className="animate-spin text-blue-400" />
+              <ArrowsClockwise size={17} className="animate-spin" />
             ) : syncStatus.state === 'error' || syncStatus.state === 'offline' ? (
               <CloudSlash size={17} className="text-amber-400" />
             ) : (
