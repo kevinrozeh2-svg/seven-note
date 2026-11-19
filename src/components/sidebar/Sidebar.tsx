@@ -62,6 +62,7 @@ import {
 import {
   getCurrentMember,
   type TeamMember,
+  isUserAdmin,
   isWorkspaceVisible,
   isSpaceVisible,
   canUserEditWorkspace,
@@ -371,6 +372,11 @@ export function Sidebar({
     y: number
     isPrivate?: boolean
   } | null>(null)
+  const [isMoveSpaceExpanded, setIsMoveSpaceExpanded] = useState(false)
+
+  useEffect(() => {
+    setIsMoveSpaceExpanded(false)
+  }, [activeItemMenu])
 
   useEffect(() => {
     const handleCloseMenu = () => setActiveItemMenu(null)
@@ -1720,6 +1726,372 @@ export function Sidebar({
     }
   }
 
+  // Permisos y acciones para mover archivos o carpetas a otros espacios de trabajo
+  // - Admin: puede mover cualquier carpeta o archivo compartido (y sus propios archivos privados).
+  // - Trabajador: solo puede mover carpetas o archivos que haya creado él mismo.
+  const canMoveDocToOtherSpace = useCallback(
+    (doc?: WorkspaceItem | null): boolean => {
+      if (!doc || doc.isDeleted) return false
+      if (!canUserEditWorkspace(doc, activeMember, authUser?.id)) return false
+      if (isUserAdmin(activeMember)) return true
+
+      // Verificar que todas las subpáginas activas del archivo también pertenezcan al trabajador
+      const visited = new Set<string>([doc.id])
+      const queue = [doc.id]
+      while (queue.length > 0) {
+        const pid = queue.shift()!
+        for (const w of activeWorkspaces) {
+          if (w.parentId === pid && !visited.has(w.id)) {
+            if (!canUserEditWorkspace(w, activeMember, authUser?.id)) return false
+            visited.add(w.id)
+            queue.push(w.id)
+          }
+        }
+      }
+      return true
+    },
+    [activeMember, authUser?.id, activeWorkspaces]
+  )
+
+  const canMoveFolderToOtherSpace = useCallback(
+    (folderPath?: string | null): boolean => {
+      const cleanPath = normalizeFolderPath(folderPath)
+      if (!cleanPath) return false
+      if (isUserAdmin(activeMember)) return true
+
+      const directDocs = teamDocs.filter((w) => {
+        const f = normalizeFolderPath(w.folder)
+        return f === cleanPath || (f !== null && f.startsWith(cleanPath + '/'))
+      })
+
+      if (directDocs.length === 0) {
+        return canUserManageSpace(currentSpace, activeMember, authUser?.id)
+      }
+
+      const movedIds = new Set<string>(directDocs.map((w) => w.id))
+      const queue = directDocs.map((w) => w.id)
+      while (queue.length > 0) {
+        const pid = queue.shift()!
+        for (const w of activeWorkspaces) {
+          if (w.parentId === pid && !movedIds.has(w.id)) {
+            movedIds.add(w.id)
+            queue.push(w.id)
+          }
+        }
+      }
+
+      for (const id of movedIds) {
+        const doc = activeWorkspaces.find((w) => w.id === id)
+        if (doc && !canUserEditWorkspace(doc, activeMember, authUser?.id)) {
+          return false
+        }
+      }
+      return true
+    },
+    [activeMember, authUser?.id, teamDocs, activeWorkspaces, currentSpace]
+  )
+
+  const handleMoveDocToSpace = async (docId: string, targetSpaceId: string) => {
+    if (!docId || !targetSpaceId || targetSpaceId === currentSpace.id) return
+
+    const [doc, targetSpace] = await Promise.all([
+      db.workspaces.get(docId),
+      db.spaces.get(targetSpaceId)
+    ])
+
+    if (!doc || doc.isDeleted) return
+    if (!targetSpace || targetSpace.isDeleted || !isSpaceVisible(targetSpace, activeMember, authUser?.id)) {
+      toast.error('No tienes acceso al espacio de destino.')
+      return
+    }
+
+    if (!canUserEditWorkspace(doc, activeMember, authUser?.id)) {
+      toast.error('Solo el autor o un administrador pueden mover este archivo.')
+      return
+    }
+
+    const sourceSpaceId = doc.spaceId || currentSpace.id
+    const sourceDocs = await db.workspaces
+      .where('spaceId')
+      .equals(sourceSpaceId)
+      .and((w) => !w.isDeleted)
+      .toArray()
+
+    const descendantIds = new Set<string>()
+    const queue = [doc.id]
+    while (queue.length > 0) {
+      const pid = queue.shift()!
+      for (const candidate of sourceDocs) {
+        if (candidate.parentId === pid && !descendantIds.has(candidate.id)) {
+          descendantIds.add(candidate.id)
+          queue.push(candidate.id)
+        }
+      }
+    }
+
+    const descendants = sourceDocs.filter((w) => descendantIds.has(w.id))
+    if (!isUserAdmin(activeMember) && descendants.some((d) => !canUserEditWorkspace(d, activeMember, authUser?.id))) {
+      toast.error('Este archivo contiene subpáginas de otros miembros que no puedes mover.')
+      return
+    }
+
+    const targetRootDocs = await db.workspaces
+      .where('spaceId')
+      .equals(targetSpaceId)
+      .and((w) => !w.isDeleted && !w.parentId && !normalizeFolderPath(w.folder))
+      .toArray()
+
+    const maxOrder = targetRootDocs.reduce(
+      (max, w, idx) => Math.max(max, typeof w.sortOrder === 'number' ? w.sortOrder : (idx + 1) * 1000),
+      0
+    )
+
+    try {
+      const updates: { key: string; changes: Partial<WorkspaceItem> }[] = [
+        {
+          key: doc.id,
+          changes: {
+            spaceId: targetSpaceId,
+            parentId: null,
+            folder: null,
+            sortOrder: maxOrder + 1000,
+            updatedAt: getSafeTimestamp(doc.updatedAt),
+            syncStatus: 'pending' as const
+          }
+        },
+        ...descendants.map((d) => ({
+          key: d.id,
+          changes: {
+            spaceId: targetSpaceId,
+            folder: null,
+            updatedAt: getSafeTimestamp(d.updatedAt),
+            syncStatus: 'pending' as const
+          }
+        }))
+      ]
+
+      await db.workspaces.bulkUpdate(updates)
+      syncEngine.scheduleSync(50)
+
+      if (currentWorkspaceId === doc.id || descendantIds.has(currentWorkspaceId)) {
+        const movedSet = new Set([doc.id, ...descendantIds])
+        const remaining = workspaces.filter(
+          (w) =>
+            !movedSet.has(w.id) &&
+            !w.isDeleted &&
+            (w.spaceId || DEFAULT_SPACE_ID) === currentSpace.id &&
+            isWorkspaceVisible(w, activeMember, authUser?.id)
+        )
+        if (remaining.length > 0) {
+          onSelectWorkspace(remaining[0].id, currentSpace.id)
+        }
+      }
+
+      toast.success(`"${doc.title || 'Sin título'}" movido a "${targetSpace.name}"`, {
+        action: {
+          label: 'Ir',
+          onClick: () => {
+            onSelectSpace?.(targetSpaceId)
+            onSelectWorkspace(doc.id, targetSpaceId)
+          }
+        }
+      })
+    } catch (err) {
+      console.error('Error moving document to another space', err)
+      toast.error('No se pudo mover el archivo.')
+    }
+  }
+
+  const handleMoveFolderToSpace = async (folderPath: string, targetSpaceId: string) => {
+    const cleanPath = normalizeFolderPath(folderPath)
+    if (!cleanPath || !targetSpaceId || targetSpaceId === currentSpace.id) return
+
+    const targetSpace = await db.spaces.get(targetSpaceId)
+    if (!targetSpace || targetSpace.isDeleted || !isSpaceVisible(targetSpace, activeMember, authUser?.id)) {
+      toast.error('No tienes acceso al espacio de destino.')
+      return
+    }
+
+    const sourceDocs = await db.workspaces
+      .where('spaceId')
+      .equals(currentSpace.id)
+      .and((w) => !w.isDeleted)
+      .toArray()
+
+    const directFolderDocs = sourceDocs.filter((w) => {
+      if (w.isPrivate) return false
+      const f = normalizeFolderPath(w.folder)
+      return f === cleanPath || (f !== null && f.startsWith(cleanPath + '/'))
+    })
+
+    const movedIds = new Set<string>(directFolderDocs.map((w) => w.id))
+    const queue = directFolderDocs.map((w) => w.id)
+    while (queue.length > 0) {
+      const pid = queue.shift()!
+      for (const candidate of sourceDocs) {
+        if (candidate.parentId === pid && !movedIds.has(candidate.id)) {
+          movedIds.add(candidate.id)
+          queue.push(candidate.id)
+        }
+      }
+    }
+
+    const allMovedDocs = sourceDocs.filter((w) => movedIds.has(w.id))
+
+    if (!isUserAdmin(activeMember)) {
+      if (allMovedDocs.length === 0) {
+        if (!canUserManageSpace(currentSpace, activeMember, authUser?.id)) {
+          toast.error('Solo puedes mover carpetas que hayas creado.')
+          return
+        }
+      } else if (allMovedDocs.some((w) => !canUserEditWorkspace(w, activeMember, authUser?.id))) {
+        toast.error('Esta carpeta contiene notas de otros miembros que no puedes mover.')
+        return
+      }
+    }
+
+    // Calcular nombre único en el espacio de destino para evitar colisiones
+    const targetSpaceDocs = await db.workspaces
+      .where('spaceId')
+      .equals(targetSpaceId)
+      .and((w) => !w.isDeleted && !w.isPrivate)
+      .toArray()
+
+    const existingTargetFolders = new Set<string>()
+    for (const w of targetSpaceDocs) {
+      const f = normalizeFolderPath(w.folder)
+      if (f) {
+        const parts = f.split('/')
+        let cur = ''
+        for (const p of parts) {
+          cur = cur ? `${cur}/${p}` : p
+          existingTargetFolders.add(cur)
+        }
+      }
+    }
+    if (Array.isArray(targetSpace.folderOrder)) {
+      for (const f of targetSpace.folderOrder) {
+        const norm = normalizeFolderPath(f)
+        if (norm) existingTargetFolders.add(norm)
+      }
+    }
+
+    const leaf = getFolderLeafName(cleanPath)
+    let destRootPath = leaf
+    if (existingTargetFolders.has(destRootPath)) {
+      let c = 2
+      while (existingTargetFolders.has(`${leaf} ${c}`)) {
+        c++
+      }
+      destRootPath = `${leaf} ${c}`
+    }
+
+    try {
+      const mappedFolderPaths = new Set<string>([destRootPath])
+
+      if (allMovedDocs.length > 0) {
+        const updates = allMovedDocs.map((w) => {
+          const currentFolder = normalizeFolderPath(w.folder)
+          let updatedFolder: string | null = null
+          if (currentFolder === cleanPath) {
+            updatedFolder = destRootPath
+          } else if (currentFolder && currentFolder.startsWith(cleanPath + '/')) {
+            updatedFolder = `${destRootPath}${currentFolder.slice(cleanPath.length)}`
+            mappedFolderPaths.add(updatedFolder)
+          }
+
+          const nextParentId = w.parentId && movedIds.has(w.parentId) ? w.parentId : null
+
+          return {
+            key: w.id,
+            changes: {
+              spaceId: targetSpaceId,
+              folder: updatedFolder,
+              parentId: nextParentId,
+              updatedAt: getSafeTimestamp(w.updatedAt),
+              syncStatus: 'pending' as const
+            }
+          }
+        })
+        await db.workspaces.bulkUpdate(updates)
+      }
+
+      // Preservar color personalizado de carpeta si la ruta cambió
+      if (folderColors[cleanPath] !== undefined && destRootPath !== cleanPath) {
+        setFolderColor(destRootPath, folderColors[cleanPath])
+      }
+
+      // Actualizar folderOrder del espacio origen
+      persistFolderOrder((prev) =>
+        prev.filter((f) => f !== cleanPath && !f.startsWith(cleanPath + '/'))
+      )
+
+      // Actualizar folderOrder del espacio destino
+      const sourceSubfoldersInOrder = folderOrder
+        .filter((f) => f === cleanPath || f.startsWith(cleanPath + '/'))
+        .map((f) => (f === cleanPath ? destRootPath : `${destRootPath}${f.slice(cleanPath.length)}`))
+
+      const destNewPaths = Array.from(new Set([destRootPath, ...sourceSubfoldersInOrder, ...mappedFolderPaths]))
+      const prevTargetOrder = Array.isArray(targetSpace.folderOrder)
+        ? targetSpace.folderOrder.map((f) => normalizeFolderPath(f)).filter((f): f is string => Boolean(f))
+        : []
+      const nextTargetOrder = Array.from(new Set([...prevTargetOrder, ...destNewPaths]))
+
+      try {
+        localStorage.setItem(`seven_note_folder_order_${targetSpaceId}`, JSON.stringify(nextTargetOrder))
+      } catch {}
+
+      if (canUserManageSpace(targetSpace, activeMember, authUser?.id)) {
+        await db.spaces.update(targetSpaceId, {
+          folderOrder: nextTargetOrder,
+          updatedAt: getSafeTimestamp(targetSpace.updatedAt),
+          syncStatus: 'pending'
+        })
+      }
+
+      syncEngine.scheduleSync(50)
+
+      setFolderOpenMap((prev) => {
+        const next = { ...prev }
+        Object.keys(next).forEach((k) => {
+          if (k === cleanPath || k.startsWith(cleanPath + '/')) {
+            delete next[k]
+          }
+        })
+        next[destRootPath] = true
+        return next
+      })
+
+      if (movedIds.has(currentWorkspaceId)) {
+        const remaining = workspaces.filter(
+          (w) =>
+            !movedIds.has(w.id) &&
+            !w.isDeleted &&
+            (w.spaceId || DEFAULT_SPACE_ID) === currentSpace.id &&
+            isWorkspaceVisible(w, activeMember, authUser?.id)
+        )
+        if (remaining.length > 0) {
+          onSelectWorkspace(remaining[0].id, currentSpace.id)
+        }
+      }
+
+      toast.success(`Carpeta "${leaf}" movida a "${targetSpace.name}"`, {
+        action: {
+          label: 'Ir',
+          onClick: () => {
+            onSelectSpace?.(targetSpaceId)
+            if (allMovedDocs.length > 0) {
+              onSelectWorkspace(allMovedDocs[0].id, targetSpaceId)
+            }
+          }
+        }
+      })
+    } catch (err) {
+      console.error('Error moving folder to another space', err)
+      toast.error('No se pudo mover la carpeta.')
+    }
+  }
+
   // Document row renderer with subpages support
   const renderDocNode = (doc: WorkspaceItem, folderPath: string | null = null) => {
     const isActive = doc.id === currentWorkspaceId
@@ -2608,6 +2980,18 @@ export function Sidebar({
                     <div
                       key={`fav-${fav.id}`}
                       onClick={() => onSelectWorkspace(fav.id)}
+                      onContextMenu={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setActiveItemMenu({
+                          type: 'doc',
+                          id: fav.id,
+                          name: fav.title,
+                          x: e.clientX,
+                          y: e.clientY,
+                          isPrivate: fav.isPrivate
+                        })
+                      }}
                       className={`group flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-pointer transition ${
                         isActive
                           ? 'bg-white dark:bg-[#202024] text-neutral-900 dark:text-neutral-100 font-semibold shadow-xs border border-black/[0.04] dark:border-white/[0.06]'
@@ -3004,11 +3388,68 @@ export function Sidebar({
 
       {/* Obsidian-Style Context / Dropdown Menu for Notes & Folders */}
       {activeItemMenu && typeof document !== 'undefined' && createPortal(
+        (() => {
+          const targetSpaces = visibleSpaces.filter((s) => s.id !== currentSpace.id)
+          const renderMoveSpaceSection = (onPickSpace: (targetSpaceId: string) => void) => (
+            <div>
+              <button
+                onClick={() => setIsMoveSpaceExpanded((prev) => !prev)}
+                className="w-full flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg hover:bg-white/10 text-left transition cursor-pointer"
+              >
+                <span className="flex items-center gap-2.5 min-w-0">
+                  <Folders size={15} className="shrink-0" />
+                  <span className="truncate">Mover a espacio</span>
+                </span>
+                {isMoveSpaceExpanded ? (
+                  <CaretDown size={12} className="text-white/50 shrink-0" />
+                ) : (
+                  <CaretRight size={12} className="text-white/50 shrink-0" />
+                )}
+              </button>
+
+              {isMoveSpaceExpanded && (
+                <div className="mt-0.5 ml-2 pl-2 border-l border-white/10 space-y-0.5 max-h-44 overflow-y-auto">
+                  {targetSpaces.length === 0 ? (
+                    <div className="px-2.5 py-1.5 text-[11px] text-white/40 italic">
+                      No hay otros espacios
+                    </div>
+                  ) : (
+                    targetSpaces.map((sp) => (
+                      <button
+                        key={sp.id}
+                        onClick={() => {
+                          onPickSpace(sp.id)
+                          setActiveItemMenu(null)
+                        }}
+                        className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-white/10 text-left transition cursor-pointer"
+                      >
+                        <span className="shrink-0 flex items-center justify-center w-4 h-4">
+                          {sp.icon && isEmoji(sp.icon) ? (
+                            <AppleEmoji emoji={sp.icon} size={13} />
+                          ) : (
+                            <span
+                              className="w-2.5 h-2.5 rounded-full"
+                              style={{ backgroundColor: sp.color || '#1e96eb' }}
+                            />
+                          )}
+                        </span>
+                        <span className="truncate flex-1 text-[11.5px]">{sp.name}</span>
+                        {sp.isPrivate && <Lock size={11} className="text-amber-400 shrink-0" />}
+                        {sp.adminOnly && !sp.isPrivate && <Shield size={11} className="text-violet-400 shrink-0" />}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          )
+
+          return (
         <div
-          className="fixed z-[99999] bg-[#252525] dark:bg-[#202020] border border-white/[0.08] text-[var(--app-text-primary)] rounded-xl shadow-2xl p-1 text-xs select-none w-52 animate-in fade-in zoom-in-95 duration-75"
+          className="fixed z-[99999] bg-[#252525] dark:bg-[#202020] border border-white/[0.08] text-[var(--app-text-primary)] rounded-xl shadow-2xl p-1 text-xs select-none w-56 max-h-[80vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-75"
           style={{
-            left: `${Math.min(activeItemMenu.x, window.innerWidth - 220)}px`,
-            top: `${Math.min(activeItemMenu.y, window.innerHeight - 340)}px`
+            left: `${Math.max(8, Math.min(activeItemMenu.x, window.innerWidth - 236))}px`,
+            top: `${Math.max(8, Math.min(activeItemMenu.y, window.innerHeight - (isMoveSpaceExpanded ? 440 : 360)))}px`
           }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -3097,6 +3538,17 @@ export function Sidebar({
                 <span>Copiar ruta</span>
               </button>
 
+              {activeItemMenu.path && canMoveFolderToOtherSpace(activeItemMenu.path) && (
+                <>
+                  <div className="h-px bg-white/[0.06] my-1" />
+                  {renderMoveSpaceSection((targetSpaceId) => {
+                    if (activeItemMenu.path) {
+                      handleMoveFolderToSpace(activeItemMenu.path, targetSpaceId)
+                    }
+                  })}
+                </>
+              )}
+
               <div className="h-px bg-white/[0.06] my-1" />
 
               <button
@@ -3175,6 +3627,7 @@ export function Sidebar({
                 const canEditDoc = canUserEditWorkspace(targetDoc, activeMember, authUser?.id)
                 const canDeleteDoc = canUserDeleteWorkspace(targetDoc, activeMember, authUser?.id)
                 const canTogglePriv = canUserTogglePrivacy(targetDoc, activeMember, authUser?.id)
+                const canMoveDoc = canMoveDocToOtherSpace(targetDoc)
 
                 return (
                   <>
@@ -3212,6 +3665,17 @@ export function Sidebar({
                         <Tag size={15} />
                         <span>Cambiar icono...</span>
                       </button>
+                    )}
+
+                    {canMoveDoc && (
+                      <>
+                        <div className="h-px bg-white/[0.06] my-1" />
+                        {renderMoveSpaceSection((targetSpaceId) => {
+                          if (activeItemMenu.id) {
+                            handleMoveDocToSpace(activeItemMenu.id, targetSpaceId)
+                          }
+                        })}
+                      </>
                     )}
 
                     {canEditDoc && <div className="h-px bg-white/[0.06] my-1" />}
@@ -3259,7 +3723,9 @@ export function Sidebar({
               })()}
             </div>
           )}
-        </div>,
+        </div>
+          )
+        })(),
         document.body
       )}
     </aside>
