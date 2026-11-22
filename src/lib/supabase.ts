@@ -55,6 +55,72 @@ export function isSupabaseConfigured(): boolean {
 
 let cachedClient: SupabaseClient | null = null
 
+/**
+ * Normaliza `expires_at` en respuestas de Supabase Auth usando el reloj local (`Date.now()`)
+ * sumado al `expires_in` relativo del servidor. Esto evita bucles infinitos de refresh_token
+ * (y el consecuente error 429 + cierre de sesión) cuando el reloj del PC o móvil del usuario
+ * está adelantado o atrasado respecto a la hora UTC del servidor.
+ */
+function normalizeAuthSessionExpiry(payload: any, nowSec: number): boolean {
+  if (!payload || typeof payload !== 'object') return false
+  let modified = false
+
+  if (
+    typeof payload.access_token === 'string' &&
+    typeof payload.expires_in === 'number' &&
+    Number.isFinite(payload.expires_in) &&
+    payload.expires_in > 0
+  ) {
+    payload.expires_at = nowSec + Math.round(payload.expires_in)
+    modified = true
+  }
+
+  if (payload.session && typeof payload.session === 'object') {
+    if (normalizeAuthSessionExpiry(payload.session, nowSec)) {
+      modified = true
+    }
+  }
+
+  return modified
+}
+
+const clockSkewSafeFetch: typeof fetch = async (input, init) => {
+  const response = await fetch(input, init)
+
+  try {
+    const url =
+      typeof input === 'string'
+        ? input
+        : input instanceof URL
+          ? input.toString()
+          : input.url
+
+    if (
+      response.ok &&
+      url.includes('/auth/v1/') &&
+      (response.headers.get('content-type') || '').includes('application/json')
+    ) {
+      const cloned = response.clone()
+      const data = await cloned.json()
+      const nowSec = Math.floor(Date.now() / 1000)
+
+      if (normalizeAuthSessionExpiry(data, nowSec)) {
+        const headers = new Headers(response.headers)
+        headers.delete('content-length')
+        return new Response(JSON.stringify(data), {
+          status: response.status,
+          statusText: response.statusText,
+          headers
+        })
+      }
+    }
+  } catch {
+    // Si la respuesta no es JSON válido, devolver la respuesta original sin modificar
+  }
+
+  return response
+}
+
 export function getSupabaseClient(): SupabaseClient | null {
   if (cachedClient) return cachedClient
 
@@ -69,6 +135,9 @@ export function getSupabaseClient(): SupabaseClient | null {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true
+      },
+      global: {
+        fetch: clockSkewSafeFetch
       }
     })
     return cachedClient
@@ -83,7 +152,13 @@ export async function testSupabaseConnection(url: string, anonKey: string): Prom
     if (!url || !anonKey) {
       return { success: false, message: 'URL y Anon Key son obligatorios' }
     }
-    const testClient = createClient(url, anonKey)
+    const testClient = createClient(url, anonKey, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false
+      }
+    })
     // Check if we can reach the health or query workspaces table
     const { error } = await testClient.from('seven_workspaces').select('id').limit(1)
     if (error) {
@@ -168,20 +243,18 @@ export async function getAuthUser() {
   const supabase = getSupabaseClient()
   if (!supabase) return null
   try {
+    const { data: sessionData } = await supabase.auth.getSession()
+    if (sessionData?.session?.user) {
+      return sessionData.session.user
+    }
     const { data: { user }, error } = await supabase.auth.getUser()
     if (user) return user
     if (error && (error.status === 401 || error.status === 403)) {
       return null
     }
-    const { data: sessionData } = await supabase.auth.getSession()
-    return sessionData?.session?.user || null
+    return null
   } catch {
-    try {
-      const { data: sessionData } = await supabase.auth.getSession()
-      return sessionData?.session?.user || null
-    } catch {
-      return null
-    }
+    return null
   }
 }
 

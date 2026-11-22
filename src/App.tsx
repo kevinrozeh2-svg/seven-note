@@ -195,47 +195,76 @@ function MainApp() {
       setIsAuthModalOpen(true)
     }
 
+    let isMounted = true
+
+    const hydrateAuthenticatedUser = async (
+      user: any,
+      options: { resetSync?: boolean } = {}
+    ) => {
+      if (!isMounted || !user) return
+      const profile = await fetchUserProfile(user.id)
+      if (!isMounted || lastAuthUserIdRef.current !== user.id) return
+      const mapped = mapSupabaseUserToMember(user, profile)
+      setCurrentMember(mapped)
+      setCurrentMemberState(mapped)
+      if (options.resetSync) {
+        syncEngine.resetLastSyncTime()
+      }
+      syncEngine.initRealtimeSubscription()
+      syncEngine.triggerSync()
+    }
+
     // 1. Comprobar usuario ya autenticado
-    getAuthUser().then(async (user) => {
+    getAuthUser().then((user) => {
+      if (!isMounted) return
       if (user) {
+        const alreadyHydrated = lastAuthUserIdRef.current === user.id
         lastAuthUserIdRef.current = user.id
-        setAuthUser(user)
-        const profile = await fetchUserProfile(user.id)
-        const mapped = mapSupabaseUserToMember(user, profile)
-        setCurrentMember(mapped)
-        setCurrentMemberState(mapped)
-        syncEngine.initRealtimeSubscription()
-        syncEngine.triggerSync()
+        setAuthUser((prev: any) => (prev?.id === user.id ? prev : user))
+        if (!alreadyHydrated) {
+          void hydrateAuthenticatedUser(user)
+        }
       }
       setAuthLoading(false)
     }).catch(() => {
-      setAuthLoading(false)
+      if (isMounted) setAuthLoading(false)
     })
 
     // 2. Suscribirse a cambios de sesión (Login, Logout, Token refresh, Recovery)
-    const unsubAuth = onAuthChange(async (event, session) => {
+    const unsubAuth = onAuthChange((event, session) => {
+      if (!isMounted) return
+
       if (event === 'PASSWORD_RECOVERY') {
         setAuthModalMode('reset')
         setIsAuthModalOpen(true)
       }
 
       const user = session?.user || null
-      setAuthUser(user)
+
+      // En TOKEN_REFRESHED para el mismo usuario, el JWT ya se rotó en segundo plano:
+      // no re-hidratar perfil ni reiniciar realtime/sync (evita bucles y peticiones redundantes)
+      if (event === 'TOKEN_REFRESHED' && user && lastAuthUserIdRef.current === user.id) {
+        setAuthLoading(false)
+        return
+      }
+
       if (user) {
-        const isDifferentUser = Boolean(lastAuthUserIdRef.current && lastAuthUserIdRef.current !== user.id)
-        const isFreshSignIn = event === 'SIGNED_IN' && lastAuthUserIdRef.current !== user.id
+        const previousUserId = lastAuthUserIdRef.current
+        const isDifferentUser = Boolean(previousUserId && previousUserId !== user.id)
+        const isFreshSignIn = event === 'SIGNED_IN' && previousUserId !== user.id
+        const shouldHydrate = previousUserId !== user.id || event === 'USER_UPDATED'
+
         lastAuthUserIdRef.current = user.id
-        const profile = await fetchUserProfile(user.id)
-        const mapped = mapSupabaseUserToMember(user, profile)
-        setCurrentMember(mapped)
-        setCurrentMemberState(mapped)
-        if (isDifferentUser || isFreshSignIn) {
-          syncEngine.resetLastSyncTime()
+        setAuthUser((prev: any) => (prev?.id === user.id && event !== 'USER_UPDATED' ? prev : user))
+
+        if (shouldHydrate) {
+          window.setTimeout(() => {
+            void hydrateAuthenticatedUser(user, { resetSync: isDifferentUser || isFreshSignIn })
+          }, 0)
         }
-        syncEngine.initRealtimeSubscription()
-        syncEngine.triggerSync()
       } else {
         lastAuthUserIdRef.current = null
+        setAuthUser(null)
         syncEngine.stopRealtimeSubscription()
       }
       setAuthLoading(false)
@@ -247,6 +276,7 @@ function MainApp() {
     })
 
     return () => {
+      isMounted = false
       unsubAuth()
       unsubMember()
       syncEngine.stopRealtimeSubscription()

@@ -387,12 +387,13 @@ class SyncEngine {
     const supabase = getSupabaseClient()
     if (!supabase) return
 
-    const authUser = await getAuthUser()
-    if (!authUser) return
-
     if (this.realtimeChannel && this.realtimeClientRef === supabase) {
       return
     }
+
+    const authUser = await getAuthUser()
+    if (!authUser) return
+
     this.stopRealtimeSubscription()
 
     this.realtimeClientRef = supabase
@@ -501,12 +502,13 @@ class SyncEngine {
 
     try {
       const { data: sessionData } = await supabase.auth.getSession()
-      if (!sessionData?.session?.access_token) {
-        await supabase.auth.refreshSession().catch(() => {})
+      let activeSession = sessionData?.session || null
+      if (!activeSession?.access_token) {
+        const refreshed = await supabase.auth.refreshSession().catch(() => null)
+        activeSession = refreshed?.data?.session || null
       }
 
-      const authUser = await getAuthUser()
-      const authUserId = authUser?.id || sessionData?.session?.user?.id || undefined
+      const authUserId = activeSession?.user?.id || (await getAuthUser())?.id || undefined
       const currentMember = getCurrentMember()
 
       // Si no hay usuario autenticado o se cerró sesión, NO intentamos sincronizar
