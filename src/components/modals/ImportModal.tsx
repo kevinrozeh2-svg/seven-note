@@ -9,6 +9,8 @@ import { db, DEFAULT_SPACE_ID } from '../../db'
 import { syncEngine } from '../../lib/syncEngine'
 import { importObsidianCanvas } from '../../lib/canvasExchange'
 import { getCurrentMember } from '../../lib/teamAuth'
+import { sanitizeHtmlContent } from '../../lib/pasteUtils'
+import { escapeHtml } from '../../lib/securityUtils'
 import { toast } from 'sonner'
 
 interface ImportModalProps {
@@ -76,35 +78,37 @@ export function ImportModal({ isOpen, onClose, onWorkspaceImported, currentSpace
 
     const reader = new FileReader()
     reader.onload = (event) => {
-      const text = event.target?.result as string
+      const text = String(event.target?.result ?? '')
       if (file.name.endsWith('.json')) {
         try {
           const parsed = JSON.parse(text)
-          if (parsed.title) setImportedTitle(parsed.title)
-          if (parsed.content || parsed.docContent) {
-            setImportedContent(parsed.content || parsed.docContent)
+          if (typeof parsed.title === 'string') setImportedTitle(parsed.title)
+          if (typeof parsed.content === 'string' || typeof parsed.docContent === 'string') {
+            setImportedContent(sanitizeHtmlContent(parsed.content || parsed.docContent))
           } else {
-            setImportedContent(`<pre>${JSON.stringify(parsed, null, 2)}</pre>`)
+            setImportedContent(`<pre>${escapeHtml(JSON.stringify(parsed, null, 2))}</pre>`)
           }
         } catch {
           setError('El archivo JSON no es válido.')
         }
+      } else if (file.name.endsWith('.html') || file.name.endsWith('.htm')) {
+        setImportedContent(sanitizeHtmlContent(text))
       } else {
-        // Markdown or plain text
+        // Markdown or plain text (escape HTML before wrapping to prevent Stored XSS)
         const html = text
           .split('\n\n')
           .map((p) => {
-            if (p.startsWith('# ')) return `<h1>${p.slice(2)}</h1>`
-            if (p.startsWith('## ')) return `<h2>${p.slice(3)}</h2>`
-            if (p.startsWith('### ')) return `<h3>${p.slice(4)}</h3>`
+            if (p.startsWith('# ')) return `<h1>${escapeHtml(p.slice(2))}</h1>`
+            if (p.startsWith('## ')) return `<h2>${escapeHtml(p.slice(3))}</h2>`
+            if (p.startsWith('### ')) return `<h3>${escapeHtml(p.slice(4))}</h3>`
             if (p.startsWith('- ')) {
               const items = p
                 .split('\n')
-                .map((li) => `<li>${li.replace(/^- /, '')}</li>`)
+                .map((li) => `<li>${escapeHtml(li.replace(/^- /, ''))}</li>`)
                 .join('')
               return `<ul>${items}</ul>`
             }
-            return `<p>${p}</p>`
+            return `<p>${escapeHtml(p)}</p>`
           })
           .join('')
         setImportedContent(html)

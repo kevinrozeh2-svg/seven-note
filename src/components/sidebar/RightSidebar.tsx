@@ -200,12 +200,11 @@ export function RightSidebar({
     syncEngine.scheduleSync(1000)
   }
 
-  // Generate headings outline from docContent
+  // Generate headings outline from docContent safely using inert DOMParser (prevents DOM XSS)
   const extractHeadings = () => {
     if (!workspace.docContent) return []
-    const tempDiv = document.createElement('div')
-    tempDiv.innerHTML = workspace.docContent
-    const headings = tempDiv.querySelectorAll('h1, h2, h3')
+    const doc = new DOMParser().parseFromString(workspace.docContent, 'text/html')
+    const headings = doc.body.querySelectorAll('h1, h2, h3')
     return Array.from(headings).map((h, i) => ({
       id: `heading-${i}`,
       level: parseInt(h.tagName.substring(1)),

@@ -2,6 +2,7 @@ import { memo, useState } from 'react'
 import { ExternalLink, Trash2, Play, Globe } from 'lucide-react'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
+import { toSafeExternalUrl } from '../../../lib/securityUtils'
 import { areNodePropsEqual, NodeHandles, SourceNodeBadge, getCardCustomStyle, isColorDark, CardSelectionOverlay } from './nodeUtils'
 
 export const LinkNode = memo(({ id, data, selected }: any) => {
@@ -37,6 +38,8 @@ export const LinkNode = memo(({ id, data, selected }: any) => {
     }
   }
 
+  const safeHref = toSafeExternalUrl(url, { defaultHttps: true })
+  const safeImageUrl = toSafeExternalUrl(imageUrl)
   const isYouTube = url.includes('youtube') || url.includes('youtu.be')
   const isConnectorActive = Boolean(data?.isConnectorActive)
   const isConnectSource = Boolean(data?.isConnectSource)
@@ -74,10 +77,10 @@ export const LinkNode = memo(({ id, data, selected }: any) => {
       </button>
 
       {/* Media / Image Thumbnail Banner */}
-      {imageUrl && !hasImageError && (
+      {safeImageUrl && !hasImageError && (
         <div className="relative w-full h-36 bg-neutral-100 dark:bg-neutral-800 overflow-hidden">
           <img
-            src={imageUrl}
+            src={safeImageUrl}
             alt={title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
             onError={() => setHasImageError(true)}
@@ -106,15 +109,17 @@ export const LinkNode = memo(({ id, data, selected }: any) => {
           <span className="text-[10px] text-neutral-400 dark:text-neutral-500 truncate flex-1 font-mono">
             {url}
           </span>
-          <a
-            href={url.startsWith('http') ? url : `https://${url}`}
-            target="_blank"
-            rel="noreferrer"
-            className="text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
-            title="Abrir en pestaña nueva"
-          >
-            <ExternalLink className="w-3 h-3" />
-          </a>
+          {safeHref && (
+            <a
+              href={safeHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
+              title="Abrir en pestaña nueva"
+            >
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          )}
         </div>
 
         {/* Title in bold red / orange Milanote style */}

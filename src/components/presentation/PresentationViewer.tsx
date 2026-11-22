@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import DOMPurify from 'dompurify'
+import { escapeHtml, toSafeExternalUrl } from '../../lib/securityUtils'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
   CloseIcon,
@@ -448,7 +449,7 @@ export function PresentationViewer({
       title: workspace.title || 'Presentación',
       type: 'intro',
       contentHtml: `<div class="text-center py-12"><h1 class="text-5xl font-extrabold tracking-tight mb-4 text-white">${
-        workspace.title || 'Untitled'
+        escapeHtml(workspace.title || 'Untitled')
       }</h1><p class="text-lg text-zinc-400">Presentación generada desde Seven Note</p></div>`
     })
 
@@ -471,7 +472,7 @@ export function PresentationViewer({
             id: `slide-h-${idx}`,
             title: heading.textContent?.trim() || `Sección ${idx + 1}`,
             type: 'heading',
-            contentHtml: `<h2 class="text-3xl font-bold text-white mb-6 border-b border-zinc-700/60 pb-3">${heading.textContent}</h2><div class="prose prose-invert max-w-none text-zinc-300 text-base leading-relaxed">${sectionHtml}</div>`
+            contentHtml: `<h2 class="text-3xl font-bold text-white mb-6 border-b border-zinc-700/60 pb-3">${escapeHtml(heading.textContent || '')}</h2><div class="prose prose-invert max-w-none text-zinc-300 text-base leading-relaxed">${sectionHtml}</div>`
           })
         })
       }
@@ -1272,14 +1273,20 @@ export function PresentationViewer({
                 <Globe className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
               )}
               <span className="text-[10px] text-neutral-400 truncate flex-1 font-mono">{url}</span>
-              <a
-                href={url.startsWith('http') ? url : `https://${url}`}
-                target="_blank"
-                rel="noreferrer"
-                className="text-neutral-400 hover:text-neutral-200"
-              >
-                <ExternalLink className="w-3 h-3" />
-              </a>
+              {(() => {
+                const safeHref = toSafeExternalUrl(url, { defaultHttps: true })
+                if (!safeHref) return null
+                return (
+                  <a
+                    href={safeHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-neutral-400 hover:text-neutral-200"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )
+              })()}
             </div>
             <div className="font-bold text-xs text-[#f97316] mb-1 truncate">{title}</div>
             {description && (

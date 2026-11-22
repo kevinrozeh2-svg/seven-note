@@ -17,7 +17,8 @@ import { DOMParser as PMDOMParser } from '@tiptap/pm/model'
 import {
   cleanPastedHtml,
   cleanPastedText,
-  prepareClipboardPaste
+  prepareClipboardPaste,
+  sanitizeHtmlContent
 } from '../../lib/pasteUtils'
 import {
   isNeutralTextColor,
@@ -614,9 +615,8 @@ export function DocEditor({
               parseOptions: { preserveWhitespace: false }
             })
           } else {
-            const div = document.createElement('div')
-            div.innerHTML = prepared.html
-            const slice = PMDOMParser.fromSchema(view.state.schema).parseSlice(div, {
+            const parsedDoc = new DOMParser().parseFromString(sanitizeHtmlContent(prepared.html), 'text/html')
+            const slice = PMDOMParser.fromSchema(view.state.schema).parseSlice(parsedDoc.body, {
               preserveWhitespace: false
             })
             const tr = view.state.tr.replaceSelection(slice)

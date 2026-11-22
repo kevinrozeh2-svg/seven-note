@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { toSafeExternalUrl } from '../../lib/securityUtils'
 import {
   CalendarBlank,
   CaretDown,
@@ -1902,13 +1903,13 @@ export function CalendarPage() {
               )}
 
               {(() => {
-                const meet = extractMeetUrl(detailEvent)
+                const meet = toSafeExternalUrl(extractMeetUrl(detailEvent))
                 if (!meet) return null
                 return (
                   <a
                     href={meet}
                     target="_blank"
-                    rel="noreferrer"
+                    rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#1a73e8] hover:bg-[#1765cc] text-white font-medium text-xs transition"
                   >
                     <VideoCamera size={14} weight="fill" />

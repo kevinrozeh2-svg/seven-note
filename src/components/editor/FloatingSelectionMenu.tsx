@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import type { Editor } from '@tiptap/react'
+import { toSafeExternalUrl } from '../../lib/securityUtils'
 import {
   Sparkles,
   ChevronDown,
@@ -888,15 +889,23 @@ export const FloatingSelectionMenu: React.FC<FloatingSelectionMenuProps> = ({
               </div>
               {isLinkActive && (
                 <div className="flex items-center justify-between pt-1 border-t border-white/10 text-[11px]">
-                  <a
-                    href={editor.getAttributes('link')?.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-sky-400 hover:underline truncate max-w-[155px]"
-                  >
-                    <ExternalLink className="w-3 h-3 shrink-0" />
-                    <span className="truncate">Abrir enlace</span>
-                  </a>
+                  {(() => {
+                    const safeLinkHref = toSafeExternalUrl(editor.getAttributes('link')?.href, { allowMailto: true })
+                    if (!safeLinkHref) {
+                      return <span className="text-zinc-500 truncate max-w-[155px]">Enlace no válido</span>
+                    }
+                    return (
+                      <a
+                        href={safeLinkHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-1 text-sky-400 hover:underline truncate max-w-[155px]"
+                      >
+                        <ExternalLink className="w-3 h-3 shrink-0" />
+                        <span className="truncate">Abrir enlace</span>
+                      </a>
+                    )
+                  })()}
                   <button
                     type="button"
                     onClick={() => {

@@ -48,6 +48,7 @@ returns boolean
 language sql
 security definer
 stable
+set search_path = public
 as $$
   select exists (
     select 1 from public.user_profiles
@@ -60,6 +61,7 @@ returns boolean
 language sql
 security definer
 stable
+set search_path = public
 as $$
   select exists (
     select 1 from public.user_profiles
@@ -72,6 +74,7 @@ returns text
 language sql
 security definer
 stable
+set search_path = public
 as $$
   select coalesce(
     (select role from public.user_profiles where id = auth.uid() limit 1),
@@ -86,16 +89,27 @@ create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer
+set search_path = public
 as $$
 declare
   is_first_user boolean;
   invited_role text;
+  is_authorized_admin boolean;
 begin
   -- Si no existe ningún perfil en la tabla, el primer usuario se convierte automáticamente en Administrador
   select not exists(select 1 from public.user_profiles) into is_first_user;
 
   -- Comprobar si el correo ya tenía una invitación con rol preasignado
   select role into invited_role from public.team_invitations where lower(email) = lower(new.email);
+
+  is_authorized_admin := lower(new.email) in (
+    'kevin.rozeh@gmail.com',
+    'kevin.rozeh2@gmail.com',
+    'badmaik60@gmail.com',
+    'lolmark432@gmail.com',
+    'marcos@sevennote.local',
+    'marcos.sevennote@gmail.com'
+  );
 
   insert into public.user_profiles (id, email, full_name, role, status, color, created_at, updated_at)
   values (
@@ -104,11 +118,15 @@ begin
     coalesce(new.raw_user_meta_data->>'full_name', split_part(new.email, '@', 1)),
     case
       when is_first_user then 'admin'
-      when lower(new.email) in ('kevin.rozeh@gmail.com', 'kevin.rozeh2@gmail.com', 'badmaik60@gmail.com', 'marcos@sevennote.local', 'marcos.sevennote@gmail.com') then 'admin'
+      when is_authorized_admin then 'admin'
       when invited_role is not null then invited_role
       else 'member'
     end,
-    'active',
+    -- Seguridad: usuarios no invitados quedan en 'pending' hasta aprobación de un administrador
+    case
+      when is_first_user or is_authorized_admin or invited_role is not null then 'active'
+      else 'pending'
+    end,
     '#2563eb',
     (extract(epoch from now()) * 1000)::bigint,
     (extract(epoch from now()) * 1000)::bigint
@@ -116,7 +134,7 @@ begin
   on conflict (id) do update set
     email = excluded.email,
     role = case
-      when lower(excluded.email) in ('kevin.rozeh@gmail.com', 'kevin.rozeh2@gmail.com', 'badmaik60@gmail.com', 'marcos@sevennote.local', 'marcos.sevennote@gmail.com') then 'admin'
+      when lower(excluded.email) in ('kevin.rozeh@gmail.com', 'kevin.rozeh2@gmail.com', 'badmaik60@gmail.com', 'lolmark432@gmail.com', 'marcos@sevennote.local', 'marcos.sevennote@gmail.com') then 'admin'
       else user_profiles.role
     end,
     full_name = case when user_profiles.full_name = '' then excluded.full_name else user_profiles.full_name end,
@@ -157,6 +175,7 @@ where lower(email) in (
   'kevin.rozeh@gmail.com',
   'kevin.rozeh2@gmail.com',
   'badmaik60@gmail.com',
+  'lolmark432@gmail.com',
   'marcos@sevennote.local',
   'marcos.sevennote@gmail.com'
 );
@@ -167,6 +186,7 @@ values
   ('kevin.rozeh@gmail.com', 'admin'),
   ('kevin.rozeh2@gmail.com', 'admin'),
   ('badmaik60@gmail.com', 'admin'),
+  ('lolmark432@gmail.com', 'admin'),
   ('marcos@sevennote.local', 'admin'),
   ('marcos.sevennote@gmail.com', 'admin'),
   -- Capa 2: Trabajadores
@@ -341,7 +361,7 @@ alter table public.seven_tags enable row level security;
 drop policy if exists "Lectura de perfiles autenticados" on public.user_profiles;
 create policy "Lectura de perfiles autenticados" on public.user_profiles
   for select to authenticated
-  using (true);
+  using (id = auth.uid() or public.is_user_active(auth.uid()));
 
 drop policy if exists "Actualizacion propia de perfil" on public.user_profiles;
 create policy "Actualizacion propia de perfil" on public.user_profiles
@@ -349,16 +369,22 @@ create policy "Actualizacion propia de perfil" on public.user_profiles
   using (auth.uid() = id)
   with check (auth.uid() = id);
 
+-- Seguridad: impedir auto-escalación de privilegios al insertar perfil propio
 drop policy if exists "Insercion propia de perfil" on public.user_profiles;
 create policy "Insercion propia de perfil" on public.user_profiles
   for insert to authenticated
-  with check (auth.uid() = id);
+  with check (
+    auth.uid() = id
+    and role = 'member'
+    and status = 'pending'
+  );
 
 -- Trigger de seguridad para evitar escalación de privilegios en user_profiles
 create or replace function public.check_user_profile_update()
 returns trigger
 language plpgsql
 security definer
+set search_path = public
 as $$
 begin
   -- Solo administradores pueden cambiar roles y estados de cuenta
@@ -413,6 +439,7 @@ create policy "Modificacion de seven_spaces" on public.seven_spaces
   with check (
     public.is_user_active(auth.uid())
     and public.get_my_role() != 'viewer'
+    and (coalesce(user_id, auth.uid()) = auth.uid() or public.is_admin(auth.uid()))
     and (coalesce(admin_only, false) = false or public.is_admin(auth.uid()))
   );
 
@@ -444,11 +471,12 @@ create policy "Eliminacion de seven_spaces" on public.seven_spaces
   for delete to authenticated
   using (
     public.is_user_active(auth.uid())
+    and public.get_my_role() != 'viewer'
     and (
       -- Capa 1: Admin puede eliminar espacios públicos o propios
       (public.is_admin(auth.uid()) and (coalesce(is_private, false) = false or user_id = auth.uid()))
       -- Capa 2: Trabajador SOLO puede eliminar los espacios que él mismo creó
-      or (user_id = auth.uid())
+      or (user_id = auth.uid() and coalesce(admin_only, false) = false)
     )
   );
 
@@ -482,6 +510,15 @@ create policy "Modificacion de workspaces" on public.seven_workspaces
   with check (
     public.is_user_active(auth.uid())
     and public.get_my_role() != 'viewer'
+    and (coalesce(user_id, auth.uid()) = auth.uid() or public.is_admin(auth.uid()))
+    and not exists (
+      select 1 from public.seven_spaces sp
+      where sp.id = space_id
+        and (
+          (coalesce(sp.admin_only, false) = true and not public.is_admin(auth.uid()))
+          or (coalesce(sp.is_private, false) = true and sp.user_id is distinct from auth.uid())
+        )
+    )
   );
 
 drop policy if exists "Actualizacion de workspaces" on public.seven_workspaces;
@@ -489,6 +526,7 @@ create policy "Actualizacion de workspaces" on public.seven_workspaces
   for update to authenticated
   using (
     public.is_user_active(auth.uid())
+    and public.get_my_role() != 'viewer'
     and (
       -- Capa 1: Administradores pueden editar todo el contenido compartido del equipo y sus notas privadas propias
       (public.is_admin(auth.uid()) and (is_private = false or user_id = auth.uid()))
@@ -498,9 +536,18 @@ create policy "Actualizacion de workspaces" on public.seven_workspaces
   )
   with check (
     public.is_user_active(auth.uid())
+    and public.get_my_role() != 'viewer'
     and (
       (public.is_admin(auth.uid()) and (is_private = false or user_id = auth.uid()))
       or (user_id = auth.uid())
+    )
+    and not exists (
+      select 1 from public.seven_spaces sp
+      where sp.id = space_id
+        and (
+          (coalesce(sp.admin_only, false) = true and not public.is_admin(auth.uid()))
+          or (coalesce(sp.is_private, false) = true and sp.user_id is distinct from auth.uid())
+        )
     )
   );
 
@@ -509,6 +556,7 @@ create policy "Eliminacion de workspaces" on public.seven_workspaces
   for delete to authenticated
   using (
     public.is_user_active(auth.uid())
+    and public.get_my_role() != 'viewer'
     and (
       -- Capa 1: Administradores pueden eliminar notas compartidas del equipo o propias
       (public.is_admin(auth.uid()) and (is_private = false or user_id = auth.uid()))
@@ -542,6 +590,7 @@ create policy "Modificacion de seven_canvas_nodes" on public.seven_canvas_nodes
   for insert to authenticated
   with check (
     public.is_user_active(auth.uid())
+    and public.get_my_role() != 'viewer'
     and exists (
       select 1 from public.seven_workspaces w
       where w.id = seven_canvas_nodes.workspace_id
@@ -557,6 +606,7 @@ create policy "Actualizacion de seven_canvas_nodes" on public.seven_canvas_nodes
   for update to authenticated
   using (
     public.is_user_active(auth.uid())
+    and public.get_my_role() != 'viewer'
     and exists (
       select 1 from public.seven_workspaces w
       where w.id = seven_canvas_nodes.workspace_id
@@ -568,6 +618,7 @@ create policy "Actualizacion de seven_canvas_nodes" on public.seven_canvas_nodes
   )
   with check (
     public.is_user_active(auth.uid())
+    and public.get_my_role() != 'viewer'
     and exists (
       select 1 from public.seven_workspaces w
       where w.id = seven_canvas_nodes.workspace_id
@@ -583,6 +634,7 @@ create policy "Eliminacion de seven_canvas_nodes" on public.seven_canvas_nodes
   for delete to authenticated
   using (
     public.is_user_active(auth.uid())
+    and public.get_my_role() != 'viewer'
     and exists (
       select 1 from public.seven_workspaces w
       where w.id = seven_canvas_nodes.workspace_id
@@ -612,6 +664,7 @@ create policy "Modificacion de seven_canvas_edges" on public.seven_canvas_edges
   for insert to authenticated
   with check (
     public.is_user_active(auth.uid())
+    and public.get_my_role() != 'viewer'
     and exists (
       select 1 from public.seven_workspaces w
       where w.id = seven_canvas_edges.workspace_id
@@ -627,6 +680,7 @@ create policy "Actualizacion de seven_canvas_edges" on public.seven_canvas_edges
   for update to authenticated
   using (
     public.is_user_active(auth.uid())
+    and public.get_my_role() != 'viewer'
     and exists (
       select 1 from public.seven_workspaces w
       where w.id = seven_canvas_edges.workspace_id
@@ -638,6 +692,7 @@ create policy "Actualizacion de seven_canvas_edges" on public.seven_canvas_edges
   )
   with check (
     public.is_user_active(auth.uid())
+    and public.get_my_role() != 'viewer'
     and exists (
       select 1 from public.seven_workspaces w
       where w.id = seven_canvas_edges.workspace_id
@@ -653,6 +708,7 @@ create policy "Eliminacion de seven_canvas_edges" on public.seven_canvas_edges
   for delete to authenticated
   using (
     public.is_user_active(auth.uid())
+    and public.get_my_role() != 'viewer'
     and exists (
       select 1 from public.seven_workspaces w
       where w.id = seven_canvas_edges.workspace_id
@@ -738,6 +794,7 @@ begin
   where w.id = p_workspace_id
     and w.share_token = p_token
     and w.is_public_shared = true
+    and coalesce(w.is_private, false) = false
     and w.is_deleted = false
   limit 1;
 
@@ -745,20 +802,20 @@ begin
     return null;
   end if;
 
-  select coalesce(jsonb_agg(to_jsonb(n)), '[]'::jsonb)
+  select coalesce(jsonb_agg(to_jsonb(n) - 'user_id'), '[]'::jsonb)
   into v_nodes
   from public.seven_canvas_nodes n
   where n.workspace_id = v_workspace.id
     and coalesce(n.is_deleted, false) = false;
 
-  select coalesce(jsonb_agg(to_jsonb(e)), '[]'::jsonb)
+  select coalesce(jsonb_agg(to_jsonb(e) - 'user_id'), '[]'::jsonb)
   into v_edges
   from public.seven_canvas_edges e
   where e.workspace_id = v_workspace.id
     and coalesce(e.is_deleted, false) = false;
 
   return jsonb_build_object(
-    'workspace', to_jsonb(v_workspace),
+    'workspace', to_jsonb(v_workspace) - 'share_token' - 'user_id',
     'nodes', v_nodes,
     'edges', v_edges
   );
@@ -774,6 +831,7 @@ create or replace function public.get_server_time_ms()
 returns bigint
 language sql
 stable
+set search_path = public
 as $$
   select (extract(epoch from now()) * 1000)::bigint;
 $$;
@@ -783,6 +841,7 @@ grant execute on function public.get_server_time_ms() to anon, authenticated;
 create or replace function public.clamp_future_timestamps()
 returns trigger
 language plpgsql
+set search_path = public
 as $$
 declare
   now_ms bigint := (extract(epoch from now()) * 1000)::bigint;
@@ -871,7 +930,10 @@ drop policy if exists "Active members can insert notifications" on public.seven_
 create policy "Active members can insert notifications"
   on public.seven_notifications for insert
   to authenticated
-  with check (public.is_user_active(auth.uid()));
+  with check (
+    public.is_user_active(auth.uid())
+    and (actor_id is null or actor_id = auth.uid()::text)
+  );
 
 drop policy if exists "Users can update their notifications" on public.seven_notifications;
 create policy "Users can update their notifications"
@@ -880,9 +942,17 @@ create policy "Users can update their notifications"
   using (
     public.is_user_active(auth.uid())
     and (
-      recipient_id = 'all'
-      or recipient_id = auth.uid()::text
+      recipient_id = auth.uid()::text
       or lower(recipient_id) = lower(coalesce((select email from public.user_profiles where id = auth.uid()), ''))
+      or (recipient_id = 'all' and public.is_admin(auth.uid()))
+    )
+  )
+  with check (
+    public.is_user_active(auth.uid())
+    and (
+      recipient_id = auth.uid()::text
+      or lower(recipient_id) = lower(coalesce((select email from public.user_profiles where id = auth.uid()), ''))
+      or (recipient_id = 'all' and public.is_admin(auth.uid()))
     )
   );
 

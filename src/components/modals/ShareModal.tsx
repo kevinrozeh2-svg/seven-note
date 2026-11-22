@@ -12,7 +12,7 @@ import {
 import { Lock, Unlock } from 'lucide-react'
 import { db, type WorkspaceItem } from '../../db'
 import { syncEngine } from '../../lib/syncEngine'
-import { getCurrentMember } from '../../lib/teamAuth'
+import { getCurrentMember, canUserTogglePrivacy, canUserEditWorkspace } from '../../lib/teamAuth'
 import {
   htmlToMarkdown,
   exportDocumentAsMarkdown,
@@ -60,36 +60,64 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
   }
 
   const handleTogglePublic = async () => {
+    if (!canUserEditWorkspace(workspace, currentMember)) {
+      toast.error('No tienes permisos para cambiar el acceso público de esta nota.')
+      return
+    }
     const nextPublic = !isPublic
-    const token = shareToken || crypto.randomUUID()
-    setShareToken(token)
+    if (nextPublic && isPrivate) {
+      toast.error('Una nota privada no puede compartirse públicamente. Hazla de equipo primero.')
+      return
+    }
+
+    // Generate a fresh token on enable and revoke (clear) the old token on disable
+    const nextToken = nextPublic ? crypto.randomUUID() : ''
+    setShareToken(nextToken)
     setIsPublic(nextPublic)
 
     await db.workspaces.update(workspace.id, {
       isPublicShared: nextPublic,
-      shareToken: token,
+      shareToken: nextToken || undefined,
       sharePermission: 'view',
       updatedAt: Date.now(),
       syncStatus: 'pending'
     })
     syncEngine.scheduleSync(500)
-    toast.success(nextPublic ? 'Enlace público externo activado' : 'Enlace público externo desactivado')
+    toast.success(nextPublic ? 'Enlace público externo activado' : 'Enlace público externo revocado')
   }
 
   const handleTogglePrivate = async () => {
+    if (!canUserTogglePrivacy(workspace, currentMember)) {
+      toast.error('Solo el creador o un administrador puede cambiar la privacidad de esta nota.')
+      return
+    }
     const nextPrivate = !isPrivate
     setIsPrivate(nextPrivate)
     const targetOwner = workspace.ownerMember || currentMember.id
 
+    // Security: making a note private MUST immediately revoke any active public share link
+    const revokePublic = nextPrivate && isPublic
+    if (revokePublic) {
+      setIsPublic(false)
+      setShareToken('')
+    }
+
     await db.workspaces.update(workspace.id, {
       isPrivate: nextPrivate,
+      ...(nextPrivate ? { isPublicShared: false, shareToken: undefined } : {}),
       ownerMember: targetOwner,
       ownerName: currentMember.name,
       updatedAt: Date.now(),
       syncStatus: 'pending'
     })
     syncEngine.scheduleSync(500)
-    toast.success(nextPrivate ? 'Nota cambiada a MODO PRIVADO' : 'Nota compartida con todo el equipo')
+    toast.success(
+      nextPrivate
+        ? revokePublic
+          ? 'Nota cambiada a MODO PRIVADO y enlace público revocado'
+          : 'Nota cambiada a MODO PRIVADO'
+        : 'Nota compartida con todo el equipo'
+    )
   }
 
   const handleCopyMarkdown = async () => {

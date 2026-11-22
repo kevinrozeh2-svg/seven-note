@@ -26,9 +26,9 @@ export const ExternalShareView: React.FC<ExternalShareViewProps> = ({ workspaceI
       setError(null)
 
       try {
-        // 1. Intentar cargar desde IndexedDB local primero
+        // 1. Intentar cargar desde IndexedDB local primero (nunca exponer notas privadas o revocadas)
         const local = await db.workspaces.get(workspaceId)
-        if (local && local.isPublicShared && local.shareToken === token) {
+        if (local && local.isPublicShared && !local.isPrivate && !local.isDeleted && local.shareToken === token) {
           setWorkspace(local)
           setViewMode(local.viewMode === 'canvas' ? 'canvas' : 'doc')
           setLoading(false)
@@ -38,12 +38,6 @@ export const ExternalShareView: React.FC<ExternalShareViewProps> = ({ workspaceI
         // 2. Cargar desde Supabase (RPC seguro validado por token; respaldo a tabla si aún no se migró RPC)
         const supabase = getSupabaseClient()
         if (!supabase) {
-          if (local && local.shareToken === token) {
-            setWorkspace(local)
-            setViewMode(local.viewMode === 'canvas' ? 'canvas' : 'doc')
-            setLoading(false)
-            return
-          }
           throw new Error('No se pudo verificar la nota compartida con el servidor.')
         }
 
@@ -70,12 +64,18 @@ export const ExternalShareView: React.FC<ExternalShareViewProps> = ({ workspaceI
             .eq('id', workspaceId)
             .eq('share_token', token)
             .eq('is_public_shared', true)
+            .eq('is_private', false)
+            .eq('is_deleted', false)
             .single()
 
           if (supaErr || !tableData) {
             throw new Error('El enlace es inválido, ha expirado o el acceso público fue revocado por el propietario.')
           }
           data = tableData
+        }
+
+        if (data.is_private || data.is_deleted) {
+          throw new Error('El enlace es inválido, ha expirado o el acceso público fue revocado por el propietario.')
         }
 
         const meta = data.metadata || {}

@@ -65,9 +65,9 @@ const STORAGE_WEBHOOK_KEY = 'seven_note_cal_webhook_v1'
 const STORAGE_DEFAULTS_SEEDED_KEY = 'seven_note_cal_defaults_seeded_v1'
 
 const DEFAULT_WEBHOOK_CONFIG: CalendarWebhookConfig = {
-  enabled: true,
-  url: 'https://script.google.com/macros/s/AKfycbye-fw_kJRw7c9tb1WCgjOjdrrhuzifuL3sqBQ90J8tYZNKNdvH2PcbsbH3CzA_lcBwZA/exec',
-  secret: 'CAMBIA_ESTE_TOKEN_SECRETO',
+  enabled: false,
+  url: '',
+  secret: '',
 }
 
 const DEFAULT_PREFERENCES: CalendarPreferences = {
@@ -88,29 +88,9 @@ const DEFAULT_LOCAL_CALENDAR: CalendarSource = {
   isLocalOnly: true,
 }
 
-const DEFAULT_GOOGLE_CALENDARS: CalendarSource[] = [
-  {
-    id: 'gcal-seven-operativo',
-    name: 'Seven Estudio Operativo',
-    icalUrl:
-      'https://calendar.google.com/calendar/ical/4c96a975d6fd06fe06e7e8a3617dd0e81bc9c1ff3788040cedc93d9f74d658ba%40group.calendar.google.com/private-8e40e1dcbbec738db7db9e57777f7267/basic.ics',
-    googleCalendarId:
-      '4c96a975d6fd06fe06e7e8a3617dd0e81bc9c1ff3788040cedc93d9f74d658ba@group.calendar.google.com',
-    color: '#0b8043',
-    enabled: true,
-    isLocalOnly: false,
-  },
-  {
-    id: 'gcal-redes-seven',
-    name: 'Redes Seven',
-    icalUrl:
-      'https://calendar.google.com/calendar/ical/estudio777seven%40gmail.com/private-e83c2ded850a1f8b661fb7fa016ca1de/basic.ics',
-    googleCalendarId: 'estudio777seven@gmail.com',
-    color: '#8e24aa',
-    enabled: true,
-    isLocalOnly: false,
-  },
-]
+// Security: never hardcode private Google Calendar iCal URLs or secrets in the client bundle.
+// Users configure their own calendar URLs locally in Settings / Calendar.
+const DEFAULT_GOOGLE_CALENDARS: CalendarSource[] = []
 
 export function toDateKey(date: Date): string {
   const y = date.getFullYear()

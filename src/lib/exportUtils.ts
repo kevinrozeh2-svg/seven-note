@@ -1,5 +1,7 @@
+import DOMPurify from 'dompurify'
 import { toast } from 'sonner'
 import { type WorkspaceItem, type CanvasNodeItem, type CanvasEdgeItem } from '../db'
+import { escapeHtml } from './securityUtils'
 
 /**
  * Basic HTML to Markdown converter
@@ -127,7 +129,9 @@ export function exportDocumentAsMarkdown(workspace: WorkspaceItem) {
  */
 export function exportDocumentAsHtml(workspace: WorkspaceItem) {
   try {
-    const safeTitle = workspace.title || 'Untitled'
+    const rawTitle = workspace.title || 'Untitled'
+    const safeTitle = escapeHtml(rawTitle)
+    const sanitizedBody = DOMPurify.sanitize(workspace.docContent || '<p>Documento vacío</p>')
     const htmlTemplate = `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -164,12 +168,12 @@ export function exportDocumentAsHtml(workspace: WorkspaceItem) {
 <body>
   <div class="doc-container">
     <h1>${safeTitle}</h1>
-    ${workspace.docContent || '<p>Documento vacío</p>'}
+    ${sanitizedBody}
   </div>
 </body>
 </html>`
 
-    const safeName = safeTitle.replace(/[/\\?%*:|"<>]/g, '_')
+    const safeName = rawTitle.replace(/[/\\?%*:|"<>]/g, '_')
     triggerDownload(htmlTemplate, `${safeName}.html`, 'text/html;charset=utf-8')
     toast.success('Documento exportado como HTML')
   } catch (err) {

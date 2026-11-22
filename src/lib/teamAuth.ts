@@ -25,7 +25,7 @@ export interface TeamMember extends UserProfile {
  * Correos de administradores con acceso y gestión total del sistema:
  * - Kevin (kevin.rozeh@gmail.com, kevin.rozeh2@gmail.com)
  * - Maikol (badmaik60@gmail.com)
- * - Marcos (marcos@sevennote.local / marcos.sevennote@gmail.com)
+ * - Marcos (lolmark432@gmail.com / marcos@sevennote.local / marcos.sevennote@gmail.com)
  * 
  * NOTA DE PRIVACIDAD: Los administradores pueden gestionar y editar todas las notas
  * y espacios compartidos del equipo, pero NO tienen acceso al contenido privado de
@@ -35,6 +35,7 @@ export const AUTHORIZED_ADMIN_EMAILS: string[] = [
   'kevin.rozeh@gmail.com',
   'kevin.rozeh2@gmail.com',
   'badmaik60@gmail.com',
+  'lolmark432@gmail.com',
   'marcos@sevennote.local',
   'marcos.sevennote@gmail.com'
 ]
@@ -85,7 +86,7 @@ export const TEAM_MEMBERS: TeamMember[] = [
     role: 'admin',
     status: 'active',
     icon: '⚡',
-    email: 'marcos@sevennote.local'
+    email: 'lolmark432@gmail.com'
   },
   {
     id: 'mel',
