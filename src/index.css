@@ -190,6 +190,166 @@
     --affine-menu-shadow: var(--app-shadow-popover);
     --affine-popover-shadow: var(--app-shadow-popover);
   }
+
+  /* ========================================================================
+     Multi-Theme Color Presets (data-color-theme)
+     ======================================================================== */
+
+  /* 1. Obsidian Classic Dark */
+  html[data-color-theme="obsidian"] {
+    color-scheme: dark;
+    --app-bg-primary: #1e1e1e;
+    --app-bg-secondary: #1b1b1b;
+    --app-bg-tertiary: #161616;
+    --app-bg-overlay: #262626;
+    --app-bg-canvas: #171717;
+    --obsidian-ribbon-bg: #161616;
+    --obsidian-sidebar-bg: #1b1b1b;
+    --obsidian-editor-bg: #1e1e1e;
+    --app-text-primary: #dcddde;
+    --app-text-secondary: #999999;
+    --app-text-muted: #6e6e6e;
+    --app-border: rgba(255, 255, 255, 0.07);
+    --app-border-strong: rgba(255, 255, 255, 0.13);
+    --app-divider: rgba(255, 255, 255, 0.06);
+    --app-hover: rgba(255, 255, 255, 0.06);
+    --app-hover-filled: #2a2a2a;
+    --app-active: rgba(255, 255, 255, 0.10);
+    --app-accent: #7f6df2;
+    --app-accent-hover: #9383f7;
+    --app-accent-soft: rgba(127, 109, 242, 0.16);
+    --app-canvas-dot: #292929;
+  }
+
+  /* 2. Midnight Slate Dark */
+  html[data-color-theme="midnight"] {
+    color-scheme: dark;
+    --app-bg-primary: #141b29;
+    --app-bg-secondary: #101622;
+    --app-bg-tertiary: #0b0f17;
+    --app-bg-overlay: #1b2436;
+    --app-bg-canvas: #0f1520;
+    --obsidian-ribbon-bg: #0b0f17;
+    --obsidian-sidebar-bg: #101622;
+    --obsidian-editor-bg: #141b29;
+    --app-text-primary: #e2e8f0;
+    --app-text-secondary: #94a3b8;
+    --app-text-muted: #64748b;
+    --app-border: rgba(148, 163, 184, 0.12);
+    --app-border-strong: rgba(148, 163, 184, 0.22);
+    --app-divider: rgba(148, 163, 184, 0.10);
+    --app-hover: rgba(148, 163, 184, 0.08);
+    --app-hover-filled: #1e293b;
+    --app-active: rgba(148, 163, 184, 0.14);
+    --app-accent: #6366f1;
+    --app-accent-hover: #818cf8;
+    --app-accent-soft: rgba(99, 102, 241, 0.18);
+    --app-canvas-dot: #233046;
+  }
+
+  /* 3. Nord Arctic Dark */
+  html[data-color-theme="nord"] {
+    color-scheme: dark;
+    --app-bg-primary: #2e3440;
+    --app-bg-secondary: #282e39;
+    --app-bg-tertiary: #222730;
+    --app-bg-overlay: #3b4252;
+    --app-bg-canvas: #272c36;
+    --obsidian-ribbon-bg: #222730;
+    --obsidian-sidebar-bg: #282e39;
+    --obsidian-editor-bg: #2e3440;
+    --app-text-primary: #eceff4;
+    --app-text-secondary: #adb7c8;
+    --app-text-muted: #7c879b;
+    --app-border: rgba(216, 222, 233, 0.10);
+    --app-border-strong: rgba(216, 222, 233, 0.18);
+    --app-divider: rgba(216, 222, 233, 0.08);
+    --app-hover: rgba(216, 222, 233, 0.07);
+    --app-hover-filled: #3b4252;
+    --app-active: rgba(216, 222, 233, 0.12);
+    --app-accent: #88c0d0;
+    --app-accent-hover: #9bd0df;
+    --app-accent-soft: rgba(136, 192, 208, 0.16);
+    --app-canvas-dot: #3d4556;
+  }
+
+  /* 4. Forest Night Dark */
+  html[data-color-theme="forest"] {
+    color-scheme: dark;
+    --app-bg-primary: #1a211d;
+    --app-bg-secondary: #151b18;
+    --app-bg-tertiary: #101512;
+    --app-bg-overlay: #212b25;
+    --app-bg-canvas: #141a17;
+    --obsidian-ribbon-bg: #101512;
+    --obsidian-sidebar-bg: #151b18;
+    --obsidian-editor-bg: #1a211d;
+    --app-text-primary: #dce3de;
+    --app-text-secondary: #95a59b;
+    --app-text-muted: #68786e;
+    --app-border: rgba(210, 230, 218, 0.08);
+    --app-border-strong: rgba(210, 230, 218, 0.16);
+    --app-divider: rgba(210, 230, 218, 0.07);
+    --app-hover: rgba(210, 230, 218, 0.06);
+    --app-hover-filled: #232d27;
+    --app-active: rgba(210, 230, 218, 0.11);
+    --app-accent: #5fa882;
+    --app-accent-hover: #73bb96;
+    --app-accent-soft: rgba(95, 168, 130, 0.16);
+    --app-canvas-dot: #26312a;
+  }
+
+  /* 5. Obsidian Light */
+  html[data-color-theme="obsidian-light"] {
+    color-scheme: light;
+    --app-bg-primary: #ffffff;
+    --app-bg-secondary: #f5f5f5;
+    --app-bg-tertiary: #eaeaea;
+    --app-bg-overlay: #ffffff;
+    --app-bg-canvas: #f2f2f2;
+    --obsidian-ribbon-bg: #eaeaea;
+    --obsidian-sidebar-bg: #f5f5f5;
+    --obsidian-editor-bg: #ffffff;
+    --app-text-primary: #222222;
+    --app-text-secondary: #5c5c5c;
+    --app-text-muted: #888888;
+    --app-border: rgba(0, 0, 0, 0.08);
+    --app-border-strong: rgba(0, 0, 0, 0.15);
+    --app-divider: rgba(0, 0, 0, 0.07);
+    --app-hover: rgba(0, 0, 0, 0.045);
+    --app-hover-filled: #ececec;
+    --app-active: rgba(0, 0, 0, 0.08);
+    --app-accent: #7c3aed;
+    --app-accent-hover: #6d28d9;
+    --app-accent-soft: rgba(124, 58, 237, 0.12);
+    --app-canvas-dot: #dcdcdc;
+  }
+
+  /* 6. Warm Editorial Paper Light */
+  html[data-color-theme="paper"] {
+    color-scheme: light;
+    --app-bg-primary: #ffffff;
+    --app-bg-secondary: #f7f6f3;
+    --app-bg-tertiary: #f0eee9;
+    --app-bg-overlay: #ffffff;
+    --app-bg-canvas: #f5f4f0;
+    --obsidian-ribbon-bg: #f0eee9;
+    --obsidian-sidebar-bg: #f7f6f3;
+    --obsidian-editor-bg: #ffffff;
+    --app-text-primary: #37352f;
+    --app-text-secondary: #6b6861;
+    --app-text-muted: #9b978f;
+    --app-border: rgba(55, 53, 47, 0.09);
+    --app-border-strong: rgba(55, 53, 47, 0.16);
+    --app-divider: rgba(55, 53, 47, 0.08);
+    --app-hover: rgba(55, 53, 47, 0.05);
+    --app-hover-filled: #eeece7;
+    --app-active: rgba(55, 53, 47, 0.09);
+    --app-accent: #2383e2;
+    --app-accent-hover: #1b6ec2;
+    --app-accent-soft: rgba(35, 131, 226, 0.12);
+    --app-canvas-dot: #e2dfd8;
+  }
 }
 
 /* Notion Custom Scrollbars */

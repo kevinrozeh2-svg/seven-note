@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import {
-  CloseIcon,
   CloudWorkspaceIcon,
   DatabaseTableViewIcon,
   DownloadIcon,
@@ -11,7 +10,19 @@ import {
   ResetIcon,
   SettingsIcon
 } from '@blocksuite/icons/rc'
-import { Check, Eye, EyeSlash, PlugsConnected, Robot, ShieldCheck } from '@phosphor-icons/react'
+import {
+  Bell,
+  Check,
+  CloudCheck,
+  Eye,
+  EyeSlash,
+  HardDrives,
+  Palette,
+  PlugsConnected,
+  Robot,
+  ShieldCheck,
+  X
+} from '@phosphor-icons/react'
 import {
   getStoredSupabaseConfig,
   saveSupabaseConfig,
@@ -32,15 +43,27 @@ import {
   type WebPushStatus
 } from '../../lib/webPush'
 
+import { APP_THEMES, type AppThemeId, getThemeById } from '../../lib/themes'
+
 interface SettingsModalProps {
   isOpen: boolean
   onClose: () => void
   syncStatus: SyncEngineStatus
   uiScale?: string
   onUiScaleChange?: (scale: string) => void
+  themeId?: AppThemeId
+  onThemeChange?: (theme: AppThemeId) => void
 }
 
-export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', onUiScaleChange }: SettingsModalProps) {
+export function SettingsModal({
+  isOpen,
+  onClose,
+  syncStatus,
+  uiScale = '100',
+  onUiScaleChange,
+  themeId = 'obsidian',
+  onThemeChange
+}: SettingsModalProps) {
   const [url, setUrl] = useState('')
   const [anonKey, setAnonKey] = useState('')
   const [enabled, setEnabled] = useState(false)
@@ -60,6 +83,18 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
   const [webPushStatus, setWebPushStatus] = useState<WebPushStatus | null>(null)
   const [vapidInput, setVapidInput] = useState('')
   const [pushLoading, setPushLoading] = useState(false)
+  const [activeSection, setActiveSection] = useState<
+    'appearance' | 'notifications' | 'sync' | 'mcp' | 'backup'
+  >('appearance')
+
+  useEffect(() => {
+    if (!isOpen) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [isOpen, onClose])
 
   // MCP (AI Brain) section state
   const defaultMcpUrl =
@@ -390,683 +425,883 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
     reader.readAsText(file)
   }
 
+  const navItems = [
+    { id: 'appearance' as const, label: 'Apariencia', icon: Palette },
+    { id: 'notifications' as const, label: 'Notificaciones', icon: Bell },
+    { id: 'sync' as const, label: 'Sincronización', icon: CloudCheck },
+    { id: 'mcp' as const, label: 'Cerebro IA (MCP)', icon: Robot },
+    { id: 'backup' as const, label: 'Respaldo y App', icon: HardDrives }
+  ]
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-2 sm:p-4 animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-xs p-2 sm:p-5 animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-xl rounded-xl border border-[var(--app-border-strong)] shadow-[var(--app-shadow-popover)] overflow-hidden flex flex-col max-h-[90vh] bg-[var(--app-bg-overlay)] text-[var(--app-text-primary)] font-sans"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Configuración de Seven Note"
+        className="w-full max-w-4xl h-[86vh] sm:h-[78vh] max-h-[680px] rounded-xl border border-[var(--app-border-strong)] shadow-[var(--app-shadow-popover)] overflow-hidden flex flex-col md:flex-row bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] font-sans"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--app-divider)] shrink-0">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-7 h-7 rounded-md flex items-center justify-center bg-[var(--app-hover)] text-[var(--app-text-secondary)] shrink-0">
-              <SettingsIcon style={{ width: 16, height: 16 }} />
-            </div>
-            <div className="min-w-0">
-              <h2 className="text-sm font-semibold text-[var(--app-text-primary)] truncate">
-                Configuración y Sincronización
+        {/* Left Navigation Sidebar (Desktop) / Top Tab Strip (Mobile) */}
+        <aside className="md:w-56 shrink-0 bg-[var(--app-bg-secondary)] border-b md:border-b-0 md:border-r border-[var(--app-border)] flex flex-col">
+          <div className="px-4 py-3.5 flex items-center justify-between border-b border-[var(--app-divider)]">
+            <div className="flex items-center gap-2 min-w-0">
+              <SettingsIcon style={{ width: 16, height: 16, color: 'var(--app-text-secondary)' }} />
+              <h2 className="text-[13px] font-semibold text-[var(--app-text-primary)] truncate">
+                Configuración
               </h2>
-              <p className="text-[11px] text-[var(--app-text-muted)] truncate">
-                Gestión de nube Supabase y copias de seguridad locales
+            </div>
+            <button
+              type="button"
+              aria-label="Cerrar configuración"
+              onClick={onClose}
+              className="md:hidden w-8 h-8 rounded-md flex items-center justify-center text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition cursor-pointer"
+            >
+              <X size={16} weight="bold" />
+            </button>
+          </div>
+
+          <nav
+            aria-label="Secciones de configuración"
+            className="flex md:flex-col gap-1 p-2 overflow-x-auto md:overflow-y-auto no-scrollbar flex-1"
+          >
+            {navItems.map((item) => {
+              const Icon = item.icon
+              const isActive = activeSection === item.id
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  aria-current={isActive ? 'page' : undefined}
+                  onClick={() => setActiveSection(item.id)}
+                  className={`flex items-center gap-2.5 px-3 py-2 rounded-md text-xs font-medium whitespace-nowrap transition cursor-pointer shrink-0 ${
+                    isActive
+                      ? 'bg-[var(--app-active)] text-[var(--app-text-primary)] font-semibold'
+                      : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
+                  }`}
+                >
+                  <Icon size={16} weight={isActive ? 'fill' : 'regular'} className="shrink-0" />
+                  <span>{item.label}</span>
+                </button>
+              )
+            })}
+          </nav>
+
+          {/* Subtle status footer on desktop */}
+          <div className="hidden md:flex items-center justify-between px-4 py-3 border-t border-[var(--app-divider)] text-[11px] text-[var(--app-text-muted)]">
+            <span>Seven Note</span>
+            <span className="font-mono">{uiScale}%</span>
+          </div>
+        </aside>
+
+        {/* Right Content Pane */}
+        <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[var(--app-bg-primary)]">
+          {/* Desktop Pane Header */}
+          <div className="hidden md:flex items-center justify-between px-6 py-3.5 border-b border-[var(--app-divider)] shrink-0">
+            <div>
+              <h3 className="text-sm font-semibold text-[var(--app-text-primary)]">
+                {activeSection === 'appearance' && 'Apariencia'}
+                {activeSection === 'notifications' && 'Notificaciones y Alertas'}
+                {activeSection === 'sync' && 'Sincronización en la nube'}
+                {activeSection === 'mcp' && 'Cerebro IA · Servidor MCP'}
+                {activeSection === 'backup' && 'Respaldo local y Aplicación'}
+              </h3>
+              <p className="text-xs text-[var(--app-text-muted)] mt-0.5">
+                {activeSection === 'appearance' && 'Personaliza la paleta de colores y el tamaño global de la interfaz.'}
+                {activeSection === 'notifications' && 'Controla avisos flotantes, sonido, horario silencioso y push en segundo plano.'}
+                {activeSection === 'sync' && 'Gestiona la frecuencia de respaldo automático y tu conexión con Supabase.'}
+                {activeSection === 'mcp' && 'Conecta agentes externos y bots a Seven Note mediante Model Context Protocol.'}
+                {activeSection === 'backup' && 'Exporta copias de seguridad JSON, instala la app o busca actualizaciones.'}
               </p>
             </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-md text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition-colors cursor-pointer shrink-0"
-          >
-            <CloseIcon style={{ width: 16, height: 16 }} />
-          </button>
-        </div>
-
-        {/* Modal Content */}
-        <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs custom-scrollbar">
-          {/* UI Scale / Zoom Section */}
-          <div className="space-y-3 p-3.5 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)]">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <h3 className="text-xs font-semibold text-[var(--app-text-primary)]">
-                  Tamaño y escala de la interfaz
-                </h3>
-                <p className="text-[11px] mt-0.5 text-[var(--app-text-muted)]">
-                  Ajusta el tamaño global de los botones, textos e iconos.
-                </p>
-              </div>
-              <span className="text-[11px] font-mono font-medium px-2 py-0.5 rounded bg-[var(--app-hover)] border border-[var(--app-border)] text-[var(--app-text-primary)] shrink-0">
-                {uiScale}%
-              </span>
-            </div>
-
-            <div className="grid grid-cols-5 gap-1.5 pt-0.5">
-              {[
-                { value: '90', label: '90%', sub: 'Compacto' },
-                { value: '100', label: '100%', sub: 'Normal' },
-                { value: '110', label: '110%', sub: 'Grande' },
-                { value: '120', label: '120%', sub: 'Muy grande' },
-                { value: '130', label: '130%', sub: 'Accesible' },
-              ].map((opt) => {
-                const isSelected = uiScale === opt.value
-                return (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    onClick={() => onUiScaleChange?.(opt.value)}
-                    className={`py-2 px-1.5 rounded-md border text-center transition-colors flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
-                      isSelected
-                        ? 'border-[var(--app-accent)] bg-[var(--app-accent-soft)] text-[var(--app-text-primary)] font-semibold'
-                        : 'border-[var(--app-border)] bg-[var(--app-bg-primary)] text-[var(--app-text-secondary)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text-primary)]'
-                    }`}
-                  >
-                    <span className="text-xs font-semibold">{opt.label}</span>
-                    <span className="text-[10px] opacity-75">{opt.sub}</span>
-                  </button>
-                )
-              })}
-            </div>
-
-            <div className="flex items-center justify-between pt-1 text-[11px] text-[var(--app-text-muted)]">
-              <span>Atajo de teclado</span>
-              <span className="font-mono bg-[var(--app-bg-primary)] px-2 py-0.5 rounded border border-[var(--app-border)] text-[var(--app-text-secondary)]">
-                Ctrl + / Ctrl - / Ctrl 0
-              </span>
-            </div>
+            <button
+              type="button"
+              aria-label="Cerrar configuración"
+              onClick={onClose}
+              className="w-8 h-8 rounded-md flex items-center justify-center text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition cursor-pointer shrink-0"
+              title="Cerrar (Esc)"
+            >
+              <X size={17} weight="bold" />
+            </button>
           </div>
 
-          {/* Notifications Section */}
-          <div className="space-y-3 p-3.5 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)]">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <h3 className="text-xs font-semibold text-[var(--app-text-primary)]">
-                  Notificaciones y Alertas
-                </h3>
-                <p className="text-[11px] mt-0.5 text-[var(--app-text-muted)]">
-                  Controla avisos en la app, notificaciones nativas, sonido y horario silencioso.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => void notificationService.sendTestNotification()}
-                className="px-2.5 py-1 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[11px] font-medium text-[var(--app-text-primary)] transition cursor-pointer shrink-0"
-              >
-                Probar alerta
-              </button>
-            </div>
+          {/* Scrollable Active Section Body */}
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 text-xs custom-scrollbar">
+            {/* TAB 1: APARIENCIA */}
+            {activeSection === 'appearance' && (
+              <>
+                {/* Theme Selector Section */}
+                <div className="space-y-3 p-4 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)]">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <h4 className="text-[13px] font-semibold text-[var(--app-text-primary)]">
+                        Tema de la interfaz
+                      </h4>
+                      <p className="text-xs mt-0.5 text-[var(--app-text-muted)]">
+                        Elige la paleta de colores para el editor, sidebar y lienzo.
+                      </p>
+                    </div>
+                    <span className="text-xs font-medium px-2.5 py-1 rounded-md bg-[var(--app-bg-primary)] border border-[var(--app-border)] text-[var(--app-text-primary)] shrink-0">
+                      {getThemeById(themeId).name}
+                    </span>
+                  </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {[
-                {
-                  key: 'toastsEnabled' as const,
-                  label: 'Avisos flotantes (Toasts)',
-                  value: notifPrefs.toastsEnabled
-                },
-                {
-                  key: 'soundEnabled' as const,
-                  label: 'Sonido sutil de alerta',
-                  value: notifPrefs.soundEnabled
-                },
-                {
-                  key: 'dndEnabled' as const,
-                  label: 'Modo No Molestar',
-                  value: notifPrefs.dndEnabled
-                },
-                {
-                  key: 'quietHoursEnabled' as const,
-                  label: 'Horario silencioso automático',
-                  value: notifPrefs.quietHoursEnabled
-                }
-              ].map((item) => (
-                <label
-                  key={item.key}
-                  className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)] cursor-pointer"
-                >
-                  <span className="text-[11px] font-medium text-[var(--app-text-primary)]">
-                    {item.label}
-                  </span>
-                  <input
-                    type="checkbox"
-                    checked={item.value}
-                    onChange={(e) =>
-                      notificationService.updatePreferences({ [item.key]: e.target.checked })
-                    }
-                    className="accent-[var(--app-accent)] cursor-pointer"
-                  />
-                </label>
-              ))}
-            </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
+                    {APP_THEMES.map((theme) => {
+                      const isSelected = themeId === theme.id
+                      return (
+                        <button
+                          key={theme.id}
+                          type="button"
+                          aria-pressed={isSelected}
+                          onClick={() => onThemeChange?.(theme.id)}
+                          className={`group p-2.5 rounded-lg border text-left transition cursor-pointer flex flex-col gap-2 ${
+                            isSelected
+                              ? 'border-[var(--app-accent)] bg-[var(--app-bg-primary)] ring-1 ring-[var(--app-accent)]/40'
+                              : 'border-[var(--app-border)] bg-[var(--app-bg-primary)]/70 hover:bg-[var(--app-hover)] hover:border-[var(--app-border-strong)]'
+                          }`}
+                        >
+                          {/* Mini app layout preview */}
+                          <div
+                            className="w-full h-12 rounded-md overflow-hidden border flex"
+                            style={{
+                              backgroundColor: theme.swatches.editor,
+                              borderColor: theme.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'
+                            }}
+                          >
+                            <div
+                              className="w-3 h-full shrink-0 flex flex-col items-center justify-start pt-1.5 gap-1"
+                              style={{ backgroundColor: theme.swatches.ribbon }}
+                            >
+                              <span
+                                className="w-1.5 h-1.5 rounded-full"
+                                style={{ backgroundColor: theme.swatches.accent }}
+                              />
+                            </div>
+                            <div
+                              className="w-7 h-full shrink-0 p-1 flex flex-col gap-1"
+                              style={{ backgroundColor: theme.swatches.sidebar }}
+                            >
+                              <span
+                                className="h-1 w-full rounded-full opacity-35"
+                                style={{ backgroundColor: theme.swatches.text }}
+                              />
+                              <span
+                                className="h-1 w-3/4 rounded-full opacity-20"
+                                style={{ backgroundColor: theme.swatches.text }}
+                              />
+                            </div>
+                            <div className="flex-1 p-1.5 flex flex-col gap-1">
+                              <span
+                                className="h-1.5 w-2/3 rounded-full opacity-80"
+                                style={{ backgroundColor: theme.swatches.text }}
+                              />
+                              <span
+                                className="h-1 w-full rounded-full opacity-30"
+                                style={{ backgroundColor: theme.swatches.text }}
+                              />
+                              <span
+                                className="h-1 w-4/5 rounded-full opacity-20"
+                                style={{ backgroundColor: theme.swatches.text }}
+                              />
+                            </div>
+                          </div>
 
-            {notifPrefs.quietHoursEnabled && (
-              <div className="flex items-center justify-between gap-3 px-2.5 py-2 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)]">
-                <span className="text-[11px] text-[var(--app-text-secondary)]">
-                  Rango silencioso
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="time"
-                    value={notifPrefs.quietHoursStart}
-                    onChange={(e) =>
-                      notificationService.updatePreferences({ quietHoursStart: e.target.value })
-                    }
-                    className="px-1.5 py-0.5 text-[11px] rounded border border-[var(--app-border)] bg-[var(--app-bg-secondary)] text-[var(--app-text-primary)]"
-                  />
-                  <span className="text-[var(--app-text-muted)]">a</span>
-                  <input
-                    type="time"
-                    value={notifPrefs.quietHoursEnd}
-                    onChange={(e) =>
-                      notificationService.updatePreferences({ quietHoursEnd: e.target.value })
-                    }
-                    className="px-1.5 py-0.5 text-[11px] rounded border border-[var(--app-border)] bg-[var(--app-bg-secondary)] text-[var(--app-text-primary)]"
-                  />
+                          <div className="flex items-center justify-between gap-1 px-0.5">
+                            <span className="text-xs font-semibold text-[var(--app-text-primary)] truncate">
+                              {theme.name}
+                            </span>
+                            <span className="text-[10px] uppercase tracking-wider text-[var(--app-text-muted)] shrink-0">
+                              {theme.mode === 'dark' ? 'Oscuro' : 'Claro'}
+                            </span>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
+
+                {/* UI Scale / Zoom Section */}
+                <div className="space-y-3 p-4 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)]">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <h4 className="text-[13px] font-semibold text-[var(--app-text-primary)]">
+                        Tamaño y escala de la interfaz
+                      </h4>
+                      <p className="text-xs mt-0.5 text-[var(--app-text-muted)]">
+                        Ajusta el tamaño global de botones, textos e iconos.
+                      </p>
+                    </div>
+                    <span className="text-xs font-mono font-medium px-2.5 py-1 rounded-md bg-[var(--app-bg-primary)] border border-[var(--app-border)] text-[var(--app-text-primary)] shrink-0">
+                      {uiScale}%
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-5 gap-2 pt-1">
+                    {[
+                      { value: '90', label: '90%', sub: 'Compacto' },
+                      { value: '100', label: '100%', sub: 'Normal' },
+                      { value: '110', label: '110%', sub: 'Grande' },
+                      { value: '120', label: '120%', sub: 'Muy grande' },
+                      { value: '130', label: '130%', sub: 'Accesible' },
+                    ].map((opt) => {
+                      const isSelected = uiScale === opt.value
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          aria-pressed={isSelected}
+                          onClick={() => onUiScaleChange?.(opt.value)}
+                          className={`py-2.5 px-2 rounded-md border text-center transition-colors flex flex-col items-center justify-center gap-0.5 cursor-pointer ${
+                            isSelected
+                              ? 'border-[var(--app-accent)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] ring-1 ring-[var(--app-accent)]/40 font-semibold'
+                              : 'border-[var(--app-border)] bg-[var(--app-bg-primary)]/70 text-[var(--app-text-secondary)] hover:bg-[var(--app-hover)] hover:text-[var(--app-text-primary)]'
+                          }`}
+                        >
+                          <span className="text-xs font-semibold">{opt.label}</span>
+                          <span className="text-[10px] opacity-75">{opt.sub}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 text-xs text-[var(--app-text-muted)]">
+                    <span>Atajo rápido de escala</span>
+                    <span className="font-mono text-[11px] bg-[var(--app-bg-primary)] px-2 py-0.5 rounded border border-[var(--app-border)] text-[var(--app-text-secondary)]">
+                      Ctrl + / Ctrl - / Ctrl 0
+                    </span>
+                  </div>
+                </div>
+              </>
             )}
 
-            {/* Desktop Permission */}
-            <div className="flex items-center justify-between gap-2 px-2.5 py-2 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)]">
-              <div>
-                <div className="text-[11px] font-medium text-[var(--app-text-primary)]">
-                  Notificaciones de escritorio / sistema
-                </div>
-                <div className="text-[10px] text-[var(--app-text-muted)]">
-                  Estado:{' '}
-                  {desktopPerm === 'granted'
-                    ? 'Permitido'
-                    : desktopPerm === 'denied'
-                    ? 'Bloqueado por el navegador'
-                    : desktopPerm === 'unsupported'
-                    ? 'No soportado en este entorno'
-                    : 'Pendiente de permiso'}
-                </div>
-              </div>
-              {desktopPerm === 'granted' ? (
-                <input
-                  type="checkbox"
-                  checked={notifPrefs.desktopEnabled}
-                  onChange={(e) =>
-                    notificationService.updatePreferences({ desktopEnabled: e.target.checked })
-                  }
-                  className="accent-[var(--app-accent)] cursor-pointer"
-                />
-              ) : desktopPerm === 'default' ? (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const res = await notificationService.requestDesktopPermission()
-                    setDesktopPerm(res)
-                  }}
-                  className="px-2.5 py-1 rounded text-[11px] font-medium bg-[var(--app-accent-soft)] text-[var(--app-accent)] hover:opacity-90 border border-[var(--app-accent)]/30 transition cursor-pointer"
-                >
-                  Activar
-                </button>
-              ) : null}
-            </div>
-
-            {/* Background Web Push (even when browser is closed) */}
-            {webPushStatus?.supported && (
-              <div className="space-y-2 px-2.5 py-2.5 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)]">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <div className="text-[11px] font-medium text-[var(--app-text-primary)]">
-                      Push en segundo plano (web cerrada)
+            {/* TAB 2: NOTIFICACIONES */}
+            {activeSection === 'notifications' && (
+              <div className="space-y-4">
+                <div className="space-y-3 p-4 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)]">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <h4 className="text-[13px] font-semibold text-[var(--app-text-primary)]">
+                        Preferencias generales
+                      </h4>
+                      <p className="text-xs mt-0.5 text-[var(--app-text-muted)]">
+                        Elige cómo recibir avisos en la aplicación.
+                      </p>
                     </div>
-                    <div className="text-[10px] text-[var(--app-text-muted)]">
-                      {webPushStatus.subscribed
-                        ? 'Suscrito en este dispositivo'
-                        : 'Recibe alertas aunque cierres el navegador'}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    disabled={pushLoading}
-                    onClick={async () => {
-                      setPushLoading(true)
-                      const res = webPushStatus.subscribed
-                        ? await unsubscribeFromWebPush()
-                        : await subscribeToWebPush(vapidInput)
-                      setPushLoading(false)
-                      if (res.success) {
-                        toast.success(res.message)
-                      } else {
-                        toast.error(res.message)
-                      }
-                      const next = await getWebPushStatus()
-                      setWebPushStatus(next)
-                    }}
-                    className={`px-2.5 py-1 rounded text-[11px] font-medium border transition cursor-pointer disabled:opacity-50 ${
-                      webPushStatus.subscribed
-                        ? 'border-rose-500/30 bg-rose-500/10 text-rose-500 dark:text-rose-400 hover:bg-rose-500/20'
-                        : 'border-[var(--app-accent)]/30 bg-[var(--app-accent-soft)] text-[var(--app-accent)] hover:opacity-90'
-                    }`}
-                  >
-                    {pushLoading
-                      ? 'Procesando...'
-                      : webPushStatus.subscribed
-                      ? 'Desactivar'
-                      : 'Activar Push'}
-                  </button>
-                </div>
-
-                {!import.meta.env.VITE_VAPID_PUBLIC_KEY && (
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="text"
-                      value={vapidInput}
-                      onChange={(e) => {
-                        setVapidInput(e.target.value)
-                        saveVapidPublicKey(e.target.value)
-                      }}
-                      placeholder="Clave pública VAPID (ej. BEl62iUYg...)"
-                      className="flex-1 px-2 py-1 text-[11px] rounded border border-[var(--app-border)] bg-[var(--app-bg-secondary)] text-[var(--app-text-primary)] placeholder:text-[var(--app-text-muted)] font-mono"
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Category Filters */}
-            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-              {(
-                [
-                  { id: 'collaboration', label: 'Menciones y comentarios' },
-                  { id: 'activity', label: 'Nuevas notas del equipo' },
-                  { id: 'reminders', label: 'Recordatorios de tareas' },
-                  { id: 'sync', label: 'Sincronización' },
-                  { id: 'system', label: 'Sistema' }
-                ] as const
-              ).map((cat) => {
-                const active = notifPrefs.categories[cat.id]
-                return (
-                  <button
-                    key={cat.id}
-                    type="button"
-                    onClick={() =>
-                      notificationService.updatePreferences({
-                        categories: { ...notifPrefs.categories, [cat.id]: !active }
-                      })
-                    }
-                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium border transition cursor-pointer ${
-                      active
-                        ? 'border-[var(--app-accent)]/40 bg-[var(--app-accent-soft)] text-[var(--app-accent)]'
-                        : 'border-[var(--app-border)] bg-[var(--app-bg-primary)] text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)]'
-                    }`}
-                  >
-                    {active && <Check size={11} weight="bold" />}
-                    <span>{cat.label}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-
-          {/* MCP Server (AI Brain for Team Bots) */}
-          <div className="space-y-2.5">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-xs font-semibold flex items-center gap-1.5 text-[var(--app-text-primary)]">
-                  <Robot size={15} weight="duotone" className="text-[var(--app-accent)]" />
-                  <span>Cerebro IA · Servidor MCP</span>
-                </h3>
-                <p className="text-[11px] text-[var(--app-text-muted)]">
-                  Conecta tus bots y agentes externos a Seven Note mediante Model Context Protocol (Streamable HTTP).
-                </p>
-              </div>
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25 shrink-0">
-                <PlugsConnected size={11} weight="bold" />
-                Remoto
-              </span>
-            </div>
-
-            <div className="space-y-3 p-3.5 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)]">
-              {/* Endpoint URL */}
-              <div className="space-y-1">
-                <label className="block text-[11px] font-medium text-[var(--app-text-secondary)]">
-                  Endpoint MCP (URL)
-                </label>
-                <div className="flex gap-1.5">
-                  <input
-                    type="text"
-                    value={mcpUrl}
-                    onChange={(e) => handleMcpUrlChange(e.target.value)}
-                    placeholder="https://note.sevenestudio.com/api/mcp"
-                    className="flex-1 text-xs font-mono px-2.5 py-1.5 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] outline-none focus:border-[var(--app-accent)]"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void copyMcpSnippet('url')}
-                    className="px-2.5 py-1.5 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition-colors flex items-center gap-1 cursor-pointer shrink-0"
-                  >
-                    {copiedMcpItem === 'url' ? (
-                      <DoneIcon style={{ width: 13, height: 13, color: '#10b981' }} />
-                    ) : (
-                      <CopyIcon style={{ width: 13, height: 13 }} />
-                    )}
-                    <span>{copiedMcpItem === 'url' ? 'Copiada' : 'Copiar'}</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Token MCP */}
-              <div className="space-y-1">
-                <label className="block text-[11px] font-medium text-[var(--app-text-secondary)]">
-                  Token de acceso (SEVEN_NOTE_MCP_API_KEY)
-                </label>
-                <div className="flex gap-1.5">
-                  <div className="relative flex-1">
-                    <input
-                      type={showMcpKey ? 'text' : 'password'}
-                      value={mcpApiKey}
-                      onChange={(e) => handleMcpKeyChange(e.target.value)}
-                      placeholder="sn_mcp_... (se guarda solo en tu navegador)"
-                      className="w-full text-xs font-mono pl-2.5 pr-8 py-1.5 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] outline-none focus:border-[var(--app-accent)]"
-                    />
                     <button
                       type="button"
-                      onClick={() => setShowMcpKey((v) => !v)}
-                      title={showMcpKey ? 'Ocultar token' : 'Mostrar token'}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] cursor-pointer"
+                      onClick={() => void notificationService.sendTestNotification()}
+                      className="h-8 px-3 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-xs font-medium text-[var(--app-text-primary)] transition cursor-pointer shrink-0"
                     >
-                      {showMcpKey ? <EyeSlash size={14} /> : <Eye size={14} />}
+                      Probar alerta
+                    </button>
+                  </div>
+
+                  <div className="divide-y divide-[var(--app-divider)] rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)]">
+                    {[
+                      {
+                        key: 'toastsEnabled' as const,
+                        label: 'Avisos flotantes (Toasts)',
+                        desc: 'Muestra confirmaciones breves en la esquina inferior.',
+                        value: notifPrefs.toastsEnabled
+                      },
+                      {
+                        key: 'soundEnabled' as const,
+                        label: 'Sonido sutil de alerta',
+                        desc: 'Reproduce un tono suave al recibir notificaciones.',
+                        value: notifPrefs.soundEnabled
+                      },
+                      {
+                        key: 'dndEnabled' as const,
+                        label: 'Modo No Molestar',
+                        desc: 'Pausa todos los avisos visuales y de sonido.',
+                        value: notifPrefs.dndEnabled
+                      },
+                      {
+                        key: 'quietHoursEnabled' as const,
+                        label: 'Horario silencioso automático',
+                        desc: 'Silencia notificaciones durante un rango horario.',
+                        value: notifPrefs.quietHoursEnabled
+                      }
+                    ].map((item) => (
+                      <label
+                        key={item.key}
+                        className="flex items-center justify-between gap-3 px-3.5 py-2.5 cursor-pointer hover:bg-[var(--app-hover)]/60 transition"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-xs font-medium text-[var(--app-text-primary)]">
+                            {item.label}
+                          </div>
+                          <div className="text-[11px] text-[var(--app-text-muted)]">
+                            {item.desc}
+                          </div>
+                        </div>
+                        <span className="relative inline-flex items-center shrink-0">
+                          <input
+                            type="checkbox"
+                            checked={item.value}
+                            onChange={(e) =>
+                              notificationService.updatePreferences({ [item.key]: e.target.checked })
+                            }
+                            className="sr-only peer"
+                          />
+                          <span className="w-9 h-5 bg-[var(--app-border-strong)] rounded-full peer peer-checked:after:translate-x-4 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--app-accent)]" />
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+
+                  {notifPrefs.quietHoursEnabled && (
+                    <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)]">
+                      <span className="text-xs text-[var(--app-text-secondary)] font-medium">
+                        Rango silencioso
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="time"
+                          value={notifPrefs.quietHoursStart}
+                          onChange={(e) =>
+                            notificationService.updatePreferences({ quietHoursStart: e.target.value })
+                          }
+                          className="px-2 py-1 text-xs rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-secondary)] text-[var(--app-text-primary)]"
+                        />
+                        <span className="text-[var(--app-text-muted)]">a</span>
+                        <input
+                          type="time"
+                          value={notifPrefs.quietHoursEnd}
+                          onChange={(e) =>
+                            notificationService.updatePreferences({ quietHoursEnd: e.target.value })
+                          }
+                          className="px-2 py-1 text-xs rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-secondary)] text-[var(--app-text-primary)]"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Desktop & Web Push */}
+                <div className="space-y-2.5 p-4 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)]">
+                  <h4 className="text-[13px] font-semibold text-[var(--app-text-primary)]">
+                    Sistema y segundo plano
+                  </h4>
+
+                  <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)]">
+                    <div>
+                      <div className="text-xs font-medium text-[var(--app-text-primary)]">
+                        Notificaciones de escritorio / sistema
+                      </div>
+                      <div className="text-[11px] text-[var(--app-text-muted)]">
+                        Estado:{' '}
+                        {desktopPerm === 'granted'
+                          ? 'Permitido'
+                          : desktopPerm === 'denied'
+                          ? 'Bloqueado por el navegador'
+                          : desktopPerm === 'unsupported'
+                          ? 'No soportado en este entorno'
+                          : 'Pendiente de permiso'}
+                      </div>
+                    </div>
+                    {desktopPerm === 'granted' ? (
+                      <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={notifPrefs.desktopEnabled}
+                          onChange={(e) =>
+                            notificationService.updatePreferences({ desktopEnabled: e.target.checked })
+                          }
+                          className="sr-only peer"
+                        />
+                        <span className="w-9 h-5 bg-[var(--app-border-strong)] rounded-full peer peer-checked:after:translate-x-4 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--app-accent)]" />
+                      </label>
+                    ) : desktopPerm === 'default' ? (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const res = await notificationService.requestDesktopPermission()
+                          setDesktopPerm(res)
+                        }}
+                        className="h-8 px-3 rounded-md text-xs font-medium bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover-filled)] text-[var(--app-text-primary)] border border-[var(--app-border-strong)] transition cursor-pointer"
+                      >
+                        Activar
+                      </button>
+                    ) : null}
+                  </div>
+
+                  {webPushStatus?.supported && (
+                    <div className="space-y-2 px-3.5 py-2.5 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)]">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <div className="text-xs font-medium text-[var(--app-text-primary)]">
+                            Push en segundo plano (web cerrada)
+                          </div>
+                          <div className="text-[11px] text-[var(--app-text-muted)]">
+                            {webPushStatus.subscribed
+                              ? 'Suscrito en este dispositivo'
+                              : 'Recibe alertas aunque cierres el navegador'}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={pushLoading}
+                          onClick={async () => {
+                            setPushLoading(true)
+                            const res = webPushStatus.subscribed
+                              ? await unsubscribeFromWebPush()
+                              : await subscribeToWebPush(vapidInput)
+                            setPushLoading(false)
+                            if (res.success) {
+                              toast.success(res.message)
+                            } else {
+                              toast.error(res.message)
+                            }
+                            const next = await getWebPushStatus()
+                            setWebPushStatus(next)
+                          }}
+                          className={`h-8 px-3 rounded-md text-xs font-medium border transition cursor-pointer disabled:opacity-50 ${
+                            webPushStatus.subscribed
+                              ? 'border-rose-500/30 bg-rose-500/10 text-rose-500 hover:bg-rose-500/20'
+                              : 'border-[var(--app-border-strong)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover-filled)] text-[var(--app-text-primary)]'
+                          }`}
+                        >
+                          {pushLoading
+                            ? 'Procesando...'
+                            : webPushStatus.subscribed
+                            ? 'Desactivar'
+                            : 'Activar Push'}
+                        </button>
+                      </div>
+
+                      {!import.meta.env.VITE_VAPID_PUBLIC_KEY && (
+                        <input
+                          type="text"
+                          value={vapidInput}
+                          onChange={(e) => {
+                            setVapidInput(e.target.value)
+                            saveVapidPublicKey(e.target.value)
+                          }}
+                          placeholder="Clave pública VAPID (ej. BEl62iUYg...)"
+                          className="w-full px-2.5 py-1.5 text-xs rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-secondary)] text-[var(--app-text-primary)] placeholder:text-[var(--app-text-muted)] font-mono"
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Category Filters */}
+                <div className="space-y-2.5 p-4 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)]">
+                  <h4 className="text-[13px] font-semibold text-[var(--app-text-primary)]">
+                    Categorías activas
+                  </h4>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {(
+                      [
+                        { id: 'collaboration', label: 'Menciones y comentarios' },
+                        { id: 'activity', label: 'Nuevas notas del equipo' },
+                        { id: 'reminders', label: 'Recordatorios de tareas' },
+                        { id: 'sync', label: 'Sincronización' },
+                        { id: 'system', label: 'Sistema' }
+                      ] as const
+                    ).map((cat) => {
+                      const active = notifPrefs.categories[cat.id]
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          aria-pressed={active}
+                          onClick={() =>
+                            notificationService.updatePreferences({
+                              categories: { ...notifPrefs.categories, [cat.id]: !active }
+                            })
+                          }
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition cursor-pointer ${
+                            active
+                              ? 'border-[var(--app-border-strong)] bg-[var(--app-active)] text-[var(--app-text-primary)]'
+                              : 'border-[var(--app-border)] bg-[var(--app-bg-primary)] text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)]'
+                          }`}
+                        >
+                          {active && <Check size={13} weight="bold" className="text-[var(--app-accent)]" />}
+                          <span>{cat.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 3: SINCRONIZACIÓN */}
+            {activeSection === 'sync' && (
+              <div className="space-y-4">
+                {/* Live Sync Status Card */}
+                <div className="p-4 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)] flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-md flex items-center justify-center bg-[var(--app-bg-primary)] border border-[var(--app-border)] shrink-0">
+                      <CloudWorkspaceIcon style={{ width: 18, height: 18, color: 'var(--app-text-secondary)' }} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[13px] font-semibold text-[var(--app-text-primary)]">
+                        Estado de sincronización
+                      </div>
+                      <div className="text-xs text-[var(--app-text-muted)] truncate">
+                        {syncStatus.pendingCount === 0
+                          ? 'Todo sincronizado con la nube'
+                          : `${syncStatus.pendingCount} cambios pendientes en almacenamiento local`}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleManualSync}
+                    disabled={manualSyncing || !enabled}
+                    className="h-8 px-3 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shrink-0"
+                  >
+                    <ResetIcon
+                      style={{
+                        width: 14,
+                        height: 14,
+                        animation: manualSyncing ? 'spin 1s linear infinite' : 'none'
+                      }}
+                    />
+                    <span>Sincronizar ahora</span>
+                  </button>
+                </div>
+
+                {/* Supabase Settings Card */}
+                <div className="space-y-4 p-4 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)]">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h4 className="text-[13px] font-semibold text-[var(--app-text-primary)]">
+                        Respaldo automático (Supabase)
+                      </h4>
+                      <p className="text-xs text-[var(--app-text-muted)] mt-0.5">
+                        Seven Note funciona 100% offline; activa Supabase para sincronizar entre dispositivos.
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={enabled}
+                        onChange={(e) => setEnabled(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-9 h-5 bg-[var(--app-border-strong)] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-4 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--app-accent)]" />
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 pt-2 border-t border-[var(--app-divider)]">
+                    <div>
+                      <label htmlFor="sync-interval-select" className="block text-xs font-medium text-[var(--app-text-primary)]">
+                        Frecuencia de sincronización
+                      </label>
+                      <p className="text-[11px] text-[var(--app-text-muted)]">
+                        Sincroniza en segundo plano cuando estés conectado
+                      </p>
+                    </div>
+                    <select
+                      id="sync-interval-select"
+                      value={syncInterval}
+                      onChange={(e) => setSyncInterval(Number(e.target.value))}
+                      className="h-8 text-xs px-2.5 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] outline-none focus:border-[var(--app-accent)] cursor-pointer"
+                    >
+                      <option value={10}>Cada 10 segundos</option>
+                      <option value={30}>Cada 30 segundos (Recomendado)</option>
+                      <option value={60}>Cada 1 minuto</option>
+                      <option value={300}>Cada 5 minutos</option>
+                    </select>
+                  </div>
+
+                  {testResult && (
+                    <div
+                      className={`flex items-center gap-2 p-2.5 rounded-md text-xs border ${
+                        testResult.success
+                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border-emerald-500/25'
+                          : 'bg-rose-500/10 text-rose-600 dark:text-rose-300 border-rose-500/25'
+                      }`}
+                    >
+                      {testResult.success ? (
+                        <DoneIcon style={{ width: 14, height: 14 }} />
+                      ) : (
+                        <InformationIcon style={{ width: 14, height: 14 }} />
+                      )}
+                      <span>{testResult.message}</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-2 border-t border-[var(--app-divider)] gap-2 flex-wrap">
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleTest}
+                        disabled={testing || !url || !anonKey}
+                        className="h-8 px-3 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition-colors disabled:opacity-50 cursor-pointer"
+                      >
+                        {testing ? 'Probando...' : 'Probar conexión'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={copySqlSchema}
+                        className="h-8 px-3 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition-colors flex items-center gap-1.5 cursor-pointer"
+                        title="Copiar script SQL para crear las tablas en Supabase"
+                      >
+                        {copiedSql ? (
+                          <DoneIcon style={{ width: 14, height: 14, color: '#10b981' }} />
+                        ) : (
+                          <CopyIcon style={{ width: 14, height: 14 }} />
+                        )}
+                        <span>{copiedSql ? 'SQL copiado' : 'Copiar esquema SQL'}</span>
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleSave}
+                      className="h-8 px-4 rounded-md text-xs font-semibold text-white bg-[var(--app-accent)] hover:bg-[var(--app-accent-hover)] transition-colors cursor-pointer"
+                    >
+                      Guardar
                     </button>
                   </div>
                 </div>
               </div>
+            )}
 
-              {/* Permisos y alcance */}
-              <div className="flex items-start gap-2 p-2.5 rounded-md bg-[var(--app-bg-primary)] border border-[var(--app-border)] text-[11px] text-[var(--app-text-muted)]">
-                <ShieldCheck size={15} weight="duotone" className="text-emerald-500 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-medium text-[var(--app-text-primary)]">Alcance activo:</span> los bots pueden leer y escribir en{' '}
-                  <span className="text-[var(--app-text-primary)]">espacios compartidos</span> y{' '}
-                  <span className="text-[var(--app-text-primary)]">espacios solo admins</span>. Los{' '}
-                  <span className="text-rose-500 font-medium">espacios y notas privadas están bloqueados</span>.
-                </div>
-              </div>
-
-              {/* Live Test Result */}
-              {mcpStatus && (
-                <div
-                  className={`flex items-center gap-2 p-2.5 rounded-md text-xs border ${
-                    mcpStatus.ok
-                      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/25'
-                      : 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/25'
-                  }`}
-                >
-                  {mcpStatus.ok ? (
-                    <DoneIcon style={{ width: 14, height: 14, flexShrink: 0 }} />
-                  ) : (
-                    <InformationIcon style={{ width: 14, height: 14, flexShrink: 0 }} />
-                  )}
-                  <span>{mcpStatus.message}</span>
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="flex items-center justify-between pt-1 gap-2 flex-wrap">
-                <div className="flex gap-1.5 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => void copyMcpSnippet('json')}
-                    className="px-2.5 py-1.5 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition-colors flex items-center gap-1.5 cursor-pointer"
-                    title="Copiar bloque JSON listo para Claude, Cursor, Antigravity u OpenAI Agents"
-                  >
-                    {copiedMcpItem === 'json' ? (
-                      <DoneIcon style={{ width: 13, height: 13, color: '#10b981' }} />
-                    ) : (
-                      <CopyIcon style={{ width: 13, height: 13 }} />
-                    )}
-                    <span>{copiedMcpItem === 'json' ? 'JSON copiado' : 'Copiar config JSON'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void copyMcpSnippet('header')}
-                    className="px-2.5 py-1.5 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition-colors flex items-center gap-1.5 cursor-pointer"
-                    title="Copiar header Authorization: Bearer para n8n o bots propios"
-                  >
-                    {copiedMcpItem === 'header' ? (
-                      <DoneIcon style={{ width: 13, height: 13, color: '#10b981' }} />
-                    ) : (
-                      <CopyIcon style={{ width: 13, height: 13 }} />
-                    )}
-                    <span>{copiedMcpItem === 'header' ? 'Header copiado' : 'Copiar Bearer'}</span>
-                  </button>
+            {/* TAB 4: CEREBRO IA (MCP) */}
+            {activeSection === 'mcp' && (
+              <div className="space-y-4 p-4 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)]">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-[13px] font-semibold text-[var(--app-text-primary)]">
+                      Conexión Streamable HTTP
+                    </h4>
+                    <p className="text-xs text-[var(--app-text-muted)] mt-0.5">
+                      Usa este endpoint y tu token para dar acceso seguro a agentes externos.
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium bg-[var(--app-bg-primary)] text-[var(--app-text-secondary)] border border-[var(--app-border-strong)] shrink-0">
+                    <PlugsConnected size={13} />
+                    Remoto
+                  </span>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => void handleTestMcp()}
-                  disabled={mcpTesting}
-                  className="px-3.5 py-1.5 rounded-md text-xs font-medium text-white bg-[var(--app-accent)] hover:bg-[var(--app-accent-hover)] transition-colors disabled:opacity-50 cursor-pointer"
-                >
-                  {mcpTesting ? 'Probando...' : 'Probar MCP'}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Supabase Section */}
-          <div className="space-y-2.5">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h3 className="text-xs font-semibold text-[var(--app-text-primary)]">
-                  Sincronización en la nube (Supabase)
-                </h3>
-                <p className="text-[11px] text-[var(--app-text-muted)]">
-                  Opcional. Seven Note funciona 100% offline; conecta Supabase para respaldar tus notas automáticamente.
-                </p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                <input
-                  type="checkbox"
-                  checked={enabled}
-                  onChange={(e) => setEnabled(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-9 h-5 bg-[var(--app-border-strong)] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-4 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--app-accent)]"></div>
-              </label>
-            </div>
-
-            <div className="space-y-3 p-3.5 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)]">
-              {/* Intervalo de sincronización periódica */}
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <label className="block text-xs font-medium text-[var(--app-text-primary)]">
-                    Frecuencia de sincronización
+                {/* Endpoint URL */}
+                <div className="space-y-1.5">
+                  <label htmlFor="mcp-endpoint-url" className="block text-xs font-medium text-[var(--app-text-secondary)]">
+                    Endpoint MCP (URL)
                   </label>
-                  <p className="text-[11px] text-[var(--app-text-muted)]">
-                    Sincroniza en segundo plano cuando estés conectado
-                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      id="mcp-endpoint-url"
+                      type="text"
+                      value={mcpUrl}
+                      onChange={(e) => handleMcpUrlChange(e.target.value)}
+                      placeholder="https://note.sevenestudio.com/api/mcp"
+                      className="flex-1 h-9 text-xs font-mono px-3 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] outline-none focus:border-[var(--app-accent)]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void copyMcpSnippet('url')}
+                      className="h-9 px-3 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
+                    >
+                      {copiedMcpItem === 'url' ? (
+                        <DoneIcon style={{ width: 14, height: 14, color: '#10b981' }} />
+                      ) : (
+                        <CopyIcon style={{ width: 14, height: 14 }} />
+                      )}
+                      <span>{copiedMcpItem === 'url' ? 'Copiada' : 'Copiar'}</span>
+                    </button>
+                  </div>
                 </div>
-                <select
-                  value={syncInterval}
-                  onChange={(e) => setSyncInterval(Number(e.target.value))}
-                  className="text-xs px-2.5 py-1.5 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] outline-none focus:border-[var(--app-accent)] cursor-pointer"
-                >
-                  <option value={10}>Cada 10 segundos</option>
-                  <option value={30}>Cada 30 segundos (Recomendado)</option>
-                  <option value={60}>Cada 1 minuto</option>
-                  <option value={300}>Cada 5 minutos</option>
-                </select>
-              </div>
 
-              {testResult && (
-                <div
-                  className={`flex items-center gap-2 p-2.5 rounded-md text-xs border ${
-                    testResult.success
-                      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/25'
-                      : 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/25'
-                  }`}
-                >
-                  {testResult.success ? (
-                    <DoneIcon style={{ width: 14, height: 14 }} />
-                  ) : (
-                    <InformationIcon style={{ width: 14, height: 14 }} />
-                  )}
-                  <span>{testResult.message}</span>
+                {/* Token MCP */}
+                <div className="space-y-1.5">
+                  <label htmlFor="mcp-api-token" className="block text-xs font-medium text-[var(--app-text-secondary)]">
+                    Token de acceso (SEVEN_NOTE_MCP_API_KEY)
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="mcp-api-token"
+                      type={showMcpKey ? 'text' : 'password'}
+                      value={mcpApiKey}
+                      onChange={(e) => handleMcpKeyChange(e.target.value)}
+                      placeholder="sn_mcp_... (se guarda solo en tu navegador)"
+                      className="w-full h-9 text-xs font-mono pl-3 pr-9 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] outline-none focus:border-[var(--app-accent)]"
+                    />
+                    <button
+                      type="button"
+                      aria-label={showMcpKey ? 'Ocultar token' : 'Mostrar token'}
+                      onClick={() => setShowMcpKey((v) => !v)}
+                      title={showMcpKey ? 'Ocultar token' : 'Mostrar token'}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] cursor-pointer"
+                    >
+                      {showMcpKey ? <EyeSlash size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
                 </div>
-              )}
 
-              <div className="flex items-center justify-between pt-1 gap-2 flex-wrap">
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleTest}
-                    disabled={testing || !url || !anonKey}
-                    className="px-3 py-1.5 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition-colors disabled:opacity-50 cursor-pointer"
+                {/* Permisos y alcance */}
+                <div className="flex items-start gap-2.5 p-3 rounded-md bg-[var(--app-bg-primary)] border border-[var(--app-border)] text-xs text-[var(--app-text-muted)]">
+                  <ShieldCheck size={16} weight="duotone" className="text-[var(--app-text-secondary)] shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-medium text-[var(--app-text-primary)]">Alcance activo:</span> los bots pueden leer y escribir en{' '}
+                    <span className="text-[var(--app-text-primary)]">espacios compartidos</span> y{' '}
+                    <span className="text-[var(--app-text-primary)]">espacios solo admins</span>. Los{' '}
+                    <span className="text-rose-500 font-medium">espacios y notas privadas están bloqueados</span>.
+                  </div>
+                </div>
+
+                {/* Live Test Result */}
+                {mcpStatus && (
+                  <div
+                    className={`flex items-center gap-2 p-2.5 rounded-md text-xs border ${
+                      mcpStatus.ok
+                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border-emerald-500/25'
+                        : 'bg-rose-500/10 text-rose-600 dark:text-rose-300 border-rose-500/25'
+                    }`}
                   >
-                    {testing ? 'Probando...' : 'Probar conexión'}
-                  </button>
-                  <button
-                    onClick={copySqlSchema}
-                    className="px-3 py-1.5 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition-colors flex items-center gap-1.5 cursor-pointer"
-                    title="Copiar script SQL para crear las tablas en Supabase"
-                  >
-                    {copiedSql ? (
-                      <DoneIcon style={{ width: 14, height: 14, color: '#10b981' }} />
+                    {mcpStatus.ok ? (
+                      <DoneIcon style={{ width: 14, height: 14, flexShrink: 0 }} />
                     ) : (
-                      <CopyIcon style={{ width: 14, height: 14 }} />
+                      <InformationIcon style={{ width: 14, height: 14, flexShrink: 0 }} />
                     )}
-                    <span>{copiedSql ? 'SQL copiado' : 'Copiar esquema SQL'}</span>
-                  </button>
-                </div>
-
-                <button
-                  onClick={handleSave}
-                  className="px-4 py-1.5 rounded-md text-xs font-medium text-[var(--app-bg-primary)] bg-[var(--app-text-primary)] hover:opacity-90 transition-opacity cursor-pointer"
-                >
-                  Guardar
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Sync Actions */}
-          <div className="p-3.5 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)] flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-8 h-8 rounded-md flex items-center justify-center bg-[var(--app-hover)] shrink-0">
-                <CloudWorkspaceIcon style={{ width: 16, height: 16, color: 'var(--app-text-secondary)' }} />
-              </div>
-              <div className="min-w-0">
-                <div className="text-xs font-semibold text-[var(--app-text-primary)]">
-                  Estado de sincronización
-                </div>
-                <div className="text-[11px] text-[var(--app-text-muted)] truncate">
-                  {syncStatus.pendingCount === 0
-                    ? 'Todo sincronizado con la nube'
-                    : `${syncStatus.pendingCount} cambios pendientes en IndexedDB`}
-                </div>
-              </div>
-            </div>
-            <button
-              onClick={handleManualSync}
-              disabled={manualSyncing || !enabled}
-              className="px-3 py-1.5 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shrink-0"
-            >
-              <ResetIcon
-                style={{
-                  width: 14,
-                  height: 14,
-                  animation: manualSyncing ? 'spin 1s linear infinite' : 'none'
-                }}
-              />
-              <span>Sincronizar ahora</span>
-            </button>
-          </div>
-
-          {/* Local Backups (Offline First) */}
-          <div className="space-y-2.5">
-            <div>
-              <h3 className="text-xs font-semibold flex items-center gap-2 text-[var(--app-text-primary)]">
-                <DatabaseTableViewIcon style={{ width: 15, height: 15, color: 'var(--app-text-secondary)' }} />
-                <span>Copia de seguridad local (JSON)</span>
-              </h3>
-              <p className="text-[11px] text-[var(--app-text-muted)] mt-0.5">
-                Exporta o restaura todo tu espacio de trabajo localmente sin depender de ningún servidor.
-              </p>
-            </div>
-
-            <div className="flex gap-2">
-              <button
-                onClick={exportBackupJson}
-                className="flex-1 py-2 px-3 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition-colors flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <DownloadIcon style={{ width: 14, height: 14 }} />
-                <span>Exportar copia (JSON)</span>
-              </button>
-
-              <label className="flex-1 py-2 px-3 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition-colors flex items-center justify-center gap-2 cursor-pointer">
-                <UploadIcon style={{ width: 14, height: 14 }} />
-                <span>Restaurar copia</span>
-                <input
-                  type="file"
-                  accept=".json"
-                  onChange={importBackupJson}
-                  className="hidden"
-                />
-              </label>
-            </div>
-          </div>
-
-          {/* PWA / Desktop App Install & Updates */}
-          <div className="p-3.5 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)] flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="w-8 h-8 rounded-md flex items-center justify-center bg-[var(--app-accent-soft)] text-[var(--app-accent)] font-semibold text-sm shrink-0">
-                7
-              </div>
-              <div className="min-w-0">
-                <div className="text-xs font-semibold text-[var(--app-text-primary)]">
-                  {isTauri ? 'Seven Note para Escritorio (Nativo)' : 'Aplicación de Escritorio / PWA'}
-                </div>
-                <div className="text-[11px] text-[var(--app-text-muted)]">
-                  {isTauri
-                    ? 'Versión nativa de escritorio v1.0.0. Actualizaciones automáticas activas.'
-                    : isStandalone
-                    ? 'Seven Note se está ejecutando en modo standalone (instalada).'
-                    : 'Instala Seven Note en Windows, Mac, iPad o Android para acceso directo y 100% offline.'}
-                </div>
-              </div>
-            </div>
-
-            {isTauri ? (
-              <button
-                type="button"
-                onClick={() => checkForAppUpdates(true)}
-                className="px-3.5 py-1.5 rounded-md text-xs font-medium text-white bg-[var(--app-accent)] hover:bg-[var(--app-accent-hover)] transition-colors cursor-pointer shrink-0"
-              >
-                Buscar actualizaciones
-              </button>
-            ) : (
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => checkForWebUpdates(true)}
-                  className="px-3 py-1.5 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition-colors cursor-pointer"
-                >
-                  Buscar actualizaciones
-                </button>
-                {!isStandalone && (
-                  <button
-                    onClick={handleInstallApp}
-                    className="px-3.5 py-1.5 rounded-md text-xs font-medium text-white bg-[var(--app-accent)] hover:bg-[var(--app-accent-hover)] transition-colors cursor-pointer"
-                  >
-                    Instalar App
-                  </button>
+                    <span>{mcpStatus.message}</span>
+                  </div>
                 )}
+
+                {/* Actions */}
+                <div className="flex items-center justify-between pt-2 border-t border-[var(--app-divider)] gap-2 flex-wrap">
+                  <div className="flex gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => void copyMcpSnippet('json')}
+                      className="h-8 px-3 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition-colors flex items-center gap-1.5 cursor-pointer"
+                      title="Copiar bloque JSON listo para Claude, Cursor, Antigravity u OpenAI Agents"
+                    >
+                      {copiedMcpItem === 'json' ? (
+                        <DoneIcon style={{ width: 13, height: 13, color: '#10b981' }} />
+                      ) : (
+                        <CopyIcon style={{ width: 13, height: 13 }} />
+                      )}
+                      <span>{copiedMcpItem === 'json' ? 'JSON copiado' : 'Copiar config JSON'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void copyMcpSnippet('header')}
+                      className="h-8 px-3 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition-colors flex items-center gap-1.5 cursor-pointer"
+                      title="Copiar header Authorization: Bearer para n8n o bots propios"
+                    >
+                      {copiedMcpItem === 'header' ? (
+                        <DoneIcon style={{ width: 13, height: 13, color: '#10b981' }} />
+                      ) : (
+                        <CopyIcon style={{ width: 13, height: 13 }} />
+                      )}
+                      <span>{copiedMcpItem === 'header' ? 'Header copiado' : 'Copiar Bearer'}</span>
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => void handleTestMcp()}
+                    disabled={mcpTesting}
+                    className="h-8 px-4 rounded-md text-xs font-semibold text-white bg-[var(--app-accent)] hover:bg-[var(--app-accent-hover)] transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    {mcpTesting ? 'Probando...' : 'Probar MCP'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 5: RESPALDO Y APP */}
+            {activeSection === 'backup' && (
+              <div className="space-y-4">
+                {/* Local Backups (Offline First) */}
+                <div className="space-y-3 p-4 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)]">
+                  <div>
+                    <h4 className="text-[13px] font-semibold flex items-center gap-2 text-[var(--app-text-primary)]">
+                      <DatabaseTableViewIcon style={{ width: 16, height: 16, color: 'var(--app-text-secondary)' }} />
+                      <span>Copia de seguridad local (JSON)</span>
+                    </h4>
+                    <p className="text-xs text-[var(--app-text-muted)] mt-0.5">
+                      Exporta o restaura todo tu espacio de trabajo localmente sin depender de ningún servidor.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={exportBackupJson}
+                      className="flex-1 h-9 px-3 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <DownloadIcon style={{ width: 15, height: 15 }} />
+                      <span>Exportar copia (JSON)</span>
+                    </button>
+
+                    <label className="flex-1 h-9 px-3 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition-colors flex items-center justify-center gap-2 cursor-pointer">
+                      <UploadIcon style={{ width: 15, height: 15 }} />
+                      <span>Restaurar copia</span>
+                      <input
+                        type="file"
+                        accept=".json"
+                        onChange={importBackupJson}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {/* PWA / Desktop App Install & Updates */}
+                <div className="p-4 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-md flex items-center justify-center bg-[var(--app-bg-primary)] border border-[var(--app-border-strong)] text-[var(--app-text-primary)] font-bold text-sm shrink-0">
+                      7
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[13px] font-semibold text-[var(--app-text-primary)]">
+                        {isTauri ? 'Seven Note para Escritorio (Nativo)' : 'Aplicación de Escritorio / PWA'}
+                      </div>
+                      <div className="text-xs text-[var(--app-text-muted)]">
+                        {isTauri
+                          ? 'Versión nativa de escritorio v1.0.0. Actualizaciones automáticas activas.'
+                          : isStandalone
+                          ? 'Seven Note se está ejecutando en modo standalone (instalada).'
+                          : 'Instala Seven Note en Windows, Mac, iPad o Android para acceso directo offline.'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {isTauri ? (
+                    <button
+                      type="button"
+                      onClick={() => checkForAppUpdates(true)}
+                      className="h-8 px-3.5 rounded-md text-xs font-semibold text-white bg-[var(--app-accent)] hover:bg-[var(--app-accent-hover)] transition-colors cursor-pointer shrink-0"
+                    >
+                      Buscar actualizaciones
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => checkForWebUpdates(true)}
+                        className="h-8 px-3 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition-colors cursor-pointer"
+                      >
+                        Buscar actualizaciones
+                      </button>
+                      {!isStandalone && (
+                        <button
+                          type="button"
+                          onClick={handleInstallApp}
+                          className="h-8 px-3.5 rounded-md text-xs font-semibold text-white bg-[var(--app-accent)] hover:bg-[var(--app-accent-hover)] transition-colors cursor-pointer"
+                        >
+                          Instalar App
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
-        </div>
-
-        {/* Footer */}
-        <div className="px-5 py-3 border-t border-[var(--app-divider)] text-xs flex items-center justify-between shrink-0 bg-[var(--app-bg-secondary)] text-[var(--app-text-muted)]">
-          <span>Seven Note</span>
-          <button
-            onClick={onClose}
-            className="px-3.5 py-1.5 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition-colors cursor-pointer"
-          >
-            Cerrar
-          </button>
         </div>
       </div>
     </div>

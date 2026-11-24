@@ -14,13 +14,34 @@ export interface CanvasTemplateEdgeDef {
   color?: string
 }
 
+export type TemplateCategory =
+  | 'Tableros Edgeless'
+  | 'Proyectos'
+  | 'Trabajo'
+  | 'Personal'
+  | 'Creatividad'
+  | 'Estudio'
+
+export const TEMPLATE_CATEGORIES: TemplateCategory[] = [
+  'Tableros Edgeless',
+  'Proyectos',
+  'Trabajo',
+  'Personal',
+  'Creatividad',
+  'Estudio'
+]
+
 export interface AppTemplate {
   id: string
   title: string
   description: string
   icon: string
-  category: 'Tableros Edgeless' | 'Personal' | 'Trabajo' | 'Proyectos' | 'Creatividad'
+  category: TemplateCategory
   type: 'canvas' | 'doc'
+  tags?: string[]
+  featured?: boolean
+  isCustom?: boolean
+  createdAt?: number
   docContent?: string
   nodes?: CanvasTemplateNodeDef[]
   edges?: CanvasTemplateEdgeDef[]
@@ -32,6 +53,21 @@ export interface AppTemplate {
   coverBannerStyle?: 'minimal-light' | 'minimal-dark' | 'cream' | 'serif'
 }
 
+export function resolveTemplateContent(html?: string): string {
+  if (!html) return '<p></p>'
+  const now = new Date()
+  const todayShort = now.toLocaleDateString('es-ES')
+  const todayLong = now.toLocaleDateString('es-ES', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  })
+  return html
+    .replace(/\{\{TODAY\}\}/g, todayShort)
+    .replace(/\{\{TODAY_LONG\}\}/g, todayLong)
+}
+
 export const APP_TEMPLATES: AppTemplate[] = [
   // --- Plantilla Proyectos & Subproyectos (Estilo Notion Minimal) ---
   {
@@ -41,6 +77,8 @@ export const APP_TEMPLATES: AppTemplate[] = [
     icon: 'folder',
     category: 'Proyectos',
     type: 'doc',
+    featured: true,
+    tags: ['roadmap', 'iniciativas', 'hitos', 'notion'],
     hasCover: true,
     coverType: 'bannerText',
     coverBannerTitle: 'PROJECTS &',
@@ -72,6 +110,8 @@ export const APP_TEMPLATES: AppTemplate[] = [
     icon: '🎨',
     category: 'Tableros Edgeless',
     type: 'canvas',
+    featured: true,
+    tags: ['moodboard', 'diseño', 'paleta', 'visual'],
     nodes: [
       {
         type: 'note',
@@ -733,11 +773,13 @@ export const APP_TEMPLATES: AppTemplate[] = [
   },
   {
     id: 'project-kanban-board',
-    title: 'Seguimiento de Proyecto Kanban (AFFiNE)',
+    title: 'Seguimiento de Proyecto Kanban',
     description: '3 columnas con marcos de diapositiva y tarjetas de tareas para gestionar el flujo de entrega.',
     icon: '📋',
     category: 'Tableros Edgeless',
     type: 'canvas',
+    featured: true,
+    tags: ['kanban', 'sprint', 'tareas', 'agile'],
     nodes: [
       // Frame 1: Backlog
       {
@@ -867,8 +909,10 @@ export const APP_TEMPLATES: AppTemplate[] = [
     icon: '📅',
     category: 'Personal',
     type: 'doc',
+    featured: true,
+    tags: ['diario', 'gratitud', 'prioridades', 'hábitos'],
     docContent: `
-      <h1>📅 Diario Personal: ${new Date().toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h1>
+      <h1>📅 Diario Personal: {{TODAY_LONG}}</h1>
       <p><em>"Un pequeño paso cada día construye una gran transformación."</em></p>
       
       <h3>🎯 3 Prioridades de Hoy</h3>
@@ -895,9 +939,11 @@ export const APP_TEMPLATES: AppTemplate[] = [
     icon: '👥',
     category: 'Trabajo',
     type: 'doc',
+    featured: true,
+    tags: ['reunión', 'minuta', 'equipo', 'acuerdos'],
     docContent: `
       <h1>👥 Minuta de Reunión: Proyecto Estratégico</h1>
-      <p><strong>Fecha:</strong> ${new Date().toLocaleDateString('es-ES')} | <strong>Moderador:</strong> Equipo | <strong>Duración:</strong> 45 min</p>
+      <p><strong>Fecha:</strong> {{TODAY}} | <strong>Moderador:</strong> Equipo | <strong>Duración:</strong> 45 min</p>
 
       <h3>📋 Asistentes</h3>
       <ul>
@@ -924,6 +970,7 @@ export const APP_TEMPLATES: AppTemplate[] = [
     icon: '🚀',
     category: 'Proyectos',
     type: 'doc',
+    tags: ['proyecto', 'roadmap', 'fases', 'hitos'],
     docContent: `
       <h1>🚀 Plan de Proyecto: Nueva Iniciativa</h1>
       <blockquote>
@@ -948,6 +995,419 @@ export const APP_TEMPLATES: AppTemplate[] = [
         <li data-checked="false"><label><input type="checkbox"><span></span></label><div>Implementación de componentes y navegación</div></li>
         <li data-checked="false"><label><input type="checkbox"><span></span></label><div>Pruebas de estrés y despliegue en producción</div></li>
       </ul>
+    `
+  },
+  // --- Nuevas Plantillas de Lienzo (Canvas) ---
+  {
+    id: 'system-architecture',
+    title: 'Arquitectura de Sistema & Producto',
+    description: 'Mapa técnico por capas (Cliente, API, Datos y Servicios Externos) con nodos conectados para diseñar arquitecturas.',
+    icon: '🏗️',
+    category: 'Tableros Edgeless',
+    type: 'canvas',
+    tags: ['arquitectura', 'técnico', 'sistema', 'diagrama'],
+    nodes: [
+      {
+        type: 'frame',
+        positionX: 40,
+        positionY: 60,
+        data: { title: 'Capa Cliente (Web / Desktop)', frameIndex: 1, color: 'indigo', width: 300, height: 220 }
+      },
+      {
+        type: 'shape',
+        positionX: 80,
+        positionY: 130,
+        data: { shapeType: 'roundedRect', color: 'blue', content: 'App React + IndexedDB' }
+      },
+      {
+        type: 'frame',
+        positionX: 400,
+        positionY: 60,
+        data: { title: 'Capa API & Lógica', frameIndex: 2, color: 'purple', width: 300, height: 220 }
+      },
+      {
+        type: 'shape',
+        positionX: 440,
+        positionY: 130,
+        data: { shapeType: 'roundedRect', color: 'purple', content: 'API Gateway / Edge Functions' }
+      },
+      {
+        type: 'frame',
+        positionX: 760,
+        positionY: 60,
+        data: { title: 'Persistencia & Sync', frameIndex: 3, color: 'emerald', width: 300, height: 220 }
+      },
+      {
+        type: 'shape',
+        positionX: 800,
+        positionY: 130,
+        data: { shapeType: 'roundedRect', color: 'green', content: 'PostgreSQL / Storage' }
+      },
+      {
+        type: 'note',
+        positionX: 400,
+        positionY: 340,
+        data: { title: 'Decisiones Clave (ADR)', content: 'Priorizar escritura local instantánea y sincronización delta en segundo plano.', color: 'yellow', width: 300 }
+      }
+    ],
+    edges: [
+      { sourceIndex: 1, targetIndex: 3, label: 'HTTPS / Sync', color: '#7c3aed' },
+      { sourceIndex: 3, targetIndex: 5, label: 'SQL / RLS', color: '#10b981' },
+      { sourceIndex: 6, targetIndex: 3, label: 'Criterio', color: '#f59e0b' }
+    ]
+  },
+  {
+    id: 'visual-storyboard',
+    title: 'Storyboard & Guión Visual',
+    description: 'Secuencia de 4 escenas enmarcadas para planificar videos, campañas publicitarias o recorridos de usuario.',
+    icon: '🎞️',
+    category: 'Creatividad',
+    type: 'canvas',
+    featured: true,
+    tags: ['storyboard', 'video', 'guión', 'escenas'],
+    nodes: [
+      {
+        type: 'frame',
+        positionX: 40,
+        positionY: 60,
+        data: { title: 'Escena 1 — Gancho (0-5s)', frameIndex: 1, color: 'indigo', width: 280, height: 240 }
+      },
+      {
+        type: 'note',
+        positionX: 60,
+        positionY: 115,
+        data: { title: 'Plano & Voz en off', content: 'Abrir con el problema principal en pantalla limpia. Frase directa en menos de 8 palabras.', color: 'blue' }
+      },
+      {
+        type: 'frame',
+        positionX: 350,
+        positionY: 60,
+        data: { title: 'Escena 2 — Contexto (5-15s)', frameIndex: 2, color: 'purple', width: 280, height: 240 }
+      },
+      {
+        type: 'note',
+        positionX: 370,
+        positionY: 115,
+        data: { title: 'Demostración rápida', content: 'Mostrar la fricción actual y la transición hacia el flujo resuelto.', color: 'purple' }
+      },
+      {
+        type: 'frame',
+        positionX: 660,
+        positionY: 60,
+        data: { title: 'Escena 3 — Solución (15-40s)', frameIndex: 3, color: 'emerald', width: 280, height: 240 }
+      },
+      {
+        type: 'note',
+        positionX: 680,
+        positionY: 115,
+        data: { title: 'Beneficio tangible', content: 'Tres capturas clave con ritmo ágil y subtítulos de alto contraste.', color: 'green' }
+      },
+      {
+        type: 'frame',
+        positionX: 970,
+        positionY: 60,
+        data: { title: 'Escena 4 — Cierre & CTA', frameIndex: 4, color: 'amber', width: 280, height: 240 }
+      },
+      {
+        type: 'note',
+        positionX: 990,
+        positionY: 115,
+        data: { title: 'Llamado a la acción', content: 'Resumen en 1 línea + enlace o siguiente paso concreto.', color: 'yellow' }
+      }
+    ],
+    edges: [
+      { sourceIndex: 0, targetIndex: 2, label: 'Corte', color: '#7c3aed' },
+      { sourceIndex: 2, targetIndex: 4, label: 'Transición', color: '#10b981' },
+      { sourceIndex: 4, targetIndex: 6, label: 'Cierre', color: '#f59e0b' }
+    ]
+  },
+  // --- Nuevas Plantillas de Documentos ---
+  {
+    id: 'product-prd',
+    title: 'Especificación de Producto (PRD)',
+    description: 'Documento estructurado para definir problema, usuarios, requisitos funcionales, métricas de éxito y alcance.',
+    icon: '📐',
+    category: 'Proyectos',
+    type: 'doc',
+    tags: ['prd', 'producto', 'especificación', 'requisitos'],
+    hasCover: true,
+    coverType: 'bannerText',
+    coverBannerTitle: 'PRODUCT',
+    coverBannerSubtitle: 'SPECIFICATION',
+    coverColor: '#18181b',
+    coverBannerStyle: 'minimal-dark',
+    docContent: `
+      <h2>1. Contexto & Problema</h2>
+      <p>Describe qué problema real estamos resolviendo, para quién ocurre y por qué importa ahora.</p>
+      <blockquote><em>Hipótesis: Al simplificar este flujo reduciremos la fricción inicial y aumentaremos la retención semanal.</em></blockquote>
+
+      <h2>2. Objetivos & Métricas de Éxito</h2>
+      <ul>
+        <li><strong>Objetivo principal:</strong> Reducir el tiempo de primera acción por debajo de 30 segundos.</li>
+        <li><strong>Métrica secundaria:</strong> Tasa de adopción semanal del equipo.</li>
+      </ul>
+
+      <h2>3. Requisitos Funcionales</h2>
+      <ul data-type="taskList">
+        <li data-checked="true"><label><input type="checkbox" checked="checked"><span></span></label><div>Definir casos de uso principales y estados vacíos</div></li>
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div>Validar diseño responsivo en escritorio y móvil</div></li>
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div>Garantizar persistencia offline y sincronización</div></li>
+      </ul>
+
+      <h2>4. Fuera de Alcance (No-Goals)</h2>
+      <p>Lista explícita de lo que NO se construirá en esta iteración para proteger el enfoque.</p>
+    `
+  },
+  {
+    id: 'sprint-retrospective',
+    title: 'Retrospectiva de Sprint',
+    description: 'Formato clásico Start / Stop / Continue para evaluar iteraciones del equipo y definir acciones concretas.',
+    icon: '🔄',
+    category: 'Proyectos',
+    type: 'doc',
+    tags: ['sprint', 'agile', 'retrospectiva', 'equipo'],
+    docContent: `
+      <h1>🔄 Retrospectiva de Sprint — {{TODAY}}</h1>
+      <p><strong>Equipo:</strong> Producto & Ingeniería | <strong>Facilitador:</strong> —</p>
+
+      <h3>✅ Qué salió bien (Seguir haciendo)</h3>
+      <ul>
+        <li>Entregas incrementales sin regresiones críticas.</li>
+        <li>Comunicación rápida para desbloquear dependencias.</li>
+      </ul>
+
+      <h3>⚠️ Qué generó fricción (Dejar de hacer / Ajustar)</h3>
+      <ul>
+        <li>Cambios de alcance a mitad de semana sin re-estimación.</li>
+      </ul>
+
+      <h3>💡 Experimentos & Acciones del Próximo Sprint</h3>
+      <ul data-type="taskList">
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div>Documentar criterios de aceptación antes de iniciar desarrollo</div></li>
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div>Reservar bloque semanal para deuda técnica y pruebas</div></li>
+      </ul>
+    `
+  },
+  {
+    id: 'quarterly-okrs',
+    title: 'OKRs Trimestrales',
+    description: 'Alinea objetivos ambiciosos con resultados clave medibles y seguimiento semanal de progreso.',
+    icon: '🎯',
+    category: 'Trabajo',
+    type: 'doc',
+    tags: ['okr', 'estrategia', 'metas', 'trimestre'],
+    hasCover: true,
+    coverType: 'bannerText',
+    coverBannerTitle: 'QUARTERLY',
+    coverBannerSubtitle: 'OKRS & GOALS',
+    coverColor: '#ffffff',
+    coverBannerStyle: 'minimal-light',
+    docContent: `
+      <h2>🎯 Objetivo 1: Consolidar experiencia de producto</h2>
+      <ul data-type="taskList">
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div><strong>KR 1.1:</strong> Alcanzar puntuación de satisfacción ≥ 4.7/5</div></li>
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div><strong>KR 1.2:</strong> Reducir incidencias críticas reportadas en un 50%</div></li>
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div><strong>KR 1.3:</strong> Publicar 3 mejoras clave de flujo de trabajo</div></li>
+      </ul>
+
+      <h2>🚀 Objetivo 2: Crecimiento y documentación</h2>
+      <ul data-type="taskList">
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div><strong>KR 2.1:</strong> Completar base de conocimiento interna al 100%</div></li>
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div><strong>KR 2.2:</strong> Documentar 5 casos de éxito con métricas reales</div></li>
+      </ul>
+    `
+  },
+  {
+    id: 'one-on-one-meeting',
+    title: 'Reunión 1:1 (One-on-One)',
+    description: 'Agenda enfocada en bienestar, avances, bloqueos, feedback mutuo y crecimiento profesional.',
+    icon: '🤝',
+    category: 'Trabajo',
+    type: 'doc',
+    tags: ['1:1', 'liderazgo', 'feedback', 'gestión'],
+    docContent: `
+      <h1>🤝 Reunión 1:1 — {{TODAY}}</h1>
+      <p><strong>Participantes:</strong> — | <strong>Frecuencia:</strong> Quincenal</p>
+
+      <h3>🧭 Pulso & Prioridades</h3>
+      <ul>
+        <li>¿Cómo te sientes con tu carga actual esta semana?</li>
+        <li>¿Cuál es el logro del que estás más orgulloso/a recientemente?</li>
+      </ul>
+
+      <h3>🚧 Bloqueos & Apoyo Necesario</h3>
+      <p>Anota aquí decisiones pendientes, dependencias o recursos que necesites desbloquear.</p>
+
+      <h3>📈 Desarrollo & Próximos Pasos</h3>
+      <ul data-type="taskList">
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div>Acción acordada #1</div></li>
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div>Acción acordada #2</div></li>
+      </ul>
+    `
+  },
+  {
+    id: 'client-proposal-brief',
+    title: 'Brief de Cliente & Propuesta',
+    description: 'Estructura profesional para resumir necesidades del cliente, entregables, cronograma y presupuesto.',
+    icon: '💼',
+    category: 'Trabajo',
+    type: 'doc',
+    tags: ['cliente', 'propuesta', 'brief', 'comercial'],
+    docContent: `
+      <h1>💼 Propuesta de Proyecto</h1>
+      <p><strong>Cliente:</strong> — | <strong>Fecha:</strong> {{TODAY}} | <strong>Estado:</strong> Borrador</p>
+
+      <h3>1. Diagnóstico & Reto</h3>
+      <p>Resumen claro de la situación actual del cliente y la oportunidad principal identificada.</p>
+
+      <h3>2. Solución & Entregables</h3>
+      <ul>
+        <li><strong>Entregable 1:</strong> Auditoría y arquitectura de solución.</li>
+        <li><strong>Entregable 2:</strong> Diseño visual e implementación completa.</li>
+        <li><strong>Entregable 3:</strong> Capacitación y soporte post-lanzamiento.</li>
+      </ul>
+
+      <h3>3. Cronograma & Siguientes Pasos</h3>
+      <ul data-type="taskList">
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div>Aprobación de alcance y firma</div></li>
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div>Reunión de arranque (Kick-off)</div></li>
+      </ul>
+    `
+  },
+  {
+    id: 'weekly-planner',
+    title: 'Planificador Semanal',
+    description: 'Organiza el foco de tu semana de lunes a viernes, prioridades clave y revisión de cierre.',
+    icon: '🗓️',
+    category: 'Personal',
+    type: 'doc',
+    tags: ['semanal', 'productividad', 'agenda', 'tareas'],
+    docContent: `
+      <h1>🗓️ Planificador Semanal</h1>
+      <blockquote><em>Foco principal de la semana: completar lo importante antes que lo urgente.</em></blockquote>
+
+      <h3>⭐ Top 3 Resultados de la Semana</h3>
+      <ul data-type="taskList">
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div>Resultado clave #1</div></li>
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div>Resultado clave #2</div></li>
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div>Resultado clave #3</div></li>
+      </ul>
+
+      <h3>📌 Agenda por Días</h3>
+      <p><strong>Lunes:</strong> Arranque y bloque de trabajo profundo<br/>
+      <strong>Martes:</strong> Seguimiento de proyectos activos<br/>
+      <strong>Miércoles:</strong> Revisión intermedia y entregables<br/>
+      <strong>Jueves:</strong> Iteración y cierre de pendientes<br/>
+      <strong>Viernes:</strong> Balance semanal y limpieza de bandeja</p>
+    `
+  },
+  {
+    id: 'book-reading-notes',
+    title: 'Notas de Lectura & Libros',
+    description: 'Captura ideas centrales, citas memorables y aprendizajes accionables de cada libro o artículo.',
+    icon: '📚',
+    category: 'Personal',
+    type: 'doc',
+    tags: ['lectura', 'libros', 'resumen', 'conocimiento'],
+    docContent: `
+      <h1>📚 Notas de Lectura</h1>
+      <p><strong>Autor:</strong> — | <strong>Categoría:</strong> — | <strong>Fecha:</strong> {{TODAY}}</p>
+
+      <h3>💎 Tesis Central en 3 Frases</h3>
+      <p>Resume con tus propias palabras cuál es la idea principal que defiende el autor.</p>
+
+      <h3>✍️ Citas Destacadas</h3>
+      <blockquote><em>"Agrega aquí la frase más reveladora del libro junto con el número de página."</em></blockquote>
+
+      <h3>⚡ Cómo Aplicarlo en mi Vida / Trabajo</h3>
+      <ul data-type="taskList">
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div>Primer cambio o experimento concreto a aplicar esta semana</div></li>
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div>Idea para conectar con otras notas de mi espacio</div></li>
+      </ul>
+    `
+  },
+  {
+    id: 'creative-content-script',
+    title: 'Guión de Contenido & Video',
+    description: 'Plantilla ágil para estructurar gancho, desarrollo, ritmo visual y CTA en videos, newsletters o artículos.',
+    icon: '✨',
+    category: 'Creatividad',
+    type: 'doc',
+    tags: ['contenido', 'guión', 'youtube', 'redacción'],
+    docContent: `
+      <h1>✨ Guión de Contenido</h1>
+      <p><strong>Formato:</strong> Video / Artículo | <strong>Audiencia:</strong> — | <strong>Fecha:</strong> {{TODAY}}</p>
+
+      <h3>🎣 Gancho (Primeros 10 segundos)</h3>
+      <blockquote><em>Promesa clara + curiosidad inmediata sin rodeos.</em></blockquote>
+
+      <h3>🧩 Estructura del Desarrollo</h3>
+      <ul>
+        <li><strong>Punto 1:</strong> Contexto real y error común.</li>
+        <li><strong>Punto 2:</strong> Demostración paso a paso con ejemplo concreto.</li>
+        <li><strong>Punto 3:</strong> Resultado final y detalle que marca la diferencia.</li>
+      </ul>
+
+      <h3>📣 Cierre & Llamado a la Acción</h3>
+      <p>Resume la idea principal en una frase memorable e invita al siguiente paso.</p>
+    `
+  },
+  {
+    id: 'cornell-study-notes',
+    title: 'Notas Cornell (Método de Estudio)',
+    description: 'Sistema probado para tomar apuntes efectivos con preguntas clave, desarrollo estructurado y síntesis final.',
+    icon: '🎓',
+    category: 'Estudio',
+    type: 'doc',
+    featured: true,
+    tags: ['estudio', 'cornell', 'apuntes', 'universidad'],
+    docContent: `
+      <h1>🎓 Apuntes Cornell — Tema de Estudio</h1>
+      <p><strong>Asignatura / Curso:</strong> — | <strong>Fecha:</strong> {{TODAY}}</p>
+
+      <h3>❓ Preguntas Clave & Conceptos</h3>
+      <ul>
+        <li>¿Cuál es el principio fundamental detrás de este tema?</li>
+        <li>¿En qué casos falla o tiene excepciones?</li>
+        <li>¿Cómo se relaciona con la clase anterior?</li>
+      </ul>
+
+      <h3>📝 Desarrollo de Notas</h3>
+      <p>Registra definiciones claras, fórmulas, ejemplos resueltos y esquemas durante la sesión.</p>
+
+      <h3>🧠 Resumen de Síntesis (con tus palabras)</h3>
+      <blockquote><em>Escribe en 3-4 líneas lo esencial para repasar en 60 segundos antes de un examen.</em></blockquote>
+
+      <h3>✅ Repaso Espaciado</h3>
+      <ul data-type="taskList">
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div>Repaso a las 24 horas</div></li>
+        <li data-checked="false"><label><input type="checkbox"><span></span></label><div>Repaso a los 7 días</div></li>
+      </ul>
+    `
+  },
+  {
+    id: 'research-paper-summary',
+    title: 'Resumen de Investigación / Paper',
+    description: 'Ficha analítica para sintetizar papers académicos, metodología, hallazgos y limitaciones.',
+    icon: '🔬',
+    category: 'Estudio',
+    type: 'doc',
+    tags: ['investigación', 'paper', 'académico', 'análisis'],
+    docContent: `
+      <h1>🔬 Ficha de Investigación</h1>
+      <p><strong>Autores / Año:</strong> — | <strong>Fuente:</strong> —</p>
+
+      <h3>🎯 Pregunta de Investigación</h3>
+      <p>¿Qué hipótesis o vacío en la literatura intenta resolver este trabajo?</p>
+
+      <h3>🧪 Metodología</h3>
+      <ul>
+        <li><strong>Muestra / Dataset:</strong> —</li>
+        <li><strong>Enfoque experimental:</strong> —</li>
+      </ul>
+
+      <h3>📊 Hallazgos Principales & Limitaciones</h3>
+      <p>Anota los resultados más sólidos y cualquier sesgo o limitación que deba considerarse.</p>
     `
   }
 ]

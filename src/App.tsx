@@ -55,7 +55,7 @@ import { FindInPage } from './components/search/FindInPage'
 import { type WorkbenchTab } from './components/tabs/WorkbenchTabs'
 const ExternalShareView = lazy(() => import('./components/views/ExternalShareView').then(m => ({ default: m.ExternalShareView })))
 const CalendarPage = lazy(() => import('./components/views/CalendarPage').then(m => ({ default: m.CalendarPage })))
-import { type AppTemplate } from './lib/templates'
+import { type AppTemplate, resolveTemplateContent } from './lib/templates'
 import {
   getCurrentMember,
   setCurrentMember,
@@ -91,6 +91,13 @@ import {
 } from './lib/notificationService'
 import { type NotificationActionPayload } from './db'
 import { useAppStore } from './store/useAppStore'
+import {
+  type AppThemeId,
+  getInitialThemeId,
+  getThemeById,
+  getToggledThemeId,
+  applyAppTheme
+} from './lib/themes'
 
 // Lazy-loaded heavy components for instant initial load (code-splitting)
 const DocEditor = lazy(() => import('./components/editor/DocEditor').then(m => ({ default: m.DocEditor })))
@@ -313,9 +320,11 @@ function MainApp() {
   const [rightSidebarTab, setRightSidebarTab] = useState<'properties' | 'outline' | 'history'>('properties')
   const [isPresentationMode, setIsPresentationMode] = useState(false)
   const [presentationFrameId, setPresentationFrameId] = useState<string | undefined>(undefined)
-  const [darkMode, setDarkMode] = useState(() => {
-    return localStorage.getItem('seven_note_theme') !== 'light'
-  })
+  const [themeId, setThemeId] = useState<AppThemeId>(() => getInitialThemeId())
+  const darkMode = getThemeById(themeId).mode === 'dark'
+  const handleToggleDarkMode = () => {
+    setThemeId((prev) => getToggledThemeId(prev))
+  }
 
   // Interface scaling (Zoom UI)
   const UI_SCALES = ['90', '100', '110', '120', '130']
@@ -896,18 +905,10 @@ function MainApp() {
     }
   }, [isPresentationMode, currentWorkspaceId, focusMode])
 
-  // Handle dark mode class on document
+  // Apply selected color theme and dark/light mode class on document
   useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark')
-      document.documentElement.setAttribute('data-theme', 'dark')
-      localStorage.setItem('seven_note_theme', 'dark')
-    } else {
-      document.documentElement.classList.remove('dark')
-      document.documentElement.setAttribute('data-theme', 'light')
-      localStorage.setItem('seven_note_theme', 'light')
-    }
-  }, [darkMode])
+    applyAppTheme(themeId)
+  }, [themeId])
 
   // Filter visible spaces for current member (Strict privacy & Admin-only spaces) and sort by custom sortOrder
   const visibleSpaces = useMemo(() => {
@@ -1346,9 +1347,9 @@ function MainApp() {
     } else {
       // Document template
       await db.workspaces.update(currentWorkspace.id, {
-        title: currentWorkspace.title === 'Untitled' ? template.title : currentWorkspace.title,
+        title: currentWorkspace.title === 'Untitled' || currentWorkspace.title === 'Sin título' ? template.title : currentWorkspace.title,
         icon: template.icon,
-        docContent: template.docContent || '<p></p>',
+        docContent: resolveTemplateContent(template.docContent),
         templateName: template.title,
         hasCover: template.hasCover,
         coverType: template.coverType,
@@ -1361,7 +1362,114 @@ function MainApp() {
       })
     }
 
+    toast.success(`Plantilla "${template.title}" aplicada.`)
     syncEngine.scheduleSync(1000)
+  }
+
+  // Create a brand new workspace populated with the chosen template
+  const handleCreateFromTemplate = async (template: AppTemplate) => {
+    const newId = crypto.randomUUID()
+    const now = Date.now()
+    const isCanvas = template.type === 'canvas'
+
+    const newWs: WorkspaceItem = {
+      id: newId,
+      parentId: null,
+      spaceId: currentSpaceId,
+      title: template.title,
+      icon: template.icon || '',
+      color: '#7c3aed',
+      viewMode: isCanvas ? 'canvas' : 'doc',
+      docContent: isCanvas ? '<p></p>' : resolveTemplateContent(template.docContent),
+      templateName: template.title,
+      hasCover: template.hasCover,
+      coverType: template.coverType,
+      coverBannerTitle: template.coverBannerTitle,
+      coverBannerSubtitle: template.coverBannerSubtitle,
+      coverColor: template.coverColor,
+      coverBannerStyle: template.coverBannerStyle,
+      createdAt: now,
+      updatedAt: now,
+      isFavorite: false,
+      isDeleted: false,
+      syncStatus: 'pending',
+      ownerMember: currentMember.id,
+      ownerName: currentMember.name,
+      createdBy: currentMember.name,
+      userId: authUser?.id || undefined,
+      viewedBy: [
+        currentMember.id,
+        currentMember.fullName || currentMember.name,
+        currentMember.email,
+        authUser?.id
+      ].filter(Boolean) as string[],
+      isNewItem: true
+    }
+
+    await db.workspaces.add(newWs)
+
+    if (isCanvas && template.nodes && template.nodes.length > 0) {
+      const createdNodeIds: string[] = []
+      for (let i = 0; i < template.nodes.length; i++) {
+        const nodeDef = template.nodes[i]
+        const newNodeId = crypto.randomUUID()
+        createdNodeIds.push(newNodeId)
+        await db.canvasNodes.add({
+          id: newNodeId,
+          workspaceId: newId,
+          type: nodeDef.type,
+          positionX: nodeDef.positionX,
+          positionY: nodeDef.positionY,
+          data: {
+            ...nodeDef.data,
+            workspaceId: newId
+          },
+          createdAt: now + i,
+          updatedAt: now + i,
+          isDeleted: false,
+          syncStatus: 'pending'
+        })
+      }
+
+      if (template.edges && template.edges.length > 0) {
+        for (let i = 0; i < template.edges.length; i++) {
+          const edgeDef = template.edges[i]
+          const sourceId = createdNodeIds[edgeDef.sourceIndex]
+          const targetId = createdNodeIds[edgeDef.targetIndex]
+          if (sourceId && targetId) {
+            await db.canvasEdges.add({
+              id: crypto.randomUUID(),
+              workspaceId: newId,
+              source: sourceId,
+              target: targetId,
+              label: edgeDef.label,
+              animated: true,
+              color: edgeDef.color || '#7c3aed',
+              createdAt: now + i,
+              updatedAt: now + i,
+              isDeleted: false,
+              syncStatus: 'pending'
+            })
+          }
+        }
+      }
+    }
+
+    syncEngine.scheduleSync(500)
+    setOptimisticWorkspace(newWs)
+    const newTab: WorkbenchTab = {
+      id: `tab-${crypto.randomUUID()}`,
+      workspaceId: newId,
+      viewType: 'doc',
+      title: newWs.title,
+      icon: newWs.icon || '',
+      spaceId: currentSpaceId,
+      pinned: false
+    }
+    setTabs((prev) => [...prev, newTab])
+    setActiveTabId(newTab.id)
+    setCurrentWorkspaceId(newId)
+    toast.success(`${isCanvas ? 'Lienzo' : 'Nota'} "${template.title}" creada desde plantilla.`)
   }
 
   // Scroll to heading in document
@@ -1529,7 +1637,7 @@ function MainApp() {
             })
           }}
           darkMode={darkMode}
-          onToggleDarkMode={() => setDarkMode(!darkMode)}
+          onToggleDarkMode={handleToggleDarkMode}
           currentMember={currentMember}
           onSelectMember={handleSelectMember}
           authUser={authUser}
@@ -1598,7 +1706,7 @@ function MainApp() {
                 syncStatus={syncStatus}
                 isLoading={isWorkspacesLoading}
                 darkMode={darkMode}
-                onToggleDarkMode={() => setDarkMode(!darkMode)}
+                onToggleDarkMode={handleToggleDarkMode}
               />
             </motion.div>
           </>
@@ -2331,8 +2439,13 @@ function MainApp() {
               <TemplatesPage
                 onSelectTemplate={(template) => {
                   handleApplyTemplate(template)
-                  selectWorkspaceWithTab(currentWorkspace?.id || '')
+                  if (currentWorkspace?.id) {
+                    selectWorkspaceWithTab(currentWorkspace.id)
+                  }
                 }}
+                onCreateFromTemplate={handleCreateFromTemplate}
+                currentWorkspace={currentWorkspace}
+                isCurrentWorkspaceReadOnly={isCurrentWorkspaceReadOnly}
               />
             ) : currentWorkspace ? (
               activeViewMode === 'doc' ? (
@@ -2485,7 +2598,7 @@ function MainApp() {
         workspaces={currentSpaceWorkspaces}
         onSelectWorkspace={(id) => selectWorkspaceWithTab(id)}
         darkMode={darkMode}
-        onToggleDarkMode={() => setDarkMode(!darkMode)}
+        onToggleDarkMode={handleToggleDarkMode}
         onCreateWorkspace={async () => {
           const newId = crypto.randomUUID()
           const now = Date.now()
@@ -2530,6 +2643,8 @@ function MainApp() {
           syncStatus={syncStatus}
           uiScale={uiScale}
           onUiScaleChange={setUiScale}
+          themeId={themeId}
+          onThemeChange={setThemeId}
         />
 
         <AuthModal
@@ -2569,6 +2684,7 @@ function MainApp() {
           isOpen={isTemplatesOpen}
           onClose={() => setIsTemplatesOpen(false)}
           onSelectTemplate={handleApplyTemplate}
+          onCreateFromTemplate={handleCreateFromTemplate}
         />
 
         <ImportModal
