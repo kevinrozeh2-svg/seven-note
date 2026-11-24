@@ -771,24 +771,45 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
   color: var(--app-text-muted);
 }
 
-/* TipTap Tables Styling (Notion Clean Table) */
+/* TipTap Tables Styling (Notion Clean Table + Excel Spreadsheet Controls) */
+.ProseMirror .tableWrapper {
+  overflow-x: auto;
+  margin: 1rem 0;
+  padding: 2px;
+}
+
 .ProseMirror table {
   border-collapse: collapse;
-  margin: 1rem 0;
+  margin: 0;
   width: 100%;
   table-layout: auto;
   border-radius: 6px;
-  overflow: hidden;
-  border: 1px solid var(--app-border);
+  border: 1px solid var(--app-border-strong);
+  position: relative;
+}
+
+.ProseMirror table.sn-table-coords-active {
+  margin-top: 20px;
+  margin-left: 24px;
+  width: calc(100% - 24px);
 }
 
 .ProseMirror td,
 .ProseMirror th {
-  border: 1px solid var(--app-border);
-  padding: 6px 10px;
+  border: 1px solid var(--app-border-strong);
+  padding: 7px 10px;
   vertical-align: top;
   box-sizing: border-box;
   font-size: 14px;
+  position: relative;
+  min-width: 48px;
+  transition: background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.ProseMirror td > p,
+.ProseMirror th > p {
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 .ProseMirror th {
@@ -799,6 +820,162 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
 
 .ProseMirror td {
   background-color: var(--app-bg-primary);
+}
+
+/* Excel Coordinate Labels (A, B, C... across top; 1, 2, 3... along left) */
+.ProseMirror table.sn-table-coords-active tr:first-child > [data-col-label]::before {
+  content: attr(data-col-label);
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  top: -21px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--app-font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--app-text-muted);
+  background-color: var(--app-bg-secondary);
+  border: 1px solid var(--app-border-strong);
+  border-bottom: none;
+  pointer-events: none;
+  user-select: none;
+}
+
+.ProseMirror table.sn-table-coords-active tr > [data-row-label]::after {
+  content: attr(data-row-label);
+  position: absolute;
+  top: -1px;
+  bottom: -1px;
+  left: -25px;
+  width: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--app-font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--app-text-muted);
+  background-color: var(--app-bg-secondary);
+  border: 1px solid var(--app-border-strong);
+  border-right: none;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Active Cell Focus Outline (Excel style) */
+.ProseMirror td.sn-cell-active,
+.ProseMirror th.sn-cell-active {
+  box-shadow: inset 0 0 0 2px var(--app-accent);
+  z-index: 2;
+}
+
+/* Referenced Cells Highlighted when Editing/Viewing a Formula */
+.ProseMirror td.sn-cell-ref-highlight,
+.ProseMirror th.sn-cell-ref-highlight {
+  background-color: var(--app-accent-soft) !important;
+  box-shadow: inset 0 0 0 1.5px var(--app-accent);
+}
+
+/* TipTap Multi-Cell Selection (avoid ::after so it never collides with data-row-label) */
+.ProseMirror td.selectedCell,
+.ProseMirror th.selectedCell {
+  background-color: var(--app-accent-soft) !important;
+}
+
+/* Column Resize Handle */
+.ProseMirror .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: -2px;
+  width: 4px;
+  background-color: var(--app-accent);
+  opacity: 0.7;
+  cursor: col-resize;
+  z-index: 20;
+}
+
+.ProseMirror.resize-cursor {
+  cursor: col-resize;
+}
+
+/* Formula Cell Subtle Corner Indicator */
+.ProseMirror td.sn-cell-formula:not(.sn-cell-error),
+.ProseMirror th.sn-cell-formula:not(.sn-cell-error) {
+  background-image: linear-gradient(
+    225deg,
+    var(--app-accent) 0px,
+    var(--app-accent) 5px,
+    transparent 5.5px
+  );
+}
+
+/* Calculation Error Cell Styling (#DIV/0!, #VALUE!, #REF!, #NAME?, #CIRC!, #SYNTAX!) */
+.ProseMirror td.sn-cell-error,
+.ProseMirror th.sn-cell-error,
+.ProseMirror td[data-error],
+.ProseMirror th[data-error] {
+  background-color: rgba(244, 63, 94, 0.13) !important;
+  color: #fb7185 !important;
+  font-family: var(--app-font-mono);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1.5px rgba(244, 63, 94, 0.55);
+  background-image: linear-gradient(
+    225deg,
+    #f43f5e 0px,
+    #f43f5e 7px,
+    transparent 7.5px
+  );
+}
+
+html:not(.dark) .ProseMirror td.sn-cell-error,
+html:not(.dark) .ProseMirror th.sn-cell-error,
+html:not(.dark) .ProseMirror td[data-error],
+html:not(.dark) .ProseMirror th[data-error] {
+  color: #e11d48 !important;
+}
+
+/* Cell Alignment Attributes */
+.ProseMirror td[data-align="left"],
+.ProseMirror th[data-align="left"] {
+  text-align: left;
+}
+.ProseMirror td[data-align="center"],
+.ProseMirror th[data-align="center"] {
+  text-align: center;
+}
+.ProseMirror td[data-align="right"],
+.ProseMirror th[data-align="right"] {
+  text-align: right;
+}
+
+/* Semantic Cell Background Tints */
+.ProseMirror td[data-bg="neutral"],
+.ProseMirror th[data-bg="neutral"] {
+  background-color: rgba(148, 163, 184, 0.12);
+}
+.ProseMirror td[data-bg="amber"],
+.ProseMirror th[data-bg="amber"] {
+  background-color: rgba(245, 158, 11, 0.14);
+}
+.ProseMirror td[data-bg="emerald"],
+.ProseMirror th[data-bg="emerald"] {
+  background-color: rgba(16, 185, 129, 0.13);
+}
+.ProseMirror td[data-bg="sky"],
+.ProseMirror th[data-bg="sky"] {
+  background-color: rgba(56, 189, 248, 0.13);
+}
+.ProseMirror td[data-bg="violet"],
+.ProseMirror th[data-bg="violet"] {
+  background-color: rgba(124, 58, 237, 0.15);
+}
+.ProseMirror td[data-bg="rose"],
+.ProseMirror th[data-bg="rose"] {
+  background-color: rgba(244, 63, 94, 0.13);
 }
 
 /* TipTap Blockquote (Notion Left Border) */

@@ -37,10 +37,13 @@ import {
   isNeutralBackgroundColor,
   parseCssLengthPx
 } from '../../lib/pasteCssUtils'
-import { Table } from '@tiptap/extension-table'
 import { TableRow } from '@tiptap/extension-table-row'
-import { TableHeader } from '@tiptap/extension-table-header'
-import { TableCell } from '@tiptap/extension-table-cell'
+import {
+  SpreadsheetTable,
+  SpreadsheetTableCell,
+  SpreadsheetTableHeader
+} from './SpreadsheetTableExtensions'
+import { TableSpreadsheetToolbar } from './TableSpreadsheetToolbar'
 import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight'
 import { common, createLowlight } from 'lowlight'
 import { toast } from '../../lib/toast'
@@ -496,12 +499,12 @@ export function DocEditor({
       CodeBlockLowlight.configure({
         lowlight
       }),
-      Table.configure({
+      SpreadsheetTable.configure({
         resizable: true
       }),
       TableRow,
-      TableHeader,
-      TableCell,
+      SpreadsheetTableHeader,
+      SpreadsheetTableCell,
       Underline,
       TextStyle,
       ColorMark,
@@ -1992,77 +1995,9 @@ export function DocEditor({
         </div>
       )}
 
-      {/* Interactive Sticky Table Toolbar when inside a table */}
+      {/* Interactive Sticky Excel-like Spreadsheet Table Toolbar when inside a table */}
       {!hideEditControls && editor.isActive('table') && (
-        <div className="sticky top-11 z-20 flex items-center justify-center py-2 px-3 bg-white/70 dark:bg-[#121214]/70 backdrop-blur-md">
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/90 dark:bg-[#1a1b1e]/90 border border-black/[0.08] dark:border-white/[0.1] text-xs text-[var(--app-text-primary)] shadow-lg flex-wrap">
-            <span className="text-[10px] uppercase font-bold text-blue-500 px-1">
-              Tabla
-            </span>
-            <button
-              onClick={() => editor.chain().focus().addRowBefore().run()}
-              className="px-2.5 py-0.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition text-[11px] font-medium cursor-pointer active:scale-95"
-              title="Añadir fila arriba"
-            >
-              + Fila ↑
-            </button>
-            <button
-              onClick={() => editor.chain().focus().addRowAfter().run()}
-              className="px-2.5 py-0.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition text-[11px] font-medium cursor-pointer active:scale-95"
-              title="Añadir fila abajo"
-            >
-              + Fila ↓
-            </button>
-            <button
-              onClick={() => editor.chain().focus().deleteRow().run()}
-              className="px-2.5 py-0.5 rounded-full hover:bg-rose-500/10 text-rose-500 transition text-[11px] font-medium cursor-pointer active:scale-95"
-              title="Eliminar fila actual"
-            >
-              - Fila
-            </button>
-
-            <div className="w-[1px] h-3.5 bg-black/[0.08] dark:bg-white/[0.1] mx-0.5" />
-
-            <button
-              onClick={() => editor.chain().focus().addColumnBefore().run()}
-              className="px-2.5 py-0.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition text-[11px] font-medium cursor-pointer active:scale-95"
-              title="Añadir columna a la izquierda"
-            >
-              + Col ←
-            </button>
-            <button
-              onClick={() => editor.chain().focus().addColumnAfter().run()}
-              className="px-2.5 py-0.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition text-[11px] font-medium cursor-pointer active:scale-95"
-              title="Añadir columna a la derecha"
-            >
-              + Col →
-            </button>
-            <button
-              onClick={() => editor.chain().focus().deleteColumn().run()}
-              className="px-2.5 py-0.5 rounded-full hover:bg-rose-500/10 text-rose-500 transition text-[11px] font-medium cursor-pointer active:scale-95"
-              title="Eliminar columna actual"
-            >
-              - Col
-            </button>
-
-            <div className="w-[1px] h-3.5 bg-black/[0.08] dark:bg-white/[0.1] mx-0.5" />
-
-            <button
-              onClick={() => editor.chain().focus().toggleHeaderRow().run()}
-              className="px-2.5 py-0.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-neutral-600 dark:text-neutral-300 transition text-[11px] font-medium cursor-pointer active:scale-95"
-              title="Alternar fila de encabezado"
-            >
-              Encabezado
-            </button>
-            <button
-              onClick={() => editor.chain().focus().deleteTable().run()}
-              className="px-2.5 py-0.5 rounded-full hover:bg-rose-500/10 text-rose-500 transition text-[11px] font-medium cursor-pointer active:scale-95"
-              title="Borrar tabla"
-            >
-              Borrar tabla
-            </button>
-          </div>
-        </div>
+        <TableSpreadsheetToolbar editor={editor} />
       )}
 
       {/* Interactive Sticky Code Block Toolbar when inside a code block */}
