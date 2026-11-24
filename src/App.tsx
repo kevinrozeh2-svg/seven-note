@@ -1943,7 +1943,7 @@ function MainApp() {
 
             {/* Center: Board Title (touch/click to rename) */}
             {activeViewMode === 'canvas' && (
-              <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 items-center justify-center pointer-events-auto z-10 max-w-[50vw]">
+              <div className="hidden md:flex flex-1 min-w-0 items-center justify-center px-3 pointer-events-auto z-10">
                 {isEditingBoardTitle ? (
                   <input
                     type="text"
@@ -1956,16 +1956,16 @@ function MainApp() {
                     }}
                     autoFocus
                     placeholder="Título del lienzo..."
-                    className="font-serif font-bold text-base md:text-lg text-center text-[var(--app-text-primary)] bg-[var(--app-bg-overlay)] px-4 py-1 rounded-lg border border-[var(--app-border-strong)] shadow-md outline-none min-w-[220px] max-w-full focus:border-[var(--app-accent)]"
+                    className="font-serif font-bold text-base md:text-lg text-center text-[var(--app-text-primary)] bg-[var(--app-bg-overlay)] px-4 py-1 rounded-lg border border-[var(--app-border-strong)] shadow-md outline-none min-w-[160px] max-w-full focus:border-[var(--app-accent)]"
                   />
                 ) : (
                   <button
                     type="button"
                     onClick={startEditingBoardTitle}
-                    className="group flex items-center gap-2 px-3 py-1 rounded-lg hover:bg-[var(--app-hover)] transition cursor-pointer select-none tracking-tight text-center active:scale-95"
+                    className="group flex items-center gap-2 px-3 py-1 rounded-lg hover:bg-[var(--app-hover)] transition cursor-pointer select-none tracking-tight text-center active:scale-95 max-w-full min-w-0"
                     title="Toca para cambiar el nombre del lienzo"
                   >
-                    <span className="font-serif font-bold text-base md:text-lg text-[var(--app-text-primary)] group-hover:text-[var(--app-accent)] transition truncate max-w-[250px] md:max-w-[420px]">
+                    <span className="font-serif font-bold text-base md:text-lg text-[var(--app-text-primary)] group-hover:text-[var(--app-accent)] transition truncate">
                       {currentWorkspace?.title || 'Sin título'}
                     </span>
                     <PencilSimpleLine size={15} weight="duotone" className="text-[var(--app-text-muted)] group-hover:text-[var(--app-accent)] opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition shrink-0" />
