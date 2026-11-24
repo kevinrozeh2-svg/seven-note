@@ -1,5 +1,9 @@
 import DOMPurify from 'dompurify'
 import {
+  extractEmojiFromImageElement,
+  isEmojiImageElement
+} from '../components/ui/AppleEmoji'
+import {
   containsLatexMath,
   createMathBlockHtml,
   createMathInlineHtml,
@@ -1038,6 +1042,13 @@ function collectInlineRuns(
   }
 
   if (tag === 'img') {
+    if (isEmojiImageElement(el)) {
+      const emojiText = extractEmojiFromImageElement(el)
+      if (emojiText) {
+        runs.push({ text: emojiText, state: parentState })
+        return runs
+      }
+    }
     const src = el.getAttribute('src')
     if (src) {
       const alt = escapeHtml(el.getAttribute('alt') || '')
@@ -3288,6 +3299,16 @@ export function cleanPastedHtml(html: string): string {
       // Resolve <style> rules before removing <style> tags
       applyStylesheetRules(doc)
       doc.querySelectorAll('style, script, noscript, meta, link').forEach((el) => el.remove())
+
+      // Replace inline emoji <img> tags (Apple Emoji, Twemoji, Notion/Slack, etc.) with plain Unicode emojis
+      doc.querySelectorAll('img').forEach((imgEl) => {
+        if (isEmojiImageElement(imgEl)) {
+          const emojiText = extractEmojiFromImageElement(imgEl)
+          if (emojiText) {
+            imgEl.replaceWith(doc.createTextNode(emojiText))
+          }
+        }
+      })
 
       const allElements = Array.from(doc.querySelectorAll('*'))
       for (const el of allElements) {

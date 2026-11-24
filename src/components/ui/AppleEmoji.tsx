@@ -80,6 +80,66 @@ export function getAppleEmojiUrl(emoji: string, forceVariant?: 'with-fe0f' | 'wi
   return `https://cdn.jsdelivr.net/npm/emoji-datasource-apple@15.1.2/img/apple/64/${unified}.png`
 }
 
+/**
+ * Decodes the Unicode emoji string from an emoji-datasource-apple CDN image URL
+ * (e.g. ".../img/apple/64/1f680.png" -> "🚀").
+ */
+export function extractEmojiFromAppleUrl(src: string | null | undefined): string {
+  if (!src || !src.includes('emoji-datasource-apple')) return ''
+  const match = src.match(/\/([0-9a-f-]+)\.png(?:[?#].*)?$/i)
+  if (!match) return ''
+  try {
+    const codePoints = match[1]
+      .split('-')
+      .map((hex) => parseInt(hex, 16))
+      .filter((cp) => Number.isFinite(cp) && cp > 0 && cp <= 0x10ffff)
+    if (codePoints.length === 0) return ''
+    return String.fromCodePoint(...codePoints)
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Checks whether an HTML element is an inline emoji image (Apple emoji, Twemoji, Notion/Slack emoji, etc.)
+ * so block image extensions never hijack it as a full-width photo.
+ */
+export function isEmojiImageElement(el: Element): boolean {
+  if (el.hasAttribute('data-apple-emoji')) return true
+  const src = el.getAttribute('src') || ''
+  if (src.includes('emoji-datasource-apple')) return true
+  const alt = (el.getAttribute('alt') || '').trim()
+  if (alt && isSingleEmoji(alt)) {
+    const cls = el.getAttribute('class') || ''
+    if (
+      /emoji|twemoji|openmoji|noto-emoji|fluentui-emoji/i.test(src) ||
+      /emoji/i.test(cls)
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Extracts the underlying Unicode emoji string from an emoji <img> or <span> element.
+ */
+export function extractEmojiFromImageElement(el: Element): string {
+  const dataAttr = (el.getAttribute('data-apple-emoji') || '').trim()
+  if (dataAttr) return dataAttr
+
+  const alt = (el.getAttribute('alt') || '').trim()
+  if (alt && isSingleEmoji(alt)) return alt
+
+  const fromUrl = extractEmojiFromAppleUrl(el.getAttribute('src'))
+  if (fromUrl) return fromUrl
+
+  const text = (el.textContent || '').trim()
+  if (text && isSingleEmoji(text)) return text
+
+  return alt || text || ''
+}
+
 export interface AppleEmojiProps {
   emoji?: string | React.ReactNode
   size?: number | string

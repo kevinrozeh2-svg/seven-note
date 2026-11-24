@@ -427,15 +427,46 @@ function tokenizeFormula(input: string): Token[] {
       continue
     }
 
-    // Number literal (digits with optional decimal point)
+    // Number literal (digits with optional decimal point, plus Spanish decimal comma e.g. 15,5% or 12,5*2)
     if (/\d/.test(ch) || (ch === '.' && i + 1 < len && /\d/.test(input[i + 1]))) {
       const start = i
-      let hasDot = false
-      while (i < len && (/\d/.test(input[i]) || (!hasDot && input[i] === '.'))) {
-        if (input[i] === '.') hasDot = true
-        i++
+      let hasDec = false
+      let rawNum = ''
+      const hasSemicolonInFormula = input.includes(';')
+      while (i < len) {
+        const cur = input[i]
+        if (/\d/.test(cur)) {
+          rawNum += cur
+          i++
+        } else if (!hasDec && cur === '.') {
+          hasDec = true
+          rawNum += '.'
+          i++
+        } else if (!hasDec && cur === ',' && i + 1 < len && /\d/.test(input[i + 1])) {
+          // Treat ',' as Spanish decimal separator when:
+          // - formula uses ';' as arg separator, OR
+          // - followed by digits ending with '%' (e.g. 15,5%), OR
+          // - outside any function call parentheses (e.g. =12,5*2)
+          let parenDepth = 0
+          for (const t of tokens) {
+            if (t.type === 'LPAREN') parenDepth++
+            else if (t.type === 'RPAREN') parenDepth = Math.max(0, parenDepth - 1)
+          }
+          let look = i + 1
+          while (look < len && /\d/.test(input[look])) look++
+          const followedByPercent = input[look] === '%'
+          if (hasSemicolonInFormula || parenDepth === 0 || followedByPercent) {
+            hasDec = true
+            rawNum += '.'
+            i++
+          } else {
+            break
+          }
+        } else {
+          break
+        }
       }
-      tokens.push({ type: 'NUMBER', value: input.slice(start, i), pos: start })
+      tokens.push({ type: 'NUMBER', value: rawNum, pos: start })
       continue
     }
 
@@ -629,8 +660,13 @@ class FormulaParser {
       const a = toNumber(left, `operación "${op}"`)
       const b = toNumber(right, `operación "${op}"`)
       const val = op === '+' ? a + b : a - b
+      const leftPct = left.type === 'number' && Boolean(left.isPercent)
+      const rightPct = right.type === 'number' && Boolean(right.isPercent)
+      // Preserve percentage when both are percent, or when combining a percent with 0 or 1 (e.g. =1-B2 or =B2+0)
       const isPercent =
-        left.type === 'number' && right.type === 'number' && Boolean(left.isPercent) && Boolean(right.isPercent)
+        (leftPct && rightPct) ||
+        (leftPct && (b === 0 || b === 1)) ||
+        (rightPct && (a === 0 || a === 1))
       const isCurrency =
         (left.type === 'number' && Boolean(left.isCurrency)) ||
         (right.type === 'number' && Boolean(right.isCurrency))
@@ -657,6 +693,8 @@ class FormulaParser {
       if (!Number.isFinite(val)) {
         throw new FormulaError('#NUM!', 'Resultado numérico fuera de rango')
       }
+      const leftPct = left.type === 'number' && Boolean(left.isPercent)
+      const rightPct = right.type === 'number' && Boolean(right.isPercent)
       const isCurrency =
         (left.type === 'number' && Boolean(left.isCurrency)) ||
         (right.type === 'number' && Boolean(right.isCurrency))
@@ -664,7 +702,9 @@ class FormulaParser {
         (left.type === 'number' && left.currencySymbol) ||
         (right.type === 'number' && right.currencySymbol) ||
         null
-      left = { type: 'number', value: val, isPercent: false, isCurrency, currencySymbol }
+      // Dividing a percentage by a scalar (e.g. =15%/2 -> 7,5%) keeps percent format
+      const isPercent = op === '/' && leftPct && !rightPct && !isCurrency
+      left = { type: 'number', value: val, isPercent, isCurrency, currencySymbol }
     }
     return left
   }
@@ -891,46 +931,51 @@ function collectNumbers(args: FnArg[]): {
 } {
   const nums: number[] = []
   let percentCount = 0
+  let nonZeroNonPercentCount = 0
   let anyCurrency = false
   let currencySymbol: string | null = null
+
+  const pushNum = (
+    value: number,
+    isPercent: boolean,
+    isCurrency: boolean,
+    sym: string | null | undefined
+  ) => {
+    nums.push(value)
+    if (isPercent) {
+      percentCount++
+    } else if (Math.abs(value) > 1e-12) {
+      nonZeroNonPercentCount++
+    }
+    if (isCurrency) {
+      anyCurrency = true
+      if (!currencySymbol && sym) currencySymbol = sym
+    }
+  }
 
   for (const arg of args) {
     if (arg.type === 'range') {
       for (const cell of arg.cells) {
         if (cell.kind === 'number') {
-          nums.push(cell.value)
-          if (cell.isPercent) percentCount++
-          if (cell.isCurrency) {
-            anyCurrency = true
-            if (!currencySymbol && cell.currencySymbol) currencySymbol = cell.currencySymbol
-          }
+          pushNum(cell.value, cell.isPercent, cell.isCurrency, cell.currencySymbol)
         }
       }
     } else if (arg.type === 'number') {
-      nums.push(arg.value)
-      if (arg.isPercent) percentCount++
-      if (arg.isCurrency) {
-        anyCurrency = true
-        if (!currencySymbol && arg.currencySymbol) currencySymbol = arg.currencySymbol
-      }
+      pushNum(arg.value, Boolean(arg.isPercent), Boolean(arg.isCurrency), arg.currencySymbol)
     } else if (arg.type === 'boolean') {
-      nums.push(arg.value ? 1 : 0)
+      pushNum(arg.value ? 1 : 0, false, false, null)
     } else if (arg.type === 'string') {
       const parsed = parseNumericCellValue(arg.value)
       if (parsed.kind === 'number') {
-        nums.push(parsed.value)
-        if (parsed.isPercent) percentCount++
-        if (parsed.isCurrency) {
-          anyCurrency = true
-          if (!currencySymbol && parsed.currencySymbol) currencySymbol = parsed.currencySymbol
-        }
+        pushNum(parsed.value, parsed.isPercent, parsed.isCurrency, parsed.currencySymbol)
       }
     }
   }
 
   return {
     nums,
-    allPercent: nums.length > 0 && percentCount === nums.length,
+    // Treat as percent if at least one cell is % and no non-zero plain number conflicts (so 0 without % doesn't break %)
+    allPercent: percentCount > 0 && nonZeroNonPercentCount === 0 && !anyCurrency,
     anyCurrency,
     currencySymbol
   }
@@ -1122,6 +1167,17 @@ export function evaluateTableGrid(grid: TableCellInput[][]): TableEvaluationResu
   const rows = grid.length
   const cols = rows > 0 ? Math.max(...grid.map((r) => r.length)) : 0
 
+  // Detect percentage columns from row 0 header (e.g. "%", "Porcentaje", "% Peso")
+  const percentCols = new Set<number>()
+  if (rows > 0) {
+    for (let c = 0; c < cols; c++) {
+      const hdr = (grid[0]?.[c]?.text || '').trim().toLowerCase()
+      if (hdr === '%' || hdr.includes('%') || hdr.includes('porcentaje') || hdr.includes('porciento')) {
+        percentCols.add(c)
+      }
+    }
+  }
+
   type CacheEntry = {
     evalCell: EvaluatedCell
     resolved: {
@@ -1213,10 +1269,11 @@ export function evaluateTableGrid(grid: TableCellInput[][]): TableEvaluationResu
       visiting.delete(key)
 
       if (val.type === 'number') {
+        const isColPercent = r > 0 && percentCols.has(c) && !val.isCurrency
         const inferredFormat: CellFormat =
           explicitFormat !== 'auto'
             ? explicitFormat
-            : val.isPercent
+            : val.isPercent || isColPercent
               ? 'percent'
               : val.isCurrency
                 ? 'currency'

@@ -520,6 +520,7 @@ export function DocEditor({
         openOnClick: false,
         autolink: true
       }),
+      AppleEmojiExtension,
       RichImage.configure({
         allowBase64: true
       }),
@@ -527,7 +528,6 @@ export function DocEditor({
       MathInline,
       NoteLinkCard,
       NoteMention,
-      AppleEmojiExtension,
       TextAlign.configure({
         types: ['heading', 'paragraph', 'blockquote'],
         alignments: ['left', 'center', 'right', 'justify'],

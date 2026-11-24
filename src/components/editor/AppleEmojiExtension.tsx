@@ -1,5 +1,10 @@
 import { Node, mergeAttributes } from '@tiptap/core'
-import { EMOJI_MATCH_REGEX, getAppleEmojiUrl } from '../ui/AppleEmoji'
+import {
+  EMOJI_MATCH_REGEX,
+  getAppleEmojiUrl,
+  isEmojiImageElement,
+  extractEmojiFromImageElement
+} from '../ui/AppleEmoji'
 
 let isConvertingEmojis = false
 
@@ -81,9 +86,16 @@ function createEmojiDom(emoji: string): HTMLElement {
   const img = document.createElement('img')
   img.src = getAppleEmojiUrl(emoji)
   img.alt = emoji
+  img.setAttribute('data-apple-emoji', emoji)
   img.draggable = false
-  img.className = 'inline-block w-[1.15em] h-[1.15em] object-contain pointer-events-none select-none'
+  img.className = 'apple-emoji-img inline-block w-[1.15em] h-[1.15em] object-contain pointer-events-none select-none'
   img.style.verticalAlign = '-0.15em'
+  img.style.display = 'inline-block'
+  img.style.width = '1.15em'
+  img.style.height = '1.15em'
+  img.style.margin = '0'
+  img.style.borderRadius = '0'
+  img.style.boxShadow = 'none'
 
   let triedFallback = false
   img.onerror = () => {
@@ -105,6 +117,7 @@ function createEmojiDom(emoji: string): HTMLElement {
 
 export const AppleEmojiExtension = Node.create({
   name: 'appleEmoji',
+  priority: 1000,
   inline: true,
   group: 'inline',
   atom: true,
@@ -115,11 +128,7 @@ export const AppleEmojiExtension = Node.create({
     return {
       emoji: {
         default: '',
-        parseHTML: (element) =>
-          element.getAttribute('data-apple-emoji') ||
-          element.getAttribute('alt') ||
-          element.textContent ||
-          '',
+        parseHTML: (element) => extractEmojiFromImageElement(element),
         renderHTML: (attributes) => ({
           'data-apple-emoji': attributes.emoji,
           alt: attributes.emoji,
@@ -132,7 +141,14 @@ export const AppleEmojiExtension = Node.create({
   parseHTML() {
     return [
       { tag: 'img[data-apple-emoji]' },
-      { tag: 'span[data-apple-emoji]' }
+      { tag: 'span[data-apple-emoji]' },
+      {
+        tag: 'img[src]',
+        getAttrs: (el) => {
+          if (!(el instanceof HTMLElement)) return false
+          return isEmojiImageElement(el) ? {} : false
+        }
+      }
     ]
   },
 
@@ -141,7 +157,7 @@ export const AppleEmojiExtension = Node.create({
       'img',
       mergeAttributes(HTMLAttributes, {
         draggable: 'false',
-        class: 'inline-block align-[-0.15em] w-[1.15em] h-[1.15em] select-none mx-[0.04em]'
+        class: 'apple-emoji-img inline-block align-[-0.15em] w-[1.15em] h-[1.15em] select-none mx-[0.04em]'
       })
     ]
   },

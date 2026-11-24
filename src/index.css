@@ -429,14 +429,28 @@ html[data-reduce-motion="true"] *::after {
   scroll-behavior: auto !important;
 }
 
-/* TipTap Images */
-.ProseMirror img {
+/* TipTap Images (exclude inline Apple emoji images) */
+.ProseMirror img:not([data-apple-emoji]):not(.apple-emoji-img) {
   max-width: 100%;
   height: auto;
   border-radius: 0.75rem;
   display: block;
   margin: 1.5rem auto;
   box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.25);
+}
+
+.ProseMirror [data-apple-emoji] img,
+.ProseMirror img[data-apple-emoji],
+.ProseMirror img.apple-emoji-img {
+  display: inline-block;
+  width: 1.15em;
+  height: 1.15em;
+  max-width: none;
+  margin: 0 0.04em;
+  border-radius: 0;
+  box-shadow: none;
+  vertical-align: -0.15em;
+  object-fit: contain;
 }
 
 .ProseMirror p {

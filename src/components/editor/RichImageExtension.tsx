@@ -28,6 +28,7 @@ import {
   getFilterPresetCss
 } from '../../lib/imageEditorUtils'
 import { processAndUploadImage, deleteImageFromStorage } from '../../lib/imageOptimizer'
+import { isEmojiImageElement } from '../ui/AppleEmoji'
 import { PhotoEditorModal, type PhotoEditorResult } from './PhotoEditorModal'
 
 export interface RichImageAttrs {
@@ -908,6 +909,20 @@ export const RichImage = Image.extend({
   inline: false,
   draggable: true,
   atom: true,
+
+  parseHTML() {
+    return [
+      {
+        tag: this.options.allowBase64 ? 'img[src]' : 'img[src]:not([src^="data:"])',
+        getAttrs: (el) => {
+          if (!(el instanceof HTMLElement)) return false
+          // Never hijack inline emoji <img> tags (Apple Emoji, Twemoji, etc.) as block images
+          if (isEmojiImageElement(el)) return false
+          return {}
+        }
+      }
+    ]
+  },
 
   addAttributes() {
     return {

@@ -9,6 +9,7 @@ import {
   colIndexToLetter,
   evaluateTableGrid,
   extractFormulaReferences,
+  formatCalculatedValue,
   formatCellRef,
   parseNumericCellValue,
   type CellFormat,
@@ -677,6 +678,41 @@ export function updateActiveCellAttrs(
 
   const { state, view } = editor
   const tr = state.tr
+  const hasFormula = Boolean(active.cellNode.attrs.formula)
+
+  // If changing format on a non-formula numeric cell, reformat its visible text immediately
+  if (attrs.cellFormat && !hasFormula) {
+    const rawText = getCellText(active.cellNode)
+    const parsed = parseNumericCellValue(rawText)
+    if (parsed.kind === 'number') {
+      let formatted: string | null = null
+      if (attrs.cellFormat === 'percent') {
+        // Smart percent: "15" -> "15%", "0.15" -> "15%", "15%" -> "15%"
+        const pctRatio = parsed.isPercent
+          ? parsed.value
+          : Math.abs(parsed.value) >= 1
+            ? parsed.value / 100
+            : parsed.value
+        formatted = formatCalculatedValue(pctRatio, 'percent')
+      } else if (attrs.cellFormat === 'currency') {
+        const val = parsed.isPercent ? parsed.value * 100 : parsed.value
+        formatted = formatCalculatedValue(val, 'currency', parsed.currencySymbol || '$')
+      } else if (attrs.cellFormat === 'number') {
+        const val = parsed.isPercent ? parsed.value * 100 : parsed.value
+        formatted = formatCalculatedValue(val, 'number')
+      }
+
+      if (formatted !== null && formatted !== rawText) {
+        const marks = getFirstTextMarks(active.cellNode)
+        const paragraph = state.schema.nodes.paragraph.create(
+          null,
+          [state.schema.text(formatted, marks)]
+        )
+        tr.replaceWith(active.cellPos + 1, active.cellPos + active.cellNode.nodeSize - 1, paragraph)
+      }
+    }
+  }
+
   tr.setNodeMarkup(active.cellPos, undefined, {
     ...active.cellNode.attrs,
     ...attrs
@@ -797,6 +833,7 @@ export function addAutoTotalRow(editor: Editor): boolean {
 
   for (let c = 0; c < colCount; c++) {
     let numericCount = 0
+    let percentCount = 0
     let firstNumRow = -1
     let lastNumRow = -1
 
@@ -806,10 +843,15 @@ export function addAutoTotalRow(editor: Editor): boolean {
       const parsed = parseNumericCellValue(cell.text)
       if (parsed.kind === 'number' || cell.formula) {
         numericCount++
+        if (parsed.isPercent || cell.cellFormat === 'percent') percentCount++
         if (firstNumRow === -1) firstNumRow = r
         lastNumRow = r
       }
     }
+
+    const headerText = (rows[0]?.find((x) => x.col === c)?.text || '').trim().toLowerCase()
+    const isPercentCol =
+      percentCount > 0 || headerText === '%' || headerText.includes('%') || headerText.includes('porcentaje')
 
     if (c === 0 && numericCount === 0) {
       const textNode = schema.text('Total', boldMark ? [boldMark] : [])
@@ -822,7 +864,10 @@ export function addAutoTotalRow(editor: Editor): boolean {
       const textNode = schema.text('0', boldMark ? [boldMark] : [])
       const para = schema.nodes.paragraph.create(null, [textNode])
       newCells.push(
-        schema.nodes.tableCell.create({ formula, cellBg: 'neutral' }, [para])
+        schema.nodes.tableCell.create(
+          { formula, cellBg: 'neutral', ...(isPercentCol ? { cellFormat: 'percent' } : {}) },
+          [para]
+        )
       )
     } else {
       const para = schema.nodes.paragraph.create()
