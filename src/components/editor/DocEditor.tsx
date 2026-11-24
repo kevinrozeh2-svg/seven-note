@@ -99,6 +99,7 @@ import {
 import { syncEngine } from '../../lib/syncEngine'
 import { EmojiPickerPopover } from '../modals/EmojiPickerPopover'
 import { AppleEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
+import { AppleEmojiExtension } from './AppleEmojiExtension'
 import { NotionDatabaseView, getDefaultDatabaseData } from './NotionDatabaseView'
 import { NotionViewsDropdown, NOTION_TOOLS } from './NotionViewsDropdown'
 import {
@@ -523,6 +524,7 @@ export function DocEditor({
       MathInline,
       NoteLinkCard,
       NoteMention,
+      AppleEmojiExtension,
       TextAlign.configure({
         types: ['heading', 'paragraph', 'blockquote'],
         alignments: ['left', 'center', 'right', 'justify'],

@@ -2037,3 +2037,9 @@ html [data-sileo-viewport] [data-sileo-button][data-state="action"].sn-sileo-but
 
 
 
+
+/* Apple emoji rendering inside the editor */
+.ProseMirror .apple-emoji-src { font-size: 0; }
+.ProseMirror .apple-emoji-failed + .apple-emoji-src { font-size: inherit; }
+.ProseMirror .apple-emoji-img { display: inline-block; width: 1.2em; height: 1.2em; vertical-align: -0.2em; object-fit: contain; user-select: none; pointer-events: none; }
+.ProseMirror .apple-emoji-native { font-family: 'Apple Color Emoji','Segoe UI Emoji',sans-serif; }
