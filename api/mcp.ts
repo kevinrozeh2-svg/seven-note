@@ -424,6 +424,17 @@ function createSevenNoteMcpServer(supabase: SupabaseClient): McpServer {
     version: SERVER_VERSION,
   })
 
+  // Helper: fetch IDs of private spaces so bots NEVER read docs/canvas/tags inside private spaces
+  async function getPrivateSpaceIds(): Promise<Set<string>> {
+    if (allowPrivate) return new Set()
+    const { data, error } = await supabase
+      .from('seven_spaces')
+      .select('id')
+      .eq('is_private', true)
+    if (error) throw new Error(`Supabase error checking private spaces: ${error.message}`)
+    return new Set((data || []).map((s: any) => s.id))
+  }
+
   // --------------------------------------------------------------------------
   // Tool 1: list_spaces
   // --------------------------------------------------------------------------
@@ -432,7 +443,7 @@ function createSevenNoteMcpServer(supabase: SupabaseClient): McpServer {
     {
       title: 'List Spaces',
       description:
-        'List all active shared spaces (workspaces/departments) in Seven Note. Start here to understand how the team organizes its knowledge.',
+        'List all active non-private spaces (including shared and admin-only team spaces) in Seven Note. Start here to understand how the team organizes its knowledge.',
       inputSchema: {},
     },
     async () => {
@@ -444,7 +455,7 @@ function createSevenNoteMcpServer(supabase: SupabaseClient): McpServer {
         .order('updated_at', { ascending: false })
 
       if (!allowPrivate) {
-        query = query.eq('is_private', false).eq('admin_only', false)
+        query = query.eq('is_private', false)
       }
 
       const { data, error } = await query
@@ -455,6 +466,7 @@ function createSevenNoteMcpServer(supabase: SupabaseClient): McpServer {
         name: s.name,
         icon: s.icon,
         color: s.color,
+        admin_only: Boolean(s.admin_only),
         folders: Array.isArray(s.folder_order) ? s.folder_order : [],
         updated_at: s.updated_at,
       }))
@@ -471,7 +483,7 @@ function createSevenNoteMcpServer(supabase: SupabaseClient): McpServer {
     {
       title: 'List Documents',
       description:
-        'List active shared documents/pages in Seven Note. Filter by space_id, folder, tag, or favorites_only.',
+        'List active non-private documents/pages in Seven Note (includes shared and admin-only spaces; excludes private spaces and private documents). Filter by space_id, folder, tag, or favorites_only.',
       inputSchema: {
         space_id: z.string().optional().describe('Filter by space ID (from list_spaces).'),
         folder: z.string().optional().describe('Filter by exact folder name.'),
@@ -481,6 +493,11 @@ function createSevenNoteMcpServer(supabase: SupabaseClient): McpServer {
       },
     },
     async ({ space_id, folder, tag, favorites_only, limit }) => {
+      const privateSpaceIds = await getPrivateSpaceIds()
+      if (space_id && privateSpaceIds.has(space_id)) {
+        return jsonText({ count: 0, documents: [], error: 'Access denied: space is private.' })
+      }
+
       const maxRows = limit ?? 50
       let query = supabase
         .from('seven_workspaces')
@@ -489,7 +506,7 @@ function createSevenNoteMcpServer(supabase: SupabaseClient): McpServer {
         )
         .eq('is_deleted', false)
         .order('updated_at', { ascending: false })
-        .limit(tag ? 250 : maxRows)
+        .limit(tag || privateSpaceIds.size > 0 ? 300 : maxRows)
 
       if (!allowPrivate) query = query.eq('is_private', false)
       if (space_id) query = query.eq('space_id', space_id)
@@ -500,23 +517,27 @@ function createSevenNoteMcpServer(supabase: SupabaseClient): McpServer {
       if (error) throw new Error(`Supabase error listing documents: ${error.message}`)
 
       const tagLower = tag?.trim().toLowerCase()
-      let docs = (data || []).map((d: any) => ({
-        id: d.id,
-        title: d.title,
-        space_id: d.space_id || DEFAULT_SPACE_ID,
-        parent_id: d.parent_id || null,
-        folder: d.folder || null,
-        icon: d.icon,
-        view_mode: d.view_mode,
-        is_favorite: Boolean(d.is_favorite),
-        tags: normalizeTags(d.metadata),
-        created_at: d.created_at,
-        updated_at: d.updated_at,
-      }))
+      let docs = (data || [])
+        .filter((d: any) => !privateSpaceIds.has(d.space_id || DEFAULT_SPACE_ID))
+        .map((d: any) => ({
+          id: d.id,
+          title: d.title,
+          space_id: d.space_id || DEFAULT_SPACE_ID,
+          parent_id: d.parent_id || null,
+          folder: d.folder || null,
+          icon: d.icon,
+          view_mode: d.view_mode,
+          is_favorite: Boolean(d.is_favorite),
+          tags: normalizeTags(d.metadata),
+          created_at: d.created_at,
+          updated_at: d.updated_at,
+        }))
 
       if (tagLower) {
-        docs = docs.filter((d) => d.tags.some((t) => t.toLowerCase() === tagLower)).slice(0, maxRows)
+        docs = docs.filter((d) => d.tags.some((t) => t.toLowerCase() === tagLower))
       }
+
+      docs = docs.slice(0, maxRows)
 
       return jsonText({ count: docs.length, documents: docs })
     }
@@ -530,7 +551,7 @@ function createSevenNoteMcpServer(supabase: SupabaseClient): McpServer {
     {
       title: 'Search Team Knowledge',
       description:
-        'Search across Seven Note documents (titles, content, folders, tags) and canvas notes. Returns ranked matches with text snippets so you can decide which document to read in full with get_document.',
+        'Search across Seven Note documents (titles, content, folders, tags) and canvas notes in shared and admin-only spaces (excludes all private spaces and private documents). Returns ranked matches with text snippets so you can decide which document to read in full with get_document.',
       inputSchema: {
         query: z.string().min(1).describe('Search query or keywords.'),
         space_id: z.string().optional().describe('Optional space ID to narrow the search.'),
@@ -539,6 +560,11 @@ function createSevenNoteMcpServer(supabase: SupabaseClient): McpServer {
       },
     },
     async ({ query: rawQuery, space_id, include_canvas, limit }) => {
+      const privateSpaceIds = await getPrivateSpaceIds()
+      if (space_id && privateSpaceIds.has(space_id)) {
+        return jsonText({ query: rawQuery, total_matches: 0, results: [], error: 'Access denied: space is private.' })
+      }
+
       const maxResults = limit ?? 10
       const terms = rawQuery
         .toLowerCase()
@@ -552,7 +578,7 @@ function createSevenNoteMcpServer(supabase: SupabaseClient): McpServer {
         .select('id, space_id, folder, title, icon, view_mode, doc_content, metadata, updated_at, is_private')
         .eq('is_deleted', false)
         .order('updated_at', { ascending: false })
-        .limit(300)
+        .limit(400)
 
       if (!allowPrivate) docQuery = docQuery.eq('is_private', false)
       if (space_id) docQuery = docQuery.eq('space_id', space_id)
@@ -577,6 +603,7 @@ function createSevenNoteMcpServer(supabase: SupabaseClient): McpServer {
       const workspaceTitleMap = new Map<string, string>()
 
       for (const doc of docs || []) {
+        if (privateSpaceIds.has(doc.space_id || DEFAULT_SPACE_ID)) continue
         allowedWorkspaceIds.add(doc.id)
         workspaceTitleMap.set(doc.id, doc.title || 'Sin título')
 
@@ -686,19 +713,22 @@ function createSevenNoteMcpServer(supabase: SupabaseClient): McpServer {
       },
     },
     async ({ id, include_canvas }) => {
-      const { data: doc, error } = await supabase
-        .from('seven_workspaces')
-        .select('*')
-        .eq('id', id)
-        .eq('is_deleted', false)
-        .maybeSingle()
+      const [privateSpaceIds, { data: doc, error }] = await Promise.all([
+        getPrivateSpaceIds(),
+        supabase
+          .from('seven_workspaces')
+          .select('*')
+          .eq('id', id)
+          .eq('is_deleted', false)
+          .maybeSingle(),
+      ])
 
       if (error) throw new Error(`Supabase error fetching document: ${error.message}`)
       if (!doc) {
         return jsonText({ found: false, error: `Document '${id}' not found.` })
       }
-      if (!allowPrivate && doc.is_private) {
-        return jsonText({ found: false, error: 'Access denied: document is private.' })
+      if (!allowPrivate && (doc.is_private || privateSpaceIds.has(doc.space_id || DEFAULT_SPACE_ID))) {
+        return jsonText({ found: false, error: 'Access denied: document or its space is private.' })
       }
 
       const metadata = doc.metadata || {}
@@ -766,6 +796,12 @@ function createSevenNoteMcpServer(supabase: SupabaseClient): McpServer {
       },
     },
     async ({ title, content, space_id, folder, parent_id, icon, tags, created_by }) => {
+      const targetSpaceId = space_id?.trim() || DEFAULT_SPACE_ID
+      const privateSpaceIds = await getPrivateSpaceIds()
+      if (privateSpaceIds.has(targetSpaceId)) {
+        return jsonText({ created: false, error: 'Access denied: cannot create documents inside a private space.' })
+      }
+
       const now = Date.now()
       const id = crypto.randomUUID()
       const author = created_by?.trim() || 'AI Bot'
@@ -773,7 +809,7 @@ function createSevenNoteMcpServer(supabase: SupabaseClient): McpServer {
 
       const row = {
         id,
-        space_id: space_id?.trim() || DEFAULT_SPACE_ID,
+        space_id: targetSpaceId,
         parent_id: parent_id?.trim() || null,
         folder: folder?.trim() || null,
         title: title.trim(),
@@ -831,19 +867,22 @@ function createSevenNoteMcpServer(supabase: SupabaseClient): McpServer {
       },
     },
     async ({ id, title, content, mode, folder, icon, tags, edited_by }) => {
-      const { data: existing, error: fetchError } = await supabase
-        .from('seven_workspaces')
-        .select('*')
-        .eq('id', id)
-        .eq('is_deleted', false)
-        .maybeSingle()
+      const [privateSpaceIds, { data: existing, error: fetchError }] = await Promise.all([
+        getPrivateSpaceIds(),
+        supabase
+          .from('seven_workspaces')
+          .select('*')
+          .eq('id', id)
+          .eq('is_deleted', false)
+          .maybeSingle(),
+      ])
 
       if (fetchError) throw new Error(`Supabase error reading document: ${fetchError.message}`)
       if (!existing) {
         return jsonText({ updated: false, error: `Document '${id}' not found.` })
       }
-      if (!allowPrivate && existing.is_private) {
-        return jsonText({ updated: false, error: 'Access denied: document is private.' })
+      if (!allowPrivate && (existing.is_private || privateSpaceIds.has(existing.space_id || DEFAULT_SPACE_ID))) {
+        return jsonText({ updated: false, error: 'Access denied: document or its space is private.' })
       }
 
       const now = Math.max(Date.now(), (existing.updated_at || 0) + 1)
@@ -903,17 +942,20 @@ function createSevenNoteMcpServer(supabase: SupabaseClient): McpServer {
       },
     },
     async ({ workspace_id }) => {
-      const { data: doc } = await supabase
-        .from('seven_workspaces')
-        .select('id, title, is_private, is_deleted')
-        .eq('id', workspace_id)
-        .maybeSingle()
+      const [privateSpaceIds, { data: doc }] = await Promise.all([
+        getPrivateSpaceIds(),
+        supabase
+          .from('seven_workspaces')
+          .select('id, title, space_id, is_private, is_deleted')
+          .eq('id', workspace_id)
+          .maybeSingle(),
+      ])
 
       if (!doc || doc.is_deleted) {
         return jsonText({ found: false, error: `Workspace '${workspace_id}' not found.` })
       }
-      if (!allowPrivate && doc.is_private) {
-        return jsonText({ found: false, error: 'Access denied: workspace is private.' })
+      if (!allowPrivate && (doc.is_private || privateSpaceIds.has(doc.space_id || DEFAULT_SPACE_ID))) {
+        return jsonText({ found: false, error: 'Access denied: workspace or its space is private.' })
       }
 
       const [{ data: nodes, error: nodesErr }, { data: edges, error: edgesErr }] = await Promise.all([
@@ -964,17 +1006,20 @@ function createSevenNoteMcpServer(supabase: SupabaseClient): McpServer {
       },
     },
     async ({ workspace_id, type, title, content, todos, x, y, color }) => {
-      const { data: doc } = await supabase
-        .from('seven_workspaces')
-        .select('id, is_private, is_deleted')
-        .eq('id', workspace_id)
-        .maybeSingle()
+      const [privateSpaceIds, { data: doc }] = await Promise.all([
+        getPrivateSpaceIds(),
+        supabase
+          .from('seven_workspaces')
+          .select('id, space_id, is_private, is_deleted')
+          .eq('id', workspace_id)
+          .maybeSingle(),
+      ])
 
       if (!doc || doc.is_deleted) {
         return jsonText({ created: false, error: `Workspace '${workspace_id}' not found.` })
       }
-      if (!allowPrivate && doc.is_private) {
-        return jsonText({ created: false, error: 'Access denied: workspace is private.' })
+      if (!allowPrivate && (doc.is_private || privateSpaceIds.has(doc.space_id || DEFAULT_SPACE_ID))) {
+        return jsonText({ created: false, error: 'Access denied: workspace or its space is private.' })
       }
 
       const now = Date.now()
@@ -1034,6 +1079,11 @@ function createSevenNoteMcpServer(supabase: SupabaseClient): McpServer {
       },
     },
     async ({ space_id }) => {
+      const privateSpaceIds = await getPrivateSpaceIds()
+      if (space_id && privateSpaceIds.has(space_id)) {
+        return jsonText({ tags: [], collections: [], error: 'Access denied: space is private.' })
+      }
+
       let tagsQuery = supabase
         .from('seven_tags')
         .select('id, space_id, name, color')
@@ -1057,8 +1107,8 @@ function createSevenNoteMcpServer(supabase: SupabaseClient): McpServer {
       if (cErr) throw new Error(`Supabase error listing collections: ${cErr.message}`)
 
       return jsonText({
-        tags: tags || [],
-        collections: collections || [],
+        tags: (tags || []).filter((t: any) => !privateSpaceIds.has(t.space_id)),
+        collections: (collections || []).filter((c: any) => !privateSpaceIds.has(c.space_id)),
       })
     }
   )
@@ -1071,16 +1121,16 @@ function createSevenNoteMcpServer(supabase: SupabaseClient): McpServer {
     'seven-note://spaces',
     {
       title: 'Seven Note Spaces',
-      description: 'List of active shared spaces in Seven Note.',
+      description: 'List of active non-private spaces (including admin-only) in Seven Note.',
       mimeType: 'application/json',
     },
     async () => {
       let query = supabase
         .from('seven_spaces')
-        .select('id, name, icon, color, folder_order, updated_at')
+        .select('id, name, icon, color, admin_only, folder_order, updated_at')
         .eq('is_deleted', false)
       if (!allowPrivate) {
-        query = query.eq('is_private', false).eq('admin_only', false)
+        query = query.eq('is_private', false)
       }
       const { data } = await query
       return {
@@ -1100,27 +1150,31 @@ function createSevenNoteMcpServer(supabase: SupabaseClient): McpServer {
     'seven-note://recent-documents',
     {
       title: 'Recent Seven Note Documents',
-      description: '20 most recently updated shared documents in Seven Note.',
+      description: '20 most recently updated non-private documents in Seven Note.',
       mimeType: 'application/json',
     },
     async () => {
+      const privateSpaceIds = await getPrivateSpaceIds()
       let query = supabase
         .from('seven_workspaces')
         .select('id, space_id, folder, title, icon, metadata, updated_at')
         .eq('is_deleted', false)
         .order('updated_at', { ascending: false })
-        .limit(20)
+        .limit(60)
       if (!allowPrivate) {
         query = query.eq('is_private', false)
       }
       const { data } = await query
+      const filtered = (data || [])
+        .filter((d: any) => !privateSpaceIds.has(d.space_id || DEFAULT_SPACE_ID))
+        .slice(0, 20)
       return {
         contents: [
           {
             uri: 'seven-note://recent-documents',
             mimeType: 'application/json',
             text: JSON.stringify(
-              (data || []).map((d: any) => ({
+              filtered.map((d: any) => ({
                 id: d.id,
                 title: d.title,
                 space_id: d.space_id,

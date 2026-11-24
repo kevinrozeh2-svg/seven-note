@@ -11,7 +11,7 @@ import {
   ResetIcon,
   SettingsIcon
 } from '@blocksuite/icons/rc'
-import { Check } from '@phosphor-icons/react'
+import { Check, Eye, EyeSlash, PlugsConnected, Robot, ShieldCheck } from '@phosphor-icons/react'
 import {
   getStoredSupabaseConfig,
   saveSupabaseConfig,
@@ -60,6 +60,39 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
   const [webPushStatus, setWebPushStatus] = useState<WebPushStatus | null>(null)
   const [vapidInput, setVapidInput] = useState('')
   const [pushLoading, setPushLoading] = useState(false)
+
+  // MCP (AI Brain) section state
+  const defaultMcpUrl =
+    typeof window !== 'undefined' &&
+    window.location.origin.startsWith('http') &&
+    !window.location.hostname.includes('localhost') &&
+    !window.location.hostname.includes('127.0.0.1')
+      ? `${window.location.origin}/api/mcp`
+      : 'https://note.sevenestudio.com/api/mcp'
+  const [mcpUrl, setMcpUrl] = useState<string>(() => {
+    try {
+      return localStorage.getItem('seven_note_mcp_url') || defaultMcpUrl
+    } catch {
+      return defaultMcpUrl
+    }
+  })
+  const [mcpApiKey, setMcpApiKey] = useState<string>(() => {
+    try {
+      return localStorage.getItem('seven_note_mcp_api_key') || ''
+    } catch {
+      return ''
+    }
+  })
+  const [showMcpKey, setShowMcpKey] = useState(false)
+  const [mcpTesting, setMcpTesting] = useState(false)
+  const [mcpStatus, setMcpStatus] = useState<{
+    ok: boolean
+    message: string
+    toolsCount?: number
+    spacesCount?: number
+    adminSpacesCount?: number
+  } | null>(null)
+  const [copiedMcpItem, setCopiedMcpItem] = useState<'url' | 'json' | 'header' | null>(null)
 
   useEffect(() => {
     return notificationService.subscribeToPreferences(setNotifPrefs)
@@ -140,6 +173,150 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
     await navigator.clipboard.writeText(schemaSql)
     setCopiedSql(true)
     setTimeout(() => setCopiedSql(false), 2000)
+  }
+
+  const handleMcpUrlChange = (val: string) => {
+    setMcpUrl(val)
+    try {
+      localStorage.setItem('seven_note_mcp_url', val)
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  const handleMcpKeyChange = (val: string) => {
+    setMcpApiKey(val)
+    try {
+      localStorage.setItem('seven_note_mcp_api_key', val)
+    } catch {
+      // ignore storage errors
+    }
+  }
+
+  const copyMcpSnippet = async (kind: 'url' | 'json' | 'header') => {
+    const cleanUrl = mcpUrl.trim() || defaultMcpUrl
+    const token = mcpApiKey.trim() || 'TU_SEVEN_NOTE_MCP_API_KEY'
+    let text = cleanUrl
+    if (kind === 'header') {
+      text = `Authorization: Bearer ${token}`
+    } else if (kind === 'json') {
+      text = JSON.stringify(
+        {
+          mcpServers: {
+            'seven-note': {
+              url: cleanUrl,
+              headers: {
+                Authorization: `Bearer ${token}`
+              }
+            }
+          }
+        },
+        null,
+        2
+      )
+    }
+    await navigator.clipboard.writeText(text)
+    setCopiedMcpItem(kind)
+    toast.success(
+      kind === 'url'
+        ? 'URL del MCP copiada'
+        : kind === 'header'
+        ? 'Header de autenticación copiado'
+        : 'Configuración JSON de MCP copiada'
+    )
+    setTimeout(() => setCopiedMcpItem(null), 2000)
+  }
+
+  const handleTestMcp = async () => {
+    const cleanUrl = mcpUrl.trim() || defaultMcpUrl
+    setMcpTesting(true)
+    setMcpStatus(null)
+    try {
+      const healthRes = await fetch(cleanUrl, { method: 'GET' })
+      if (!healthRes.ok) {
+        setMcpStatus({
+          ok: false,
+          message: `El servidor respondió HTTP ${healthRes.status}. Verifica la URL y el despliegue en Vercel.`
+        })
+        return
+      }
+      const healthJson = await healthRes.json().catch(() => null)
+      const version = healthJson?.version || '1.0.0'
+
+      if (!mcpApiKey.trim()) {
+        setMcpStatus({
+          ok: true,
+          message: `Servidor MCP activo (v${version}). Pega tu token para verificar autenticación, herramientas y espacios.`
+        })
+        return
+      }
+
+      const headers = {
+        Authorization: `Bearer ${mcpApiKey.trim()}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream'
+      }
+
+      const [toolsRes, spacesRes] = await Promise.all([
+        fetch(cleanUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} })
+        }),
+        fetch(cleanUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            jsonrpc: '2.0',
+            id: 2,
+            method: 'tools/call',
+            params: { name: 'list_spaces', arguments: {} }
+          })
+        })
+      ])
+
+      if (toolsRes.status === 401 || spacesRes.status === 401) {
+        setMcpStatus({
+          ok: false,
+          message: 'Token MCP inválido (401 Unauthorized). Verifica tu SEVEN_NOTE_MCP_API_KEY.'
+        })
+        return
+      }
+
+      const toolsJson = await toolsRes.json()
+      const spacesJson = await spacesRes.json()
+      const toolsCount = Array.isArray(toolsJson?.result?.tools) ? toolsJson.result.tools.length : 0
+
+      let spacesCount = 0
+      let adminSpacesCount = 0
+      const rawSpacesText = spacesJson?.result?.content?.[0]?.text
+      if (typeof rawSpacesText === 'string') {
+        try {
+          const parsed = JSON.parse(rawSpacesText)
+          if (Array.isArray(parsed?.spaces)) {
+            spacesCount = parsed.spaces.length
+            adminSpacesCount = parsed.spaces.filter((s: any) => s?.admin_only).length
+          }
+        } catch {
+          // ignore parse errors
+        }
+      }
+
+      setMcpStatus({
+        ok: true,
+        toolsCount,
+        spacesCount,
+        adminSpacesCount,
+        message: `MCP conectado (v${version}) · ${toolsCount} herramientas · ${spacesCount} espacios visibles (${adminSpacesCount} solo admin).`
+      })
+    } catch (err: any) {
+      setMcpStatus({
+        ok: false,
+        message: `No se pudo conectar con el servidor MCP: ${err?.message || 'Error de red'}`
+      })
+    } finally {
+      setMcpTesting(false)
+    }
   }
 
   const exportBackupJson = async () => {
@@ -521,6 +698,151 @@ export function SettingsModal({ isOpen, onClose, syncStatus, uiScale = '100', on
                   </button>
                 )
               })}
+            </div>
+          </div>
+
+          {/* MCP Server (AI Brain for Team Bots) */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-xs font-semibold flex items-center gap-1.5 text-[var(--app-text-primary)]">
+                  <Robot size={15} weight="duotone" className="text-[var(--app-accent)]" />
+                  <span>Cerebro IA · Servidor MCP</span>
+                </h3>
+                <p className="text-[11px] text-[var(--app-text-muted)]">
+                  Conecta tus bots y agentes externos a Seven Note mediante Model Context Protocol (Streamable HTTP).
+                </p>
+              </div>
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25 shrink-0">
+                <PlugsConnected size={11} weight="bold" />
+                Remoto
+              </span>
+            </div>
+
+            <div className="space-y-3 p-3.5 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)]">
+              {/* Endpoint URL */}
+              <div className="space-y-1">
+                <label className="block text-[11px] font-medium text-[var(--app-text-secondary)]">
+                  Endpoint MCP (URL)
+                </label>
+                <div className="flex gap-1.5">
+                  <input
+                    type="text"
+                    value={mcpUrl}
+                    onChange={(e) => handleMcpUrlChange(e.target.value)}
+                    placeholder="https://note.sevenestudio.com/api/mcp"
+                    className="flex-1 text-xs font-mono px-2.5 py-1.5 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] outline-none focus:border-[var(--app-accent)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void copyMcpSnippet('url')}
+                    className="px-2.5 py-1.5 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition-colors flex items-center gap-1 cursor-pointer shrink-0"
+                  >
+                    {copiedMcpItem === 'url' ? (
+                      <DoneIcon style={{ width: 13, height: 13, color: '#10b981' }} />
+                    ) : (
+                      <CopyIcon style={{ width: 13, height: 13 }} />
+                    )}
+                    <span>{copiedMcpItem === 'url' ? 'Copiada' : 'Copiar'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Token MCP */}
+              <div className="space-y-1">
+                <label className="block text-[11px] font-medium text-[var(--app-text-secondary)]">
+                  Token de acceso (SEVEN_NOTE_MCP_API_KEY)
+                </label>
+                <div className="flex gap-1.5">
+                  <div className="relative flex-1">
+                    <input
+                      type={showMcpKey ? 'text' : 'password'}
+                      value={mcpApiKey}
+                      onChange={(e) => handleMcpKeyChange(e.target.value)}
+                      placeholder="sn_mcp_... (se guarda solo en tu navegador)"
+                      className="w-full text-xs font-mono pl-2.5 pr-8 py-1.5 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] outline-none focus:border-[var(--app-accent)]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowMcpKey((v) => !v)}
+                      title={showMcpKey ? 'Ocultar token' : 'Mostrar token'}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] cursor-pointer"
+                    >
+                      {showMcpKey ? <EyeSlash size={14} /> : <Eye size={14} />}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Permisos y alcance */}
+              <div className="flex items-start gap-2 p-2.5 rounded-md bg-[var(--app-bg-primary)] border border-[var(--app-border)] text-[11px] text-[var(--app-text-muted)]">
+                <ShieldCheck size={15} weight="duotone" className="text-emerald-500 shrink-0 mt-0.5" />
+                <div>
+                  <span className="font-medium text-[var(--app-text-primary)]">Alcance activo:</span> los bots pueden leer y escribir en{' '}
+                  <span className="text-[var(--app-text-primary)]">espacios compartidos</span> y{' '}
+                  <span className="text-[var(--app-text-primary)]">espacios solo admins</span>. Los{' '}
+                  <span className="text-rose-500 font-medium">espacios y notas privadas están bloqueados</span>.
+                </div>
+              </div>
+
+              {/* Live Test Result */}
+              {mcpStatus && (
+                <div
+                  className={`flex items-center gap-2 p-2.5 rounded-md text-xs border ${
+                    mcpStatus.ok
+                      ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/25'
+                      : 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/25'
+                  }`}
+                >
+                  {mcpStatus.ok ? (
+                    <DoneIcon style={{ width: 14, height: 14, flexShrink: 0 }} />
+                  ) : (
+                    <InformationIcon style={{ width: 14, height: 14, flexShrink: 0 }} />
+                  )}
+                  <span>{mcpStatus.message}</span>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex items-center justify-between pt-1 gap-2 flex-wrap">
+                <div className="flex gap-1.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => void copyMcpSnippet('json')}
+                    className="px-2.5 py-1.5 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition-colors flex items-center gap-1.5 cursor-pointer"
+                    title="Copiar bloque JSON listo para Claude, Cursor, Antigravity u OpenAI Agents"
+                  >
+                    {copiedMcpItem === 'json' ? (
+                      <DoneIcon style={{ width: 13, height: 13, color: '#10b981' }} />
+                    ) : (
+                      <CopyIcon style={{ width: 13, height: 13 }} />
+                    )}
+                    <span>{copiedMcpItem === 'json' ? 'JSON copiado' : 'Copiar config JSON'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void copyMcpSnippet('header')}
+                    className="px-2.5 py-1.5 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition-colors flex items-center gap-1.5 cursor-pointer"
+                    title="Copiar header Authorization: Bearer para n8n o bots propios"
+                  >
+                    {copiedMcpItem === 'header' ? (
+                      <DoneIcon style={{ width: 13, height: 13, color: '#10b981' }} />
+                    ) : (
+                      <CopyIcon style={{ width: 13, height: 13 }} />
+                    )}
+                    <span>{copiedMcpItem === 'header' ? 'Header copiado' : 'Copiar Bearer'}</span>
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => void handleTestMcp()}
+                  disabled={mcpTesting}
+                  className="px-3.5 py-1.5 rounded-md text-xs font-medium text-white bg-[var(--app-accent)] hover:bg-[var(--app-accent-hover)] transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {mcpTesting ? 'Probando...' : 'Probar MCP'}
+                </button>
+              </div>
             </div>
           </div>
 
