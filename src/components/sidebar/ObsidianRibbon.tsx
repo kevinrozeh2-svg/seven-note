@@ -6,8 +6,6 @@ import {
   Gear,
   Trash,
   Books,
-  DownloadSimple,
-  Keyboard,
   SidebarSimple,
   Sun,
   Moon,
@@ -67,8 +65,8 @@ export function ObsidianRibbon({
   onOpenKnowledgeGraph,
   onOpenAllDocs,
   onOpenTemplates,
-  onOpenImport,
-  onOpenShortcuts,
+  onOpenImport: _onOpenImport,
+  onOpenShortcuts: _onOpenShortcuts,
   onOpenTrash,
   onOpenSettings,
   onToggleNotifications,
@@ -91,139 +89,140 @@ export function ObsidianRibbon({
 }: ObsidianRibbonProps) {
   return (
     <nav
-      aria-label="Barra de acciones rápidas (Ribbon)"
-      className="w-11 h-full bg-[#141414] dark:bg-[#141414] light:bg-[#f3f3f3] border-r border-white/[0.06] dark:border-white/[0.06] flex flex-col items-center justify-between gap-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden shrink-0 select-none z-30"
-      style={{
-        backgroundColor: 'var(--obsidian-ribbon-bg, #141414)'
-      }}
+      aria-label="Navegación principal"
+      className="w-12 h-full bg-[var(--obsidian-ribbon-bg)] border-r border-[var(--app-border)] flex flex-col items-center justify-between gap-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden shrink-0 select-none z-30"
     >
       {/* Top tools list */}
-      <div className="flex flex-col items-center gap-1 w-full px-1">
-        {/* Brand App Icon (Original Kevin/Seven Note Logo) */}
-        <div
-          className="w-9 h-9 rounded-lg flex items-center justify-center p-0.5 mb-1.5 transition cursor-pointer hover:scale-105"
-          title="Seven Note"
+      <div className="flex flex-col items-center gap-1.5 w-full px-1">
+        {/* Brand App Icon (Navigates to All Notes) */}
+        <button
+          type="button"
+          onClick={onOpenAllDocs}
+          aria-label="Seven Note — Todas las notas"
+          className="w-10 h-10 rounded-md flex items-center justify-center p-0.5 mb-1 transition cursor-pointer hover:bg-[var(--app-hover)]"
+          title="Seven Note — Todas las notas"
         >
           <img
             src="/app-logo-light.png"
-            alt="Seven Note Logo"
+            alt=""
             className="w-full h-full object-contain dark:hidden"
           />
           <img
             src="/app-logo-dark.png"
-            alt="Seven Note Logo"
+            alt=""
             className="w-full h-full object-contain hidden dark:block"
           />
-        </div>
+        </button>
 
         {/* Toggle File Explorer / Sidebar */}
         <button
+          type="button"
           onClick={onToggleSidebar}
-          className={`w-8 h-8 rounded-md flex items-center justify-center transition cursor-pointer ${
+          aria-label={sidebarOpen ? 'Ocultar explorador lateral' : 'Mostrar explorador lateral'}
+          aria-pressed={sidebarOpen}
+          className={`w-9 h-9 rounded-md flex items-center justify-center transition cursor-pointer ${
             sidebarOpen
-              ? 'text-[var(--app-text-primary)] bg-white/10'
-              : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5'
+              ? 'text-[var(--app-text-primary)] bg-[var(--app-active)]'
+              : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
           }`}
-          title={sidebarOpen ? 'Ocultar explorador de archivos' : 'Mostrar explorador de archivos (Ctrl+\\)'}
+          title={sidebarOpen ? 'Ocultar explorador (Ctrl+\\)' : 'Mostrar explorador (Ctrl+\\)'}
         >
-          <SidebarSimple size={18} weight={sidebarOpen ? 'fill' : 'regular'} />
+          <SidebarSimple size={20} weight={sidebarOpen ? 'fill' : 'regular'} />
         </button>
 
         {/* Quick Search */}
         <button
+          type="button"
           onClick={onOpenSearch}
-          className="w-8 h-8 rounded-md flex items-center justify-center text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5 transition cursor-pointer"
-          title="Búsqueda rápida en notas (Ctrl+K)"
+          aria-label="Búsqueda rápida"
+          className="w-9 h-9 rounded-md flex items-center justify-center text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition cursor-pointer"
+          title="Búsqueda rápida (Ctrl+K)"
         >
-          <MagnifyingGlass size={18} />
+          <MagnifyingGlass size={20} />
         </button>
 
         {/* New Note Button */}
         <button
+          type="button"
           onClick={onNewNote}
-          className="w-8 h-8 rounded-md flex items-center justify-center text-[var(--app-text-muted)] hover:text-purple-400 hover:bg-purple-500/10 transition cursor-pointer"
+          aria-label="Crear nueva nota"
+          className="w-9 h-9 rounded-md flex items-center justify-center text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition cursor-pointer"
           title="Crear nueva nota (Ctrl+N)"
         >
-          <Plus size={18} weight="bold" />
+          <Plus size={20} weight="bold" />
         </button>
 
-        <div className="w-5 h-px bg-white/[0.08] my-1" />
+        <div className="w-6 h-px bg-[var(--app-divider)] my-1" />
 
-        {/* Almanaque / Google Calendar */}
+        {/* Calendario */}
         {onOpenCalendar && (
           <button
+            type="button"
             onClick={onOpenCalendar}
-            className={`w-8 h-8 rounded-md flex items-center justify-center transition cursor-pointer ${
+            aria-label="Calendario"
+            aria-current={activeView === 'calendar' ? 'page' : undefined}
+            className={`w-9 h-9 rounded-md flex items-center justify-center transition cursor-pointer ${
               activeView === 'calendar'
-                ? 'text-purple-400 bg-purple-500/15'
-                : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5'
+                ? 'text-[var(--app-text-primary)] bg-[var(--app-active)]'
+                : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
             }`}
-            title="Almanaque (Google Calendar)"
+            title="Calendario"
           >
-            <CalendarBlank size={18} />
+            <CalendarBlank size={20} />
           </button>
         )}
 
         {/* Knowledge Graph View */}
         <button
+          type="button"
           onClick={onOpenKnowledgeGraph}
-          className={`w-8 h-8 rounded-md flex items-center justify-center transition cursor-pointer ${
+          aria-label="Grafo de conocimiento"
+          aria-current={activeView === 'knowledge-graph' ? 'page' : undefined}
+          className={`w-9 h-9 rounded-md flex items-center justify-center transition cursor-pointer ${
             activeView === 'knowledge-graph'
-              ? 'text-purple-400 bg-purple-500/15'
-              : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5'
+              ? 'text-[var(--app-text-primary)] bg-[var(--app-active)]'
+              : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
           }`}
-          title="Abrir vista gráfica"
+          title="Grafo de conocimiento"
         >
-          <Graph size={18} />
+          <Graph size={20} />
         </button>
 
         {/* All Documents */}
         <button
+          type="button"
           onClick={onOpenAllDocs}
-          className={`w-8 h-8 rounded-md flex items-center justify-center transition cursor-pointer ${
+          aria-label="Todas las notas"
+          aria-current={activeView === 'all-docs' ? 'page' : undefined}
+          className={`w-9 h-9 rounded-md flex items-center justify-center transition cursor-pointer ${
             activeView === 'all-docs'
-              ? 'text-purple-400 bg-purple-500/15'
-              : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5'
+              ? 'text-[var(--app-text-primary)] bg-[var(--app-active)]'
+              : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
           }`}
-          title="Todos los documentos"
+          title="Todas las notas"
         >
-          <FileText size={18} />
+          <FileText size={20} />
         </button>
 
         {/* Plantillas */}
         <button
+          type="button"
           onClick={onOpenTemplates}
-          className={`w-8 h-8 rounded-md flex items-center justify-center transition cursor-pointer ${
+          aria-label="Plantillas"
+          aria-current={activeView === 'templates' ? 'page' : undefined}
+          className={`w-9 h-9 rounded-md flex items-center justify-center transition cursor-pointer ${
             activeView === 'templates'
-              ? 'text-purple-400 bg-purple-500/15'
-              : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5'
+              ? 'text-[var(--app-text-primary)] bg-[var(--app-active)]'
+              : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
           }`}
-          title="Plantillas de notas"
+          title="Plantillas"
         >
-          <Books size={18} />
-        </button>
-
-        {/* Importar / Exportar */}
-        <button
-          onClick={onOpenImport}
-          className="w-8 h-8 rounded-md flex items-center justify-center text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5 transition cursor-pointer"
-          title="Importar / Exportar notas y archivos"
-        >
-          <DownloadSimple size={18} />
-        </button>
-
-        {/* Atajos de teclado */}
-        <button
-          onClick={onOpenShortcuts}
-          className="w-8 h-8 rounded-md flex items-center justify-center text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5 transition cursor-pointer"
-          title="Atajos de teclado (?)"
-        >
-          <Keyboard size={18} />
+          <Books size={20} />
         </button>
       </div>
 
       {/* Bottom tools: Notifications, Sync status, Theme, User Avatar, Trash, Settings */}
-      <div className="flex flex-col items-center gap-1 w-full px-1">
+      <div className="flex flex-col items-center gap-1.5 w-full px-1">
         {/* Centro de Notificaciones */}
         {onToggleNotifications && (
           <button
@@ -238,12 +237,12 @@ export function ObsidianRibbon({
             }
             aria-expanded={notificationsOpen}
             aria-controls="seven-notification-center"
-            className={`relative w-8 h-8 rounded-md flex items-center justify-center transition cursor-pointer ${
+            className={`relative w-9 h-9 rounded-md flex items-center justify-center transition cursor-pointer ${
               notificationsOpen
-                ? 'text-[var(--app-accent)] bg-[var(--app-accent-soft)]'
+                ? 'text-[var(--app-text-primary)] bg-[var(--app-active)]'
                 : notificationsDnd
-                ? 'text-amber-400 hover:bg-white/5'
-                : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5'
+                ? 'text-amber-500 hover:bg-[var(--app-hover)]'
+                : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
             }`}
             title={
               notificationsDnd
@@ -254,18 +253,18 @@ export function ObsidianRibbon({
             }
           >
             {notificationsDnd ? (
-              <BellSlash size={17} weight={notificationsOpen ? 'fill' : 'regular'} />
+              <BellSlash size={19} weight={notificationsOpen ? 'fill' : 'regular'} />
             ) : (
-              <Bell size={17} weight={notificationsOpen ? 'fill' : 'regular'} />
+              <Bell size={19} weight={notificationsOpen ? 'fill' : 'regular'} />
             )}
             {notificationsDnd ? (
               <span
-                className="absolute top-1 right-1 w-2 h-2 rounded-full bg-amber-400 ring-2 ring-[var(--obsidian-ribbon-bg,#141414)]"
+                className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-amber-400 ring-2 ring-[var(--obsidian-ribbon-bg)]"
                 aria-hidden="true"
               />
             ) : (
               unreadNotificationsCount > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-1 rounded-full bg-[var(--app-accent)] text-white text-[9px] font-bold tabular-nums flex items-center justify-center leading-none shadow-sm">
+                <span className="absolute top-0.5 right-0.5 min-w-[16px] h-[16px] px-1 rounded-full bg-[var(--app-accent)] text-white text-[10px] font-bold tabular-nums flex items-center justify-center leading-none shadow-sm">
                   {unreadNotificationsCount > 99 ? '99+' : unreadNotificationsCount}
                 </span>
               )
@@ -278,26 +277,35 @@ export function ObsidianRibbon({
           <button
             type="button"
             onClick={onForceSync}
-            className="relative w-8 h-8 rounded-md flex items-center justify-center text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5 cursor-pointer transition active:scale-95"
+            aria-label={
+              syncStatus.state === 'syncing'
+                ? 'Sincronizando notas'
+                : syncStatus.state === 'error'
+                ? 'Error de sincronización, pulsar para reintentar'
+                : syncStatus.state === 'offline'
+                ? 'Modo sin conexión'
+                : 'Sincronizado, pulsar para resincronizar'
+            }
+            className="relative w-9 h-9 rounded-md flex items-center justify-center text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] cursor-pointer transition active:scale-95"
             title={
               syncStatus.state === 'syncing'
                 ? 'Sincronizando notas...'
                 : syncStatus.state === 'error'
-                ? 'Error de sincronización (toca para reintentar)'
+                ? 'Error de sincronización (pulsa para reintentar)'
                 : syncStatus.state === 'offline'
                 ? 'Modo sin conexión'
-                : 'Sincronizado (toca para resincronizar todo)'
+                : 'Sincronizado (pulsa para resincronizar)'
             }
           >
             {syncStatus.state === 'syncing' ? (
-              <ArrowsClockwise size={17} className="animate-spin" />
+              <ArrowsClockwise size={19} className="animate-spin text-[var(--app-accent)]" />
             ) : syncStatus.state === 'error' || syncStatus.state === 'offline' ? (
-              <CloudSlash size={17} className="text-amber-400" />
+              <CloudSlash size={19} className="text-amber-500" />
             ) : (
-              <CloudCheck size={17} />
+              <CloudCheck size={19} />
             )}
             {syncStatus.pendingCount > 0 && (
-              <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400" />
+              <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-amber-400" />
             )}
           </button>
         )}
@@ -305,17 +313,19 @@ export function ObsidianRibbon({
         {/* Dark / Light Mode Toggle */}
         {onToggleDarkMode && (
           <button
+            type="button"
             onClick={onToggleDarkMode}
-            className="w-8 h-8 rounded-md flex items-center justify-center text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5 transition cursor-pointer"
+            aria-label={darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+            className="w-9 h-9 rounded-md flex items-center justify-center text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition cursor-pointer"
             title={darkMode ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
           >
-            {darkMode ? <Sun size={17} /> : <Moon size={17} />}
+            {darkMode ? <Sun size={19} /> : <Moon size={19} />}
           </button>
         )}
 
         {/* Team Member / User Profile Switcher */}
         {currentMember && (
-          <div className="w-8 h-8 flex items-center justify-center">
+          <div className="w-9 h-9 flex items-center justify-center">
             <TeamMemberSwitcher
               variant="circular"
               popoverDirection="up"
@@ -333,24 +343,29 @@ export function ObsidianRibbon({
 
         {/* Papelera */}
         <button
+          type="button"
           onClick={onOpenTrash}
-          className={`w-8 h-8 rounded-md flex items-center justify-center transition cursor-pointer ${
+          aria-label="Papelera"
+          aria-current={activeView === 'trash' ? 'page' : undefined}
+          className={`w-9 h-9 rounded-md flex items-center justify-center transition cursor-pointer ${
             activeView === 'trash'
-              ? 'text-rose-400 bg-rose-500/15'
-              : 'text-[var(--app-text-muted)] hover:text-rose-400 hover:bg-rose-500/10'
+              ? 'text-rose-500 bg-rose-500/15'
+              : 'text-[var(--app-text-muted)] hover:text-rose-500 hover:bg-rose-500/10'
           }`}
           title="Papelera"
         >
-          <Trash size={17} />
+          <Trash size={19} />
         </button>
 
         {/* Ajustes */}
         <button
+          type="button"
           onClick={onOpenSettings}
-          className="w-8 h-8 rounded-md flex items-center justify-center text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5 transition cursor-pointer"
-          title="Ajustes y opciones"
+          aria-label="Ajustes"
+          className="w-9 h-9 rounded-md flex items-center justify-center text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition cursor-pointer"
+          title="Ajustes"
         >
-          <Gear size={17} />
+          <Gear size={19} />
         </button>
       </div>
     </nav>

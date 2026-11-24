@@ -59,7 +59,6 @@
     /* Motion & Easing Tokens */
     --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
     --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
-    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
     --duration-fast: 150ms;
     --duration-normal: 220ms;
     --duration-slow: 300ms;
@@ -209,9 +208,20 @@
   background: var(--app-text-muted);
 }
 
-/* Notion Selection Highlight */
+/* Selection Highlight & Accessible Focus Ring */
 ::selection {
   background-color: var(--app-accent-soft);
+}
+
+button:focus-visible,
+a:focus-visible,
+[role="tab"]:focus-visible,
+[role="button"]:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 1px;
 }
 
 /* TipTap Editor Styling - Authentic Notion Typography */
@@ -1125,37 +1135,37 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
 }
 
 /* ==========================================================================
-   Tactile Pill UI (Modern Violet & Dark Capsule Styles)
+   Floating Action Bars (Unified Violet Accent & 12px Geometry)
    ========================================================================== */
 .pill-capsule-bar {
-  background-color: rgba(28, 28, 31, 0.94);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 9999px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.2);
+  background-color: var(--app-bg-overlay);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--app-border-strong);
+  border-radius: 12px;
+  box-shadow: var(--app-shadow-dock);
 }
 
 .btn-pill-purple {
-  background-color: #7c5cfc;
+  background-color: var(--app-accent);
   color: #ffffff !important;
-  border-radius: 9999px;
+  border-radius: 8px;
   font-weight: 600;
-  box-shadow: 0 4px 14px rgba(124, 92, 252, 0.35);
+  box-shadow: 0 2px 10px rgba(124, 58, 237, 0.28);
   transition: background-color 180ms var(--ease-out-expo),
               box-shadow 180ms var(--ease-out-expo),
               transform 180ms var(--ease-out-expo);
 }
 
 .btn-pill-purple:hover {
-  background-color: #6c4be8;
-  box-shadow: 0 6px 20px rgba(124, 92, 252, 0.45);
+  background-color: var(--app-accent-hover);
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.36);
   transform: translateY(-0.5px);
 }
 
 .btn-pill-purple:active {
-  background-color: #5e3dd9;
-  transform: scale(0.96);
+  background-color: #6d28d9;
+  transform: scale(0.97);
 }
 
 .btn-pill-dark {

@@ -10,6 +10,15 @@ import Underline from '@tiptap/extension-underline'
 import Link from '@tiptap/extension-link'
 import { RichImage } from './RichImageExtension'
 import { MathBlock, MathInline } from './MathExtensions'
+import { NoteLinkCard, NoteMention, NoteLinkContext } from './NoteLinkExtensions'
+import {
+  computeBidirectionalLinks,
+  extractSnippetFromHtml,
+  buildWholeWordTitleRegex,
+  type BidirectionalLinkItem,
+  type UnlinkedMentionItem,
+  type LinkRelation
+} from '../../lib/bidirectionalLinks'
 import { FloatingSelectionMenu } from './FloatingSelectionMenu'
 import TextAlign from '@tiptap/extension-text-align'
 import { processAndUploadImage } from '../../lib/imageOptimizer'
@@ -115,23 +124,6 @@ function sanitizeUrl(url: string): string {
   return '#'
 }
 
-function extractSnippetFromHtml(html?: string, maxLength: number = 90): string {
-  if (!html) return ''
-  const clean = html
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<\/?[^>]+(>|$)/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/\s+/g, ' ')
-    .trim()
-  if (!clean) return ''
-  return clean.length > maxLength ? clean.slice(0, maxLength) + '...' : clean
-}
-
 interface DocEditorProps {
   workspace: WorkspaceItem
   allWorkspaces?: WorkspaceItem[]
@@ -141,6 +133,7 @@ interface DocEditorProps {
   onToggleViewMode?: () => void
   onOpenTemplatesModal?: () => void
   readOnly?: boolean
+  hideChrome?: boolean
 }
 
 // Custom Marks to preserve styles (color, highlight, sub, sup, indentation) during paste & editing
@@ -334,16 +327,6 @@ const SuperscriptMark = Mark.create({
   }
 })
 
-interface BidirectionalLinkItem {
-  workspace: WorkspaceItem
-  isOutgoing: boolean
-  isIncoming: boolean
-  relation: 'bidirectional' | 'incoming' | 'outgoing'
-  spaceName: string
-  spaceIcon: string
-  snippet: string
-}
-
 interface HoverPopoverData {
   note: WorkspaceItem
   spaceName: string
@@ -360,8 +343,10 @@ export function DocEditor({
   spaces = [],
   onSelectWorkspace,
   onTitleChange,
-  readOnly = false
+  readOnly = false,
+  hideChrome = false
 }: DocEditorProps) {
+  const hideEditControls = readOnly || hideChrome
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved')
   const [isIconModalOpen, setIsIconModalOpen] = useState(false)
   const [isCoverPickerOpen, setIsCoverPickerOpen] = useState(false)
@@ -381,9 +366,30 @@ export function DocEditor({
   const [isBodyEmojiPickerOpen, setIsBodyEmojiPickerOpen] = useState(false)
   const [isInfoExpanded, setIsInfoExpanded] = useState(workspace.isInformationOpen ?? false)
   const [infoText, setInfoText] = useState(workspace.informationContent || '')
-  const [showBiDirectional, setShowBiDirectional] = useState(workspace.biDirectionalLinksVisible ?? false)
+  const [liveDocHtml, setLiveDocHtml] = useState<string>(workspace.docContent || '')
+  const [showBiDirectional, setShowBiDirectional] = useState<boolean>(
+    workspace.biDirectionalLinksVisible ?? true
+  )
+  const [biDirectionalExplicitlySet, setBiDirectionalExplicitlySet] = useState<boolean>(
+    typeof workspace.biDirectionalLinksVisible === 'boolean'
+  )
+  const [linkFilter, setLinkFilter] = useState<'all' | LinkRelation>('all')
+  const [showUnlinkedMentions, setShowUnlinkedMentions] = useState(false)
   const [showLinkSelector, setShowLinkSelector] = useState(false)
   const [linkSearchQuery, setLinkSearchQuery] = useState('')
+
+  // Inline [[wikilink]] autocomplete state
+  const [wikiMenuOpen, setWikiMenuOpen] = useState(false)
+  const [wikiQuery, setWikiQuery] = useState('')
+  const [wikiMenuPos, setWikiMenuPos] = useState<{ x: number; y: number } | null>(null)
+  const [wikiRange, setWikiRange] = useState<{ from: number; to: number } | null>(null)
+  const [selectedWikiIdx, setSelectedWikiIdx] = useState(0)
+  const wikiStateRef = useRef<{
+    open: boolean
+    range: { from: number; to: number } | null
+    selectedIdx: number
+    items: WorkspaceItem[]
+  }>({ open: false, range: null, selectedIdx: 0, items: [] })
 
   // Hover Popover preview state
   const [hoverPopoverData, setHoverPopoverData] = useState<HoverPopoverData | null>(null)
@@ -511,6 +517,8 @@ export function DocEditor({
       }),
       MathBlock,
       MathInline,
+      NoteLinkCard,
+      NoteMention,
       TextAlign.configure({
         types: ['heading', 'paragraph', 'blockquote'],
         alignments: ['left', 'center', 'right', 'justify'],
@@ -705,6 +713,53 @@ export function DocEditor({
         return false
       },
       handleKeyDown: (view, event) => {
+        // Handle inline [[wikilink]] autocomplete navigation
+        const wikiState = wikiStateRef.current
+        if (wikiState.open) {
+          if (event.key === 'Escape') {
+            event.preventDefault()
+            setWikiMenuOpen(false)
+            return true
+          }
+          if (wikiState.items.length > 0) {
+            if (event.key === 'ArrowDown') {
+              event.preventDefault()
+              setSelectedWikiIdx((prev) => (prev + 1) % wikiState.items.length)
+              return true
+            }
+            if (event.key === 'ArrowUp') {
+              event.preventDefault()
+              setSelectedWikiIdx((prev) => (prev - 1 + wikiState.items.length) % wikiState.items.length)
+              return true
+            }
+            if (event.key === 'Enter' || event.key === 'Tab') {
+              event.preventDefault()
+              const chosen = wikiState.items[wikiState.selectedIdx] || wikiState.items[0]
+              if (chosen && wikiState.range && editorRef.current) {
+                editorRef.current
+                  .chain()
+                  .focus()
+                  .deleteRange(wikiState.range)
+                  .insertContent([
+                    {
+                      type: 'noteMention',
+                      attrs: {
+                        noteId: chosen.id,
+                        noteTitle: chosen.title || 'Untitled'
+                      }
+                    },
+                    { type: 'text', text: ' ' }
+                  ])
+                  .run()
+                setWikiMenuOpen(false)
+                setWikiQuery('')
+                setWikiRange(null)
+              }
+              return true
+            }
+          }
+        }
+
         if (event.key === '/') {
           const { from } = view.state.selection
           const resolved = view.state.doc.resolve(from)
@@ -734,6 +789,8 @@ export function DocEditor({
           const rawId = noteCard.getAttribute('data-note-id')
           const noteId = rawId ? decodeURIComponent(rawId) : null
           if (noteId && onSelectWorkspace) {
+            event.preventDefault()
+            setHoverPopoverData(null)
             onSelectWorkspace(noteId)
             return true
           }
@@ -742,9 +799,11 @@ export function DocEditor({
         if (link) {
           const href = link.getAttribute('href')
           if (href?.startsWith('#note=')) {
-            const rawId = href.replace('#note=', '')
+            const rawId = href.slice('#note='.length).split('&')[0]
             const noteId = rawId ? decodeURIComponent(rawId) : null
             if (noteId && onSelectWorkspace) {
+              event.preventDefault()
+              setHoverPopoverData(null)
               onSelectWorkspace(noteId)
               return true
             }
@@ -756,6 +815,39 @@ export function DocEditor({
     onUpdate: ({ editor }) => {
       setSaveStatus('saving')
       const html = editor.getHTML()
+      setLiveDocHtml(html)
+
+      // Detect inline [[wikilink trigger before cursor
+      if (!readOnly) {
+        const { from, empty } = editor.state.selection
+        const resolved = editor.state.doc.resolve(from)
+        const inCodeBlock = resolved.parent.type.name === 'codeBlock'
+        if (empty && !inCodeBlock) {
+          const textBefore = editor.state.doc.textBetween(resolved.start(), from, '\n', '\0')
+          const wikiMatch = /\[\[([^[\]\n]{0,60})$/.exec(textBefore)
+          if (wikiMatch) {
+            const coords = editor.view.coordsAtPos(from)
+            const menuWidth = 300
+            const menuHeight = 260
+            const x = Math.max(12, Math.min(window.innerWidth - menuWidth - 12, coords.left))
+            const y =
+              coords.bottom + menuHeight + 12 > window.innerHeight
+                ? Math.max(12, coords.top - menuHeight - 8)
+                : coords.bottom + 8
+            setWikiMenuOpen(true)
+            setWikiQuery(wikiMatch[1])
+            setWikiRange({ from: from - wikiMatch[0].length, to: from })
+            setWikiMenuPos({ x, y })
+            setSelectedWikiIdx(0)
+          } else {
+            setWikiMenuOpen(false)
+            setWikiRange(null)
+          }
+        } else {
+          setWikiMenuOpen(false)
+          setWikiRange(null)
+        }
+      }
 
       // Confetti on all tasks completed
       const taskInputs = editor.view.dom.querySelectorAll(
@@ -896,10 +988,13 @@ export function DocEditor({
       const hasUnsavedForCurrent = pendingSaveRef.current?.workspaceId === workspace.id
       if (!hasUnsavedForCurrent && editor.getHTML() !== workspace.docContent) {
         editor.commands.setContent(workspace.docContent || '<p></p>', { emitUpdate: false })
+        setLiveDocHtml(workspace.docContent || '')
       }
       setInfoText(workspace.informationContent || '')
       setIsInfoExpanded(workspace.isInformationOpen ?? false)
-      setShowBiDirectional(workspace.biDirectionalLinksVisible ?? false)
+      const hasExplicitToggle = typeof workspace.biDirectionalLinksVisible === 'boolean'
+      setBiDirectionalExplicitlySet(hasExplicitToggle)
+      setShowBiDirectional(hasExplicitToggle ? Boolean(workspace.biDirectionalLinksVisible) : true)
       setDatabaseData(workspace.databaseData || null)
     }
     isFirstRender.current = false
@@ -912,6 +1007,17 @@ export function DocEditor({
     workspace.databaseData,
     editor
   ])
+
+  // Clear ephemeral popovers & filters when switching documents
+  useEffect(() => {
+    setHoverPopoverData(null)
+    setWikiMenuOpen(false)
+    setWikiQuery('')
+    setWikiRange(null)
+    setShowLinkSelector(false)
+    setLinkSearchQuery('')
+    setLinkFilter('all')
+  }, [workspace.id])
 
   useEffect(() => {
     if (editor) {
@@ -1051,7 +1157,11 @@ export function DocEditor({
 
   // Toggle Bi-Directional links visibility
   const handleToggleBiDirectional = async () => {
-    const nextVal = !showBiDirectional
+    const currentlyVisible = biDirectionalExplicitlySet
+      ? showBiDirectional
+      : bidirectionalLinks.length > 0 || unlinkedMentions.length > 0
+    const nextVal = !currentlyVisible
+    setBiDirectionalExplicitlySet(true)
     setShowBiDirectional(nextVal)
     await db.workspaces.update(workspace.id, {
       biDirectionalLinksVisible: nextVal,
@@ -1061,121 +1171,167 @@ export function DocEditor({
     syncEngine.scheduleSync(1000)
   }
 
-  // Bidirectional links across all public workspaces (both incoming backlinks and outgoing linked notes)
-  const bidirectionalLinks = useMemo<BidirectionalLinkItem[]>(() => {
+  // Bidirectional links & unlinked mentions computed live from current editor HTML + all visible workspaces
+  const {
+    links: bidirectionalLinks,
+    unlinkedMentions,
+    outgoingIds
+  } = useMemo(
+    () => computeBidirectionalLinks(workspace, liveDocHtml, allWorkspaces, spaces),
+    [workspace, liveDocHtml, allWorkspaces, spaces]
+  )
+
+  const isBiDirectionalExpanded = biDirectionalExplicitlySet
+    ? showBiDirectional
+    : bidirectionalLinks.length > 0 || unlinkedMentions.length > 0
+
+  const filteredBidirectionalLinks = useMemo(() => {
+    if (linkFilter === 'all') return bidirectionalLinks
+    return bidirectionalLinks.filter((item) => item.relation === linkFilter)
+  }, [bidirectionalLinks, linkFilter])
+
+  const relationCounts = useMemo(() => {
+    let bidirectional = 0
+    let incoming = 0
+    let outgoing = 0
+    for (const item of bidirectionalLinks) {
+      if (item.relation === 'bidirectional') bidirectional++
+      else if (item.relation === 'incoming') incoming++
+      else outgoing++
+    }
+    return { bidirectional, incoming, outgoing }
+  }, [bidirectionalLinks])
+
+  // Candidates for inline [[wikilink]] autocomplete
+  const wikiCandidates = useMemo(() => {
+    const q = wikiQuery.trim().toLowerCase()
     return allWorkspaces
+      .filter((w) => w.id !== workspace.id && !w.isDeleted)
       .filter((w) => {
-        if (w.id === workspace.id || w.isDeleted) return false
-
-        const isOutgoing =
-          workspace.docContent.includes(w.id) ||
-          (Boolean(w.title) &&
-            w.title.trim().length > 2 &&
-            w.title !== 'Untitled' &&
-            w.title !== 'Documento sin título' &&
-            workspace.docContent.includes(w.title))
-
-        const isIncoming =
-          w.docContent.includes(workspace.id) ||
-          (Boolean(workspace.title) &&
-            workspace.title.trim().length > 2 &&
-            workspace.title !== 'Untitled' &&
-            workspace.title !== 'Documento sin título' &&
-            w.docContent.includes(workspace.title))
-
-        return isOutgoing || isIncoming
+        if (!q) return true
+        const sp = spaces.find((s) => s.id === (w.spaceId || DEFAULT_SPACE_ID))
+        return (
+          (w.title || '').toLowerCase().includes(q) ||
+          (sp?.name || '').toLowerCase().includes(q)
+        )
       })
-      .map((w) => {
-        const isOutgoing =
-          workspace.docContent.includes(w.id) ||
-          (Boolean(w.title) &&
-            w.title.trim().length > 2 &&
-            w.title !== 'Untitled' &&
-            w.title !== 'Documento sin título' &&
-            workspace.docContent.includes(w.title))
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
+      .slice(0, 8)
+  }, [allWorkspaces, workspace.id, wikiQuery, spaces])
 
-        const isIncoming =
-          w.docContent.includes(workspace.id) ||
-          (Boolean(workspace.title) &&
-            workspace.title.trim().length > 2 &&
-            workspace.title !== 'Untitled' &&
-            workspace.title !== 'Documento sin título' &&
-            w.docContent.includes(workspace.title))
-
-        const space = spaces.find((s) => s.id === (w.spaceId || DEFAULT_SPACE_ID))
-        const relation: 'bidirectional' | 'incoming' | 'outgoing' =
-          isOutgoing && isIncoming ? 'bidirectional' : isIncoming ? 'incoming' : 'outgoing'
-
-        const item: BidirectionalLinkItem = {
-          workspace: w,
-          isOutgoing,
-          isIncoming,
-          relation,
-          spaceName: space?.name || 'Espacio General',
-          spaceIcon: space?.icon || '🌐',
-          snippet: w.informationContent?.trim() || extractSnippetFromHtml(w.docContent, 75) || 'Sin contenido adicional'
-        }
-        return item
-      })
-      .sort((a, b) => (b.workspace.updatedAt || 0) - (a.workspace.updatedAt || 0))
-  }, [allWorkspaces, workspace.id, workspace.docContent, workspace.title, spaces])
-
-  // Insert a rich interactive preview card for the linked note
-  const handleInsertLinkToNote = (targetNote: WorkspaceItem) => {
-    if (!editor || readOnly) return
-    const safeTitle = escapeHtml(targetNote.title || 'Untitled')
-    const safeIcon = escapeHtml(targetNote.icon || '📄')
-    const safeId = encodeURIComponent(targetNote.id)
-    const targetSpace = spaces.find((s) => s.id === (targetNote.spaceId || DEFAULT_SPACE_ID))
-    const spaceName = escapeHtml(targetSpace?.name || 'Espacio General')
-    const spaceIcon = escapeHtml(targetSpace?.icon || '🌐')
-    const snippet = escapeHtml(
-      targetNote.informationContent?.trim() ||
-      extractSnippetFromHtml(targetNote.docContent, 80) ||
-      'Página conectada mediante enlace bidireccional'
-    )
-    const updatedDate = new Date(targetNote.updatedAt || targetNote.createdAt || Date.now()).toLocaleDateString('es-ES', {
-      day: 'numeric',
-      month: 'short'
-    })
-
-    const previewHtml = `
-      <div class="seven-note-link-card not-prose my-3 p-3 rounded-xl border border-[var(--affine-border-color)] bg-[var(--affine-background-secondary-color)] hover:border-[#1e96eb]/60 hover:bg-[var(--affine-hover-color)] transition-all cursor-pointer shadow-xs group select-none max-w-xl" data-note-id="${safeId}" contenteditable="false">
-        <div class="flex items-center justify-between gap-3">
-          <div class="flex items-center gap-2.5 min-w-0">
-            <div class="w-8 h-8 rounded-lg bg-[var(--affine-background-primary-color)] border border-[var(--affine-border-color)] flex items-center justify-center text-lg shrink-0 group-hover:scale-105 transition-transform shadow-xs">
-              ${safeIcon}
-            </div>
-            <div class="min-w-0">
-              <div class="flex items-center gap-1.5 flex-wrap">
-                <span class="font-semibold text-xs text-[var(--affine-text-primary-color)] group-hover:text-[#1e96eb] transition-colors truncate">
-                  ${safeTitle}
-                </span>
-                <span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.2 rounded-full bg-[#1e96eb]/10 border border-[#1e96eb]/25 text-[#1e96eb] font-medium shrink-0">
-                  <span>${spaceIcon}</span>
-                  <span>${spaceName}</span>
-                </span>
-              </div>
-              <p class="text-[11px] text-[var(--affine-text-secondary-color)] truncate mt-0.5">
-                ${snippet}
-              </p>
-            </div>
-          </div>
-          <div class="flex items-center gap-2 shrink-0">
-            <span class="text-[10px] text-[var(--affine-text-secondary-color)] hidden sm:inline">
-              ${updatedDate}
-            </span>
-            <a href="#note=${safeId}" class="text-[11px] font-medium text-[#1e96eb] px-2.5 py-1 rounded-md bg-[#1e96eb]/10 group-hover:bg-[#1e96eb] group-hover:text-white transition-all flex items-center gap-1 no-underline">
-              Abrir ↗
-            </a>
-          </div>
-        </div>
-      </div><p></p>
-    `
-    editor.commands.insertContent(previewHtml)
-    setShowLinkSelector(false)
-    toast.success(`Preview de "${targetNote.title || 'Untitled'}" insertado`)
+  // Keep synchronous ref for ProseMirror handleKeyDown
+  wikiStateRef.current = {
+    open: wikiMenuOpen,
+    range: wikiRange,
+    selectedIdx: selectedWikiIdx,
+    items: wikiCandidates
   }
+
+  // Insert a real TipTap NoteLinkCard (block) or NoteMention (inline)
+  const handleInsertLinkToNote = useCallback(
+    (targetNote: WorkspaceItem, mode: 'card' | 'inline' = 'card', replaceRange?: { from: number; to: number } | null) => {
+      if (!editor || readOnly) return
+      const noteTitle = targetNote.title || 'Untitled'
+
+      if (mode === 'inline') {
+        const chain = editor.chain().focus()
+        if (replaceRange) {
+          chain.deleteRange(replaceRange)
+        }
+        chain
+          .insertContent([
+            {
+              type: 'noteMention',
+              attrs: { noteId: targetNote.id, noteTitle }
+            },
+            { type: 'text', text: ' ' }
+          ])
+          .run()
+        toast.success(`Enlace a "${noteTitle}" insertado`)
+      } else {
+        const chain = editor.chain().focus()
+        if (replaceRange) {
+          chain.deleteRange(replaceRange)
+        }
+        chain
+          .insertContent([
+            {
+              type: 'noteLinkCard',
+              attrs: { noteId: targetNote.id, noteTitle }
+            },
+            { type: 'paragraph' }
+          ])
+          .run()
+        toast.success(`Tarjeta vinculada a "${noteTitle}" insertada`)
+      }
+
+      setShowLinkSelector(false)
+      setLinkSearchQuery('')
+      setWikiMenuOpen(false)
+      setWikiQuery('')
+      setWikiRange(null)
+    },
+    [editor, readOnly]
+  )
+
+  // Convert an unlinked plain-text mention in another note into an explicit bidirectional link
+  const handleConvertUnlinkedMention = useCallback(
+    async (item: UnlinkedMentionItem) => {
+      if (readOnly) return
+      const targetTitle = (workspace.title || '').trim()
+      if (!targetTitle) return
+
+      const sourceHtml = item.workspace.docContent || ''
+      const encodedId = encodeURIComponent(workspace.id)
+      const safeTitleAttr = escapeHtml(targetTitle)
+      const mentionHtml = `<a data-type="note-mention" data-note-id="${encodedId}" data-note-title="${safeTitleAttr}" href="#note=${encodedId}" class="seven-note-mention">${safeTitleAttr}</a>`
+
+      // Replace the first matching plain-text occurrence inside text nodes (not inside HTML tags)
+      let replaced = false
+      const regex = buildWholeWordTitleRegex(targetTitle)
+      const doc = new DOMParser().parseFromString(sourceHtml, 'text/html')
+      const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT)
+      let currentNode: Node | null = walker.nextNode()
+      while (currentNode && !replaced) {
+        const parentEl = currentNode.parentElement
+        const insideLink = parentEl?.closest('a, [data-note-id], [data-type="note-mention"], [data-type="note-link-card"], code, pre')
+        if (!insideLink && currentNode.nodeValue) {
+          const match = regex.exec(currentNode.nodeValue)
+          if (match) {
+            const before = currentNode.nodeValue.slice(0, match.index)
+            const after = currentNode.nodeValue.slice(match.index + match[0].length)
+            const fragment = doc.createDocumentFragment()
+            if (before) fragment.appendChild(doc.createTextNode(before))
+            const wrapper = doc.createElement('span')
+            wrapper.innerHTML = mentionHtml
+            if (wrapper.firstChild) fragment.appendChild(wrapper.firstChild)
+            if (after) fragment.appendChild(doc.createTextNode(after))
+            currentNode.parentNode?.replaceChild(fragment, currentNode)
+            replaced = true
+          }
+        }
+        currentNode = walker.nextNode()
+      }
+
+      const nextHtml = replaced
+        ? doc.body.innerHTML
+        : `${sourceHtml}<p>${mentionHtml}</p>`
+
+      try {
+        await db.workspaces.update(item.workspace.id, {
+          docContent: nextHtml,
+          updatedAt: Date.now(),
+          syncStatus: 'pending'
+        })
+        syncEngine.scheduleSync(1000)
+        toast.success(`Mención en "${item.workspace.title || 'Untitled'}" convertida en enlace bidireccional`)
+      } catch (err) {
+        console.error('Error converting unlinked mention', err)
+        toast.error('No se pudo vincular la mención')
+      }
+    },
+    [readOnly, workspace.id, workspace.title]
+  )
 
   // Handle mouse hover over any note link or preview card to show actionable preview popover
   const handleContainerMouseOver = useCallback((e: React.MouseEvent) => {
@@ -1427,26 +1583,21 @@ export function DocEditor({
 
   const handleInsertEmbedDoc = (targetNote: WorkspaceItem) => {
     if (!editor || readOnly) return
-    const desc = escapeHtml(targetNote.informationContent?.slice(0, 70) || 'Documento incrustado de Seven Note')
-    const safeTitle = escapeHtml(targetNote.title || 'Untitled')
-    const safeIcon = escapeHtml(targetNote.icon || '📄')
-    const safeId = encodeURIComponent(targetNote.id)
-    const html = `
-      <div class="affine-embed-doc my-3 p-3.5 rounded-2xl bg-indigo-950/25 border border-indigo-500/40 hover:border-indigo-500 transition group flex items-center justify-between cursor-pointer shadow-sm select-none" data-note-id="${safeId}" contenteditable="false">
-        <div class="flex items-center gap-3 min-w-0">
-          <span class="text-2xl">${safeIcon}</span>
-          <div class="min-w-0">
-            <div class="font-semibold text-sm text-zinc-100 group-hover:text-indigo-400 transition truncate">${safeTitle}</div>
-            <div class="text-[11px] text-zinc-400 truncate">${desc}</div>
-          </div>
-        </div>
-        <a href="#note=${safeId}" class="text-xs text-indigo-400 font-medium px-2.5 py-1 rounded-lg bg-indigo-500/15 border border-indigo-500/30 group-hover:bg-indigo-500/30 no-underline">Abrir ↗</a>
-      </div><p></p>
-    `
-    editor.commands.insertContent(html)
+    const noteTitle = targetNote.title || 'Untitled'
+    editor
+      .chain()
+      .focus()
+      .insertContent([
+        {
+          type: 'noteLinkCard',
+          attrs: { noteId: targetNote.id, noteTitle }
+        },
+        { type: 'paragraph' }
+      ])
+      .run()
     setIsEmbedDocModalOpen(false)
     setEmbedDocSearch('')
-    toast.success(`Nota "${targetNote.title || 'Untitled'}" incrustada`)
+    toast.success(`Nota "${noteTitle}" vinculada`)
   }
 
   const handleInsertMath = () => {
@@ -1540,8 +1691,8 @@ export function DocEditor({
 
   return (
     <div className="flex flex-col h-full bg-[var(--app-bg-primary)] overflow-y-auto text-[var(--app-text-primary)] select-text relative">
-      {/* Top Floating Formatting Toolbar (Floating Buttons Without Solid Background Bar) */}
-      {!readOnly && (
+      {/* Top Floating Formatting Toolbar (hidden in readOnly or Focus Mode) */}
+      {!hideEditControls && (
         <div className="sticky top-2 z-20 pointer-events-none w-full px-3 sm:px-6 flex items-center justify-between gap-2 select-none shrink-0 mb-1">
           <div className="flex items-center gap-1 sm:gap-1.5 flex-1 min-w-0 overflow-x-auto no-scrollbar pointer-events-auto py-1">
             {/* Quick insert block button */}
@@ -1825,7 +1976,7 @@ export function DocEditor({
       )}
 
       {/* Interactive Sticky Table Toolbar when inside a table */}
-      {!readOnly && editor.isActive('table') && (
+      {!hideEditControls && editor.isActive('table') && (
         <div className="sticky top-11 z-20 flex items-center justify-center py-2 px-3 bg-white/70 dark:bg-[#121214]/70 backdrop-blur-md">
           <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/90 dark:bg-[#1a1b1e]/90 border border-black/[0.08] dark:border-white/[0.1] text-xs text-[var(--app-text-primary)] shadow-lg flex-wrap">
             <span className="text-[10px] uppercase font-bold text-blue-500 px-1">
@@ -2466,7 +2617,7 @@ export function DocEditor({
           )}
 
           {/* Banner Hover Floating Controls (always accessible on touch/mobile) */}
-          {!readOnly && (
+          {!hideEditControls && (
             <div className="absolute right-2.5 sm:right-4 bottom-2.5 sm:bottom-3 flex items-center gap-1 sm:gap-1.5 opacity-95 sm:opacity-0 sm:group-hover/cover:opacity-100 transition-opacity bg-black/65 dark:bg-neutral-900/85 backdrop-blur-md px-2 sm:px-2.5 py-1 rounded-xl text-white shadow-lg z-20">
               <button
                 onClick={() => setIsCoverPickerOpen(true)}
@@ -2514,7 +2665,7 @@ export function DocEditor({
               >
                 {renderNoteIcon(workspace.icon || 'folder', 34)}
 
-                {!readOnly && (
+                {!hideEditControls && (
                   <div className="absolute -bottom-2 opacity-0 group-hover/icon:opacity-100 transition-opacity bg-neutral-900 text-white text-[10px] font-medium py-0.5 px-2 rounded-full shadow-md whitespace-nowrap pointer-events-none">
                     Cambiar icono
                   </div>
@@ -2522,7 +2673,7 @@ export function DocEditor({
               </div>
 
               {/* Action Buttons alongside icon */}
-              {!readOnly && (
+              {!hideEditControls && (
                 <div className="flex flex-wrap items-center gap-1 pb-1 opacity-90 sm:opacity-0 sm:group-hover/icon:opacity-100 transition-opacity">
                   <button
                     onClick={() => setIsIconModalOpen(true)}
@@ -2548,7 +2699,7 @@ export function DocEditor({
                 </div>
               )}
             </div>
-          ) : !readOnly ? (
+          ) : !hideEditControls ? (
             /* Ghost action buttons when neither cover nor icon is present - visible on touch, hover on desktop */
             <div className="flex flex-wrap items-center gap-2 mb-2 opacity-75 sm:opacity-0 sm:hover:opacity-100 transition-opacity">
               <button
@@ -2693,13 +2844,15 @@ export function DocEditor({
 
         {/* Collapsible: "Información" */}
         <div className="mb-8">
-          <div
+          <button
+            type="button"
+            aria-expanded={isInfoExpanded}
             onClick={handleToggleInfo}
-            className="flex items-center gap-3 cursor-pointer group select-none"
+            className="w-full flex items-center gap-3 cursor-pointer group select-none"
           >
-            <div className="flex items-center gap-1.5 text-[var(--affine-text-secondary-color)] group-hover:text-[var(--affine-text-primary-color)] transition">
+            <div className="flex items-center gap-1.5 text-[var(--app-text-secondary)] group-hover:text-[var(--app-text-primary)] transition">
               <span className="text-xs font-medium">Información</span>
-              <span className="text-[var(--affine-text-secondary-color)] group-hover:text-[var(--affine-text-primary-color)]">
+              <span className="text-[var(--app-text-secondary)] group-hover:text-[var(--app-text-primary)]">
                 {isInfoExpanded ? (
                   <ToggleDownIcon className="w-3.5 h-3.5" />
                 ) : (
@@ -2707,8 +2860,8 @@ export function DocEditor({
                 )}
               </span>
             </div>
-            <div className="flex-1 h-[1px] bg-[var(--affine-divider-color)]" />
-          </div>
+            <div className="flex-1 h-[1px] bg-[var(--app-divider)]" />
+          </button>
 
           {/* Collapsible Content */}
           {isInfoExpanded && (
@@ -2741,64 +2894,182 @@ export function DocEditor({
         )}
 
         {/* TipTap WYSIWYG Document Editor */}
-        <div
-          onMouseOver={handleContainerMouseOver}
-          onMouseLeave={handleContainerMouseLeave}
-          className="min-h-[280px]"
+        <NoteLinkContext.Provider
+          value={{
+            allWorkspaces,
+            spaces,
+            onSelectWorkspace: onSelectWorkspace
+              ? (id: string) => {
+                  setHoverPopoverData(null)
+                  onSelectWorkspace(id)
+                }
+              : undefined,
+            readOnly
+          }}
         >
-          <EditorContent editor={editor} />
-        </div>
+          <div
+            onMouseOver={handleContainerMouseOver}
+            onMouseLeave={handleContainerMouseLeave}
+            className="min-h-[280px]"
+          >
+            <EditorContent editor={editor} />
+          </div>
+        </NoteLinkContext.Provider>
+
+        {/* Inline [[wikilink]] Autocomplete Popover */}
+        {wikiMenuOpen &&
+          wikiMenuPos &&
+          !readOnly &&
+          createPortal(
+            <div
+              className="fixed z-[9998] w-[310px] rounded-xl bg-[var(--app-bg-overlay)] border border-[var(--app-border-strong)] p-1.5 text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 duration-100 select-none"
+              style={{
+                top: `${wikiMenuPos.y}px`,
+                left: `${wikiMenuPos.x}px`,
+                boxShadow: 'var(--app-shadow-popover)'
+              }}
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              <div className="flex items-center justify-between px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--app-text-muted)]">
+                <span>Vincular nota ({wikiQuery ? `"${wikiQuery}"` : '[[...'})</span>
+                <span className="font-normal normal-case">↑↓ · Enter · Esc</span>
+              </div>
+              {wikiCandidates.length === 0 ? (
+                <div className="px-2.5 py-3 text-xs text-[var(--app-text-muted)] text-center">
+                  No se encontraron notas coincidentes.
+                </div>
+              ) : (
+                <div className="max-h-56 overflow-y-auto space-y-0.5">
+                  {wikiCandidates.map((ws, idx) => {
+                    const sp = spaces.find((s) => s.id === (ws.spaceId || DEFAULT_SPACE_ID))
+                    const isSelected = idx === selectedWikiIdx
+                    return (
+                      <div
+                        key={ws.id}
+                        onMouseEnter={() => setSelectedWikiIdx(idx)}
+                        onClick={() => handleInsertLinkToNote(ws, 'inline', wikiRange)}
+                        className={`flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition ${
+                          isSelected
+                            ? 'bg-[var(--app-accent-soft)] text-[var(--app-accent)]'
+                            : 'hover:bg-[var(--app-hover)] text-[var(--app-text-primary)]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="shrink-0">
+                            <AppleEmoji emoji={ws.icon || '📄'} size={15} />
+                          </span>
+                          <div className="min-w-0">
+                            <div className="text-xs font-medium truncate">
+                              {renderWithAppleEmoji(ws.title || 'Untitled')}
+                            </div>
+                            <div className="text-[10px] text-[var(--app-text-muted)] truncate">
+                              {sp?.icon || '🌐'} {sp?.name || 'Espacio General'}
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleInsertLinkToNote(ws, 'card', wikiRange)
+                          }}
+                          title="Insertar como tarjeta visual"
+                          className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-[var(--app-bg-tertiary)] hover:bg-[var(--app-accent)] hover:text-white text-[var(--app-text-secondary)] transition cursor-pointer"
+                        >
+                          Tarjeta
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>,
+            document.body
+          )}
 
         {/* Section: Bi-Directional Links */}
         <div
           onMouseOver={handleContainerMouseOver}
           onMouseLeave={handleContainerMouseLeave}
-          className="mt-14 pt-6 border-t border-[var(--affine-divider-color)]"
+          className="mt-14 pt-6 border-t border-[var(--app-divider)]"
         >
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-[var(--affine-text-primary-color)]">
-                Bi-Directional Links
+          <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-semibold text-[var(--app-text-primary)]">
+                Enlaces bidireccionales
               </span>
               {bidirectionalLinks.length > 0 && (
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-[#1e96eb]/15 border border-[#1e96eb]/40 text-[#1e96eb] font-semibold">
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--app-accent-soft)] border border-[var(--app-accent)]/30 text-[var(--app-accent)] font-semibold">
                   {bidirectionalLinks.length}
                 </span>
+              )}
+              {isBiDirectionalExpanded && bidirectionalLinks.length > 1 && (
+                <div className="flex items-center gap-1 ml-1">
+                  {(
+                    [
+                      { id: 'all', label: 'Todos', count: bidirectionalLinks.length },
+                      { id: 'bidirectional', label: '⇄ Mutuos', count: relationCounts.bidirectional },
+                      { id: 'incoming', label: '← Entrantes', count: relationCounts.incoming },
+                      { id: 'outgoing', label: '→ Salientes', count: relationCounts.outgoing }
+                    ] as const
+                  )
+                    .filter((tab) => tab.id === 'all' || tab.count > 0)
+                    .map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => setLinkFilter(tab.id)}
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-medium transition cursor-pointer ${
+                          linkFilter === tab.id
+                            ? 'bg-[var(--app-accent)] text-white'
+                            : 'bg-[var(--app-bg-tertiary)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)]'
+                        }`}
+                      >
+                        {tab.label} ({tab.count})
+                      </button>
+                    ))}
+                </div>
               )}
             </div>
 
             <div className="flex items-center gap-2">
-              {showBiDirectional && (
+              {isBiDirectionalExpanded && !readOnly && (
                 <button
+                  type="button"
                   onClick={() => setShowLinkSelector(!showLinkSelector)}
-                  className="px-2.5 py-1 rounded-md bg-[var(--affine-background-secondary-color)] hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] text-xs flex items-center gap-1 border border-[var(--affine-border-color)] transition active:scale-95 cursor-pointer"
+                  className="px-2.5 py-1 rounded-md bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover-filled)] text-[var(--app-text-primary)] text-xs flex items-center gap-1 border border-[var(--app-border-strong)] transition active:scale-95 cursor-pointer"
                 >
-                  <PlusIcon className="w-3 h-3 text-[#1e96eb]" />
+                  <PlusIcon className="w-3 h-3 text-[var(--app-accent)]" />
                   <span>Vincular nota</span>
                 </button>
               )}
               <button
+                type="button"
                 onClick={handleToggleBiDirectional}
-                className="px-3 py-1 rounded-md bg-[var(--affine-background-secondary-color)] hover:bg-[var(--affine-hover-color)] text-[var(--affine-text-primary-color)] text-xs font-medium border border-[var(--affine-border-color)] transition active:scale-95 cursor-pointer"
+                className="px-3 py-1 rounded-md bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover-filled)] text-[var(--app-text-primary)] text-xs font-medium border border-[var(--app-border-strong)] transition active:scale-95 cursor-pointer"
               >
-                {showBiDirectional ? 'Ocultar' : 'Mostrar'}
+                {isBiDirectionalExpanded ? 'Ocultar' : 'Mostrar'}
               </button>
             </div>
           </div>
 
           {/* Bi-Directional Links expanded body */}
-          {showBiDirectional && (
+          {isBiDirectionalExpanded && (
             <div className="space-y-3 animate-in fade-in duration-100">
-              {showLinkSelector && (
-                <div className="p-3.5 bg-[var(--affine-background-secondary-color)] border border-[var(--affine-border-color)] rounded-xl text-xs space-y-2.5 shadow-lg max-w-md">
+              {showLinkSelector && !readOnly && (
+                <div
+                  className="p-3.5 bg-[var(--app-bg-overlay)] border border-[var(--app-border-strong)] rounded-xl text-xs space-y-2.5 max-w-lg"
+                  style={{ boxShadow: 'var(--app-shadow-popover)' }}
+                >
                   <div className="flex items-center justify-between">
-                    <span className="text-[var(--affine-text-primary-color)] font-semibold text-xs flex items-center gap-1.5">
-                      <LinkIcon className="w-3.5 h-3.5 text-[#1e96eb]" />
-                      Vincular nota (Espacios Públicos)
+                    <span className="text-[var(--app-text-primary)] font-semibold text-xs flex items-center gap-1.5">
+                      <LinkIcon className="w-3.5 h-3.5 text-[var(--app-accent)]" />
+                      Vincular otra nota
                     </span>
                     <button
+                      type="button"
                       onClick={() => setShowLinkSelector(false)}
-                      className="text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] p-0.5 rounded transition cursor-pointer"
+                      className="text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] p-0.5 rounded transition cursor-pointer"
                     >
                       <CloseIcon className="w-3.5 h-3.5" />
                     </button>
@@ -2808,19 +3079,19 @@ export function DocEditor({
                   <div className="relative">
                     <input
                       type="text"
-                      placeholder="Buscar en todos los espacios de trabajo públicos..."
+                      placeholder="Buscar nota por título o espacio..."
                       value={linkSearchQuery}
                       onChange={(e) => setLinkSearchQuery(e.target.value)}
-                      className="w-full px-2.5 py-1.5 pl-7 bg-[var(--affine-background-primary-color)] border border-[var(--affine-border-color)] rounded-lg text-xs text-[var(--affine-text-primary-color)] placeholder:text-[var(--affine-text-secondary-color)] focus:outline-none focus:border-[#1e96eb] transition"
+                      className="w-full px-2.5 py-1.5 pl-7 bg-[var(--app-bg-primary)] border border-[var(--app-border-strong)] rounded-lg text-xs text-[var(--app-text-primary)] placeholder:text-[var(--app-text-muted)] focus:outline-none focus:border-[var(--app-accent)] transition"
                       autoFocus
                     />
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--affine-text-secondary-color)] pointer-events-none text-xs">
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[var(--app-text-muted)] pointer-events-none text-xs">
                       🔍
                     </span>
                   </div>
 
-                  {/* List of public workspaces */}
-                  <div className="max-h-52 overflow-y-auto space-y-1 divide-y divide-[var(--affine-divider-color)]">
+                  {/* List of linkable workspaces */}
+                  <div className="max-h-56 overflow-y-auto space-y-1 divide-y divide-[var(--app-divider)]">
                     {allWorkspaces
                       .filter((w) => w.id !== workspace.id && !w.isDeleted)
                       .filter((w) => {
@@ -2832,105 +3103,200 @@ export function DocEditor({
                           (sp?.name || '').toLowerCase().includes(q)
                         )
                       })
+                      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
                       .map((ws) => {
                         const sp = spaces.find((s) => s.id === (ws.spaceId || DEFAULT_SPACE_ID))
                         const spName = sp?.name || 'Espacio General'
                         const spIcon = sp?.icon || '🌐'
                         const snippet = ws.informationContent?.trim() || extractSnippetFromHtml(ws.docContent, 65)
+                        const alreadyLinked = outgoingIds.has(ws.id)
 
                         return (
                           <div
                             key={ws.id}
-                            onClick={() => handleInsertLinkToNote(ws)}
-                            className="flex items-center justify-between p-2 pt-2.5 rounded-lg hover:bg-[var(--affine-hover-color)] cursor-pointer text-[var(--affine-text-primary-color)] transition group"
+                            className="flex items-center justify-between gap-2 p-2 pt-2.5 rounded-lg hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] transition group"
                           >
-                            <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                            <div
+                              onClick={() => handleInsertLinkToNote(ws, 'card')}
+                              className="flex items-center gap-2.5 min-w-0 flex-1 cursor-pointer"
+                            >
                               <span className="shrink-0 text-base">
                                 <AppleEmoji emoji={ws.icon || '📄'} size={18} />
                               </span>
                               <div className="min-w-0">
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span className="font-medium text-xs truncate group-hover:text-[#1e96eb] transition-colors">
+                                  <span className="font-medium text-xs truncate group-hover:text-[var(--app-accent)] transition-colors">
                                     {renderWithAppleEmoji(ws.title || 'Untitled')}
                                   </span>
-                                  <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.2 rounded-full bg-[#1e96eb]/10 border border-[#1e96eb]/20 text-[#1e96eb] font-medium shrink-0">
+                                  <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--app-accent-soft)] text-[var(--app-accent)] font-medium shrink-0">
                                     <span>{spIcon}</span>
                                     <span>{spName}</span>
                                   </span>
+                                  {alreadyLinked && (
+                                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-medium shrink-0">
+                                      Vinculada
+                                    </span>
+                                  )}
                                 </div>
                                 {snippet && (
-                                  <p className="text-[10px] text-[var(--affine-text-secondary-color)] truncate mt-0.5">
+                                  <p className="text-[10px] text-[var(--app-text-secondary)] truncate mt-0.5">
                                     {snippet}
                                   </p>
                                 )}
                               </div>
                             </div>
-                            <span className="shrink-0 text-[10px] font-medium text-[#1e96eb] px-2 py-1 rounded bg-[#1e96eb]/10 group-hover:bg-[#1e96eb] group-hover:text-white transition">
-                              + Insertar preview
-                            </span>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleInsertLinkToNote(ws, 'inline')}
+                                className="text-[10px] font-medium text-[var(--app-text-secondary)] hover:text-[var(--app-accent)] px-2 py-1 rounded bg-[var(--app-bg-tertiary)] hover:bg-[var(--app-accent-soft)] transition cursor-pointer"
+                                title="Insertar como enlace inline"
+                              >
+                                Inline
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleInsertLinkToNote(ws, 'card')}
+                                className="text-[10px] font-medium text-[var(--app-accent)] px-2 py-1 rounded bg-[var(--app-accent-soft)] hover:bg-[var(--app-accent)] hover:text-white transition cursor-pointer"
+                                title="Insertar como tarjeta visual"
+                              >
+                                + Tarjeta
+                              </button>
+                            </div>
                           </div>
                         )
                       })}
                   </div>
+
+                  <p className="text-[10px] text-[var(--app-text-muted)] pt-1 border-t border-[var(--app-divider)]">
+                    Tip: escribe <kbd className="px-1 py-0.5 rounded bg-[var(--app-bg-tertiary)] font-mono text-[10px]">[[</kbd> en cualquier parte del documento para vincular notas al instante.
+                  </p>
                 </div>
               )}
 
               {bidirectionalLinks.length === 0 ? (
-                <div className="p-4 rounded-xl bg-[var(--affine-background-secondary-color)] border border-[var(--affine-border-color)] text-center text-xs text-[var(--affine-text-secondary-color)]">
-                  No hay otras notas vinculadas a esta página todavía.
+                <div className="p-4 rounded-xl bg-[var(--app-bg-secondary)] border border-[var(--app-border)] text-center text-xs text-[var(--app-text-secondary)]">
+                  No hay enlaces explícitos conectados a esta página todavía.
                   <br />
-                  Usa el botón "Vincular nota" para interconectar tus ideas entre todos los espacios de trabajo públicos.
+                  Escribe <kbd className="px-1 py-0.5 rounded bg-[var(--app-bg-tertiary)] font-mono text-[11px]">[[</kbd> en el texto o usa <span className="font-medium text-[var(--app-text-primary)]">"Vincular nota"</span> para conectar tus ideas.
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  {bidirectionalLinks.map((item: BidirectionalLinkItem) => (
+                  {filteredBidirectionalLinks.map((item: BidirectionalLinkItem) => (
                     <div
                       key={item.workspace.id}
                       data-note-id={item.workspace.id}
-                      onClick={() => onSelectWorkspace && onSelectWorkspace(item.workspace.id)}
-                      className="p-3 rounded-xl bg-[var(--affine-background-secondary-color)] border border-[var(--affine-border-color)] hover:border-[#1e96eb] hover:bg-[var(--affine-hover-color)] cursor-pointer transition flex flex-col justify-between group shadow-xs select-none"
+                      onClick={() => {
+                        setHoverPopoverData(null)
+                        if (onSelectWorkspace) onSelectWorkspace(item.workspace.id)
+                      }}
+                      className="p-3 rounded-xl bg-[var(--app-bg-secondary)] border border-[var(--app-border)] hover:border-[var(--app-accent)]/60 hover:bg-[var(--app-hover-filled)] cursor-pointer transition flex flex-col justify-between group select-none"
+                      style={{ boxShadow: 'var(--app-shadow-card)' }}
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <span className="shrink-0">
+                        <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                          <span className="shrink-0 mt-0.5">
                             <AppleEmoji emoji={item.workspace.icon || '📄'} size={18} />
                           </span>
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <p className="font-semibold text-[var(--affine-text-primary-color)] group-hover:text-[#1e96eb] truncate text-xs transition-colors">
+                              <p className="font-semibold text-[var(--app-text-primary)] group-hover:text-[var(--app-accent)] truncate text-xs transition-colors">
                                 {renderWithAppleEmoji(item.workspace.title || 'Untitled')}
                               </p>
-                              <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.2 rounded-full bg-[#1e96eb]/10 border border-[#1e96eb]/20 text-[#1e96eb] font-medium shrink-0">
+                              <span className="inline-flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--app-accent-soft)] text-[var(--app-accent)] font-medium shrink-0">
                                 <span>{item.spaceIcon}</span>
                                 <span>{item.spaceName}</span>
                               </span>
                             </div>
-                            <p className="text-[10px] text-[var(--affine-text-secondary-color)] truncate mt-0.5">
-                              {item.snippet}
+                            <p className="text-[11px] text-[var(--app-text-secondary)] line-clamp-2 mt-1 leading-snug">
+                              {item.contextExcerpt || item.snippet}
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           <span
-                            className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
+                            className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap ${
                               item.relation === 'bidirectional'
-                                ? 'bg-purple-500/15 text-purple-400 border border-purple-500/30'
+                                ? 'bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/30'
                                 : item.relation === 'incoming'
-                                ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
-                                : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                                ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400 border border-blue-500/30'
+                                : 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
                             }`}
                           >
                             {item.relation === 'bidirectional'
                               ? '⇄ Bidireccional'
                               : item.relation === 'incoming'
-                              ? '← Menciona esta página'
-                              : '→ Mencionada'}
+                              ? '← Te menciona'
+                              : '→ Enlazada'}
                           </span>
-                          <OpenInNewIcon className="w-3.5 h-3.5 text-[var(--affine-text-secondary-color)] group-hover:text-[#1e96eb] transition-colors" />
+                          <OpenInNewIcon className="w-3.5 h-3.5 text-[var(--app-text-muted)] group-hover:text-[var(--app-accent)] transition-colors" />
                         </div>
                       </div>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* Optional Unlinked Mentions (plain-text title matches without explicit links) */}
+              {unlinkedMentions.length > 0 && (
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowUnlinkedMentions((v) => !v)}
+                    className="flex items-center gap-1.5 text-xs font-medium text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] transition cursor-pointer select-none"
+                  >
+                    {showUnlinkedMentions ? (
+                      <ToggleDownIcon className="w-3.5 h-3.5" />
+                    ) : (
+                      <ToggleRightIcon className="w-3.5 h-3.5" />
+                    )}
+                    <span>Menciones sin vincular ({unlinkedMentions.length})</span>
+                  </button>
+
+                  {showUnlinkedMentions && (
+                    <div className="mt-2 space-y-1.5">
+                      {unlinkedMentions.map((item) => (
+                        <div
+                          key={item.workspace.id}
+                          className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-[var(--app-bg-secondary)] border border-dashed border-[var(--app-border-strong)] hover:border-[var(--app-accent)]/50 transition"
+                        >
+                          <div
+                            onClick={() => {
+                              setHoverPopoverData(null)
+                              if (onSelectWorkspace) onSelectWorkspace(item.workspace.id)
+                            }}
+                            className="flex items-start gap-2 min-w-0 flex-1 cursor-pointer"
+                          >
+                            <span className="shrink-0 mt-0.5">
+                              <AppleEmoji emoji={item.workspace.icon || '📄'} size={16} />
+                            </span>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-xs font-medium text-[var(--app-text-primary)] truncate">
+                                  {renderWithAppleEmoji(item.workspace.title || 'Untitled')}
+                                </span>
+                                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--app-bg-tertiary)] text-[var(--app-text-muted)]">
+                                  {item.spaceIcon} {item.spaceName}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-[var(--app-text-secondary)] truncate mt-0.5">
+                                {item.contextExcerpt}
+                              </p>
+                            </div>
+                          </div>
+                          {!readOnly && (
+                            <button
+                              type="button"
+                              onClick={() => handleConvertUnlinkedMention(item)}
+                              className="shrink-0 text-[10px] font-medium px-2.5 py-1 rounded-lg bg-[var(--app-accent-soft)] text-[var(--app-accent)] hover:bg-[var(--app-accent)] hover:text-white transition cursor-pointer"
+                            >
+                              Vincular
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -2953,29 +3319,30 @@ export function DocEditor({
                 setHoverPopoverData(null)
               }, 200)
             }}
-            className="seven-note-hover-popover fixed z-[9999] bg-[#1e1f24] dark:bg-[#1a1b1e] border border-white/10 text-white rounded-xl shadow-2xl p-3.5 space-y-2.5 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md select-none"
+            className="seven-note-hover-popover fixed z-[9999] bg-[var(--app-bg-overlay)] border border-[var(--app-border-strong)] text-[var(--app-text-primary)] rounded-xl p-3.5 space-y-2.5 animate-in fade-in zoom-in-95 duration-150 backdrop-blur-md select-none"
             style={{
               top: `${hoverPopoverData.top}px`,
               left: `${hoverPopoverData.left}px`,
-              width: `${hoverPopoverData.width}px`
+              width: `${hoverPopoverData.width}px`,
+              boxShadow: 'var(--app-shadow-popover)'
             }}
           >
             {/* Popover Header */}
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center text-lg shrink-0">
+                <div className="w-8 h-8 rounded-lg bg-[var(--app-bg-secondary)] border border-[var(--app-border)] flex items-center justify-center text-lg shrink-0">
                   <AppleEmoji emoji={hoverPopoverData.note.icon || '📄'} size={18} />
                 </div>
                 <div className="min-w-0">
-                  <h4 className="font-semibold text-xs text-zinc-100 truncate">
+                  <h4 className="font-semibold text-xs text-[var(--app-text-primary)] truncate">
                     {renderWithAppleEmoji(hoverPopoverData.note.title || 'Untitled')}
                   </h4>
                   <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.2 rounded-full bg-[#1e96eb]/15 border border-[#1e96eb]/30 text-[#1e96eb] font-medium">
+                    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--app-accent-soft)] text-[var(--app-accent)] font-medium">
                       <span>{hoverPopoverData.spaceIcon}</span>
                       <span>{hoverPopoverData.spaceName}</span>
                     </span>
-                    <span className="text-[10px] text-zinc-400">
+                    <span className="text-[10px] text-[var(--app-text-muted)]">
                       {hoverPopoverData.note.updatedAt
                         ? new Date(hoverPopoverData.note.updatedAt).toLocaleDateString('es-ES', {
                             day: 'numeric',
@@ -2987,8 +3354,9 @@ export function DocEditor({
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setHoverPopoverData(null)}
-                className="text-zinc-400 hover:text-zinc-200 p-0.5 rounded transition cursor-pointer"
+                className="text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] p-0.5 rounded transition cursor-pointer"
                 title="Cerrar vista previa"
               >
                 <CloseIcon className="w-3.5 h-3.5" />
@@ -2996,7 +3364,7 @@ export function DocEditor({
             </div>
 
             {/* Popover Content Preview Snippet */}
-            <div className="p-2 rounded-lg bg-black/20 border border-white/5 text-[11px] text-zinc-300 leading-relaxed max-h-20 overflow-y-auto">
+            <div className="p-2 rounded-lg bg-[var(--app-bg-secondary)] border border-[var(--app-border)] text-[11px] text-[var(--app-text-secondary)] leading-relaxed max-h-20 overflow-y-auto">
               {hoverPopoverData.snippet}
             </div>
 
@@ -3006,7 +3374,7 @@ export function DocEditor({
                 {hoverPopoverData.note.tags.map((tag) => (
                   <span
                     key={tag}
-                    className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 border border-zinc-700/50"
+                    className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--app-bg-tertiary)] text-[var(--app-text-secondary)] border border-[var(--app-border)]"
                   >
                     #{tag}
                   </span>
@@ -3015,26 +3383,28 @@ export function DocEditor({
             )}
 
             {/* Actionable buttons */}
-            <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/10">
+            <div className="flex items-center justify-between gap-2 pt-1 border-t border-[var(--app-divider)]">
               <button
+                type="button"
                 onClick={() => {
                   if (onSelectWorkspace) {
                     onSelectWorkspace(hoverPopoverData.note.id)
                   }
                   setHoverPopoverData(null)
                 }}
-                className="flex-1 py-1.5 px-2.5 rounded-lg bg-[#1e96eb] hover:bg-[#1a85d1] text-white text-[11px] font-medium transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
+                className="flex-1 py-1.5 px-2.5 rounded-lg bg-[var(--app-accent)] hover:bg-[var(--app-accent-hover)] text-white text-[11px] font-medium transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
               >
                 <OpenInNewIcon className="w-3.5 h-3.5" />
                 <span>Abrir documento</span>
               </button>
               <button
+                type="button"
                 onClick={() => {
-                  const url = `${window.location.origin}/#note=${hoverPopoverData.note.id}`
+                  const url = `${window.location.origin}/#note=${encodeURIComponent(hoverPopoverData.note.id)}`
                   navigator.clipboard.writeText(url)
                   toast.success('Enlace de la nota copiado al portapapeles')
                 }}
-                className="py-1.5 px-2.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-zinc-300 hover:text-white text-[11px] font-medium transition flex items-center gap-1 active:scale-95 cursor-pointer"
+                className="py-1.5 px-2.5 rounded-lg bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover-filled)] border border-[var(--app-border-strong)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] text-[11px] font-medium transition flex items-center gap-1 active:scale-95 cursor-pointer"
                 title="Copiar enlace"
               >
                 <CopyIcon className="w-3.5 h-3.5" />

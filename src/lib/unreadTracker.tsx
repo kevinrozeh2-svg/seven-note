@@ -208,25 +208,23 @@ export function hasUnreadInList(
 export function NewBadge({ className = '' }: { className?: string }) {
   return (
     <span
-      className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-gradient-to-r from-emerald-500/15 to-teal-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 shrink-0 shadow-2xs select-none ${className}`}
+      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider bg-[var(--app-bg-tertiary)] text-[var(--app-text-secondary)] border border-[var(--app-border-strong)] shrink-0 select-none ${className}`}
       title="Nuevo contenido sin leer"
     >
-      New
+      <span className="w-1.5 h-1.5 rounded-full bg-[var(--app-accent)] shrink-0" aria-hidden="true" />
+      Nuevo
     </span>
   )
 }
 
 /**
- * Visual glowing dot for headers or compact spaces.
+ * Subtle unread indicator dot for headers or compact spaces.
  */
 export function NewDot({ className = '', title = 'Tiene elementos nuevos' }: { className?: string; title?: string }) {
   return (
     <span
-      className={`relative flex h-2 w-2 shrink-0 ${className}`}
+      className={`inline-flex rounded-full h-1.5 w-1.5 bg-[var(--app-accent)] shrink-0 ${className}`}
       title={title}
-    >
-      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-    </span>
+    />
   )
 }

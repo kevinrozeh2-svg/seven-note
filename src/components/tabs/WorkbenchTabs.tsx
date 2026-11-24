@@ -50,6 +50,10 @@ export interface WorkbenchTabsProps {
   onDuplicateTab: (tabId: string) => void
   onToggleSidebar?: () => void
   sidebarOpen?: boolean
+  canGoBack?: boolean
+  canGoForward?: boolean
+  onGoBack?: () => void
+  onGoForward?: () => void
 }
 
 export function WorkbenchTabs({
@@ -68,7 +72,11 @@ export function WorkbenchTabs({
   onTogglePinTab,
   onDuplicateTab,
   onToggleSidebar,
-  sidebarOpen = true
+  sidebarOpen = true,
+  canGoBack = false,
+  canGoForward = false,
+  onGoBack,
+  onGoForward
 }: WorkbenchTabsProps) {
   const [contextMenu, setContextMenu] = useState<{
     x: number
@@ -231,19 +239,33 @@ export function WorkbenchTabs({
   })
 
   return (
-    <div className="h-9 border-b border-[var(--app-border)] bg-[var(--obsidian-sidebar-bg,#181818)] px-1.5 flex items-center justify-between shrink-0 select-none z-30 relative">
-      {/* Navigation history arrows (Obsidian style) */}
+    <div className="h-9 border-b border-[var(--app-border)] bg-[var(--obsidian-sidebar-bg)] px-1.5 flex items-center justify-between shrink-0 select-none z-30 relative">
+      {/* Navigation history arrows */}
       <div className="hidden sm:flex items-center gap-0.5 mr-1 text-[var(--app-text-muted)]">
         <button
-          onClick={() => window.history.back()}
-          className="w-6 h-6 rounded hover:bg-[var(--app-hover)] hover:text-[var(--app-text-primary)] flex items-center justify-center transition cursor-pointer"
+          type="button"
+          onClick={() => onGoBack && onGoBack()}
+          disabled={!canGoBack}
+          aria-label="Pestaña anterior"
+          className={`w-6 h-6 rounded-md flex items-center justify-center transition ${
+            canGoBack
+              ? 'hover:bg-[var(--app-hover)] hover:text-[var(--app-text-primary)] cursor-pointer'
+              : 'opacity-35 cursor-not-allowed'
+          }`}
           title="Atrás"
         >
           <ChevronLeft className="w-3.5 h-3.5" />
         </button>
         <button
-          onClick={() => window.history.forward()}
-          className="w-6 h-6 rounded hover:bg-[var(--app-hover)] hover:text-[var(--app-text-primary)] flex items-center justify-center transition cursor-pointer"
+          type="button"
+          onClick={() => onGoForward && onGoForward()}
+          disabled={!canGoForward}
+          aria-label="Pestaña siguiente"
+          className={`w-6 h-6 rounded-md flex items-center justify-center transition ${
+            canGoForward
+              ? 'hover:bg-[var(--app-hover)] hover:text-[var(--app-text-primary)] cursor-pointer'
+              : 'opacity-35 cursor-not-allowed'
+          }`}
           title="Adelante"
         >
           <ChevronRight className="w-3.5 h-3.5" />
@@ -253,6 +275,8 @@ export function WorkbenchTabs({
       {/* Sidebar toggle button (visible on mobile or when sidebar is collapsed) */}
       {onToggleSidebar && !sidebarOpen && (
         <button
+          type="button"
+          aria-label="Mostrar explorador de notas"
           onClick={onToggleSidebar}
           className="w-6 h-6 rounded-md hover:bg-[var(--app-hover)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] flex items-center justify-center shrink-0 mr-1 transition cursor-pointer"
           title="Mostrar explorador de notas (Ctrl+\)"
@@ -264,8 +288,10 @@ export function WorkbenchTabs({
       {/* Scroll Left Button if overflow */}
       {canScrollLeft && (
         <button
+          type="button"
+          aria-label="Desplazar pestañas a la izquierda"
           onClick={scrollLeft}
-          className="w-5 h-7 rounded hover:bg-[var(--app-hover)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] flex items-center justify-center shrink-0 mr-1 z-10 transition cursor-pointer"
+          className="w-5 h-7 rounded-md hover:bg-[var(--app-hover)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] flex items-center justify-center shrink-0 mr-1 z-10 transition cursor-pointer"
           title="Desplazar pestañas a la izquierda"
         >
           <ChevronLeft className="w-3.5 h-3.5" />
@@ -275,6 +301,8 @@ export function WorkbenchTabs({
       {/* Scrollable Tabs row */}
       <div
         ref={tabsContainerRef}
+        role="tablist"
+        aria-label="Pestañas abiertas"
         onWheel={handleWheel}
         className="flex items-center gap-1 overflow-x-auto overflow-y-hidden no-scrollbar flex-1 h-full pr-1 touch-pan-x"
       >
@@ -289,11 +317,21 @@ export function WorkbenchTabs({
             return (
               <div
                 key={tab.id}
+                role="tab"
+                tabIndex={0}
+                aria-selected={isActive}
+                aria-label={`${meta.title} (fijada)`}
                 ref={(el) => {
                   if (el) tabRefs.current.set(tab.id, el)
                   else tabRefs.current.delete(tab.id)
                 }}
                 onClick={() => onSelectTab(tab.id)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    onSelectTab(tab.id)
+                  }
+                }}
                 onAuxClick={(e) => {
                   if (e.button === 1) {
                     e.preventDefault()
@@ -307,15 +345,15 @@ export function WorkbenchTabs({
                 }}
                 className={`flex items-center justify-center w-7 h-7 rounded-md cursor-pointer transition text-xs shrink-0 select-none ${
                   isActive
-                    ? 'bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] shadow-xs font-semibold border border-[var(--app-border)] ring-1 ring-blue-500/20'
+                    ? 'bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] shadow-xs font-semibold border border-[var(--app-border)] ring-1 ring-[var(--app-accent)]/30'
                     : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
                 }`}
                 title={`${meta.title} (Pestaña fijada)`}
               >
                 {tab.viewType === 'knowledge-graph' ? (
-                  <Network className="w-3.5 h-3.5 text-neutral-300" />
+                  <Network className="w-3.5 h-3.5 text-[var(--app-text-secondary)]" />
                 ) : tab.viewType === 'calendar' ? (
-                  <Calendar className="w-3.5 h-3.5 text-blue-400" />
+                  <Calendar className="w-3.5 h-3.5 text-[var(--app-accent)]" />
                 ) : meta.icon ? (
                   <span className="text-sm shrink-0 flex items-center justify-center">
                     <AppleEmoji emoji={meta.icon} size={15} />
@@ -331,6 +369,9 @@ export function WorkbenchTabs({
           return (
             <div
               key={tab.id}
+              role="tab"
+              tabIndex={0}
+              aria-selected={isActive}
               ref={(el) => {
                 if (el) tabRefs.current.set(tab.id, el)
                 else tabRefs.current.delete(tab.id)
@@ -341,6 +382,12 @@ export function WorkbenchTabs({
               onDrop={(e) => handleDrop(e, tab.id)}
               onDragEnd={handleDragEnd}
               onClick={() => onSelectTab(tab.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  onSelectTab(tab.id)
+                }
+              }}
               onAuxClick={(e) => {
                 if (e.button === 1) {
                   e.preventDefault()
@@ -356,13 +403,13 @@ export function WorkbenchTabs({
                 isDragging ? 'opacity-40 scale-[0.98]' : 'opacity-100'
               } ${
                 isOver && dragPosition === 'left'
-                  ? 'border-l-2 border-l-purple-500'
+                  ? 'border-l-2 border-l-[var(--app-accent)]'
                   : isOver && dragPosition === 'right'
-                  ? 'border-r-2 border-r-purple-500'
+                  ? 'border-r-2 border-r-[var(--app-accent)]'
                   : ''
               } ${
                 isActive
-                  ? 'bg-[var(--obsidian-editor-bg,#1e1e1e)] text-[var(--app-text-primary)] font-medium border-[var(--app-border)] shadow-xs relative top-[1px]'
+                  ? 'bg-[var(--obsidian-editor-bg)] text-[var(--app-text-primary)] font-medium border-[var(--app-border)] shadow-xs relative top-[1px]'
                   : 'border-transparent text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
               }`}
               title={meta.title}
@@ -370,9 +417,9 @@ export function WorkbenchTabs({
               {/* Tab Icon */}
               <span className="shrink-0 text-xs flex items-center justify-center">
                 {tab.viewType === 'knowledge-graph' ? (
-                  <Network className="w-3.5 h-3.5 text-neutral-400 group-hover:text-neutral-200" />
+                  <Network className="w-3.5 h-3.5 text-[var(--app-text-secondary)]" />
                 ) : tab.viewType === 'calendar' ? (
-                  <Calendar className="w-3.5 h-3.5 text-blue-400" />
+                  <Calendar className="w-3.5 h-3.5 text-[var(--app-accent)]" />
                 ) : meta.icon ? (
                   <AppleEmoji emoji={meta.icon} size={14} className="shrink-0" />
                 ) : meta.viewMode === 'canvas' ? (
@@ -385,21 +432,23 @@ export function WorkbenchTabs({
               {/* Title */}
               <span className="truncate flex-1 min-w-0 text-left">{renderWithAppleEmoji(meta.title)}</span>
 
-              {/* Close Button 'x' (Browser style: visible on active, hover on inactive) */}
+              {/* Close Button 'x' */}
               <button
+                type="button"
+                aria-label={`Cerrar pestaña ${meta.title}`}
                 onClick={(e) => {
                   e.stopPropagation()
                   onCloseTab(tab.id)
                 }}
                 className={`p-0.5 rounded hover:bg-[var(--app-hover-filled)] text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] transition shrink-0 ${
-                  isActive ? 'opacity-70 group-hover:opacity-100' : 'opacity-0 group-hover:opacity-100'
+                  isActive ? 'opacity-70 group-hover:opacity-100 group-focus-within:opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
                 }`}
                 title="Cerrar pestaña (Ctrl+W / Clic central)"
               >
                 <CloseIcon className="w-3 h-3" />
               </button>
 
-              {/* Subtle separator between inactive tabs (Google Chrome look) */}
+              {/* Subtle separator between inactive tabs */}
               {!isActive &&
                 tabs[index + 1] &&
                 tabs[index + 1].id !== activeTabId &&
@@ -412,6 +461,8 @@ export function WorkbenchTabs({
 
         {/* New Tab (+) Button */}
         <button
+          type="button"
+          aria-label="Nueva pestaña"
           onClick={onNewTab}
           className="w-6 h-6 flex items-center justify-center rounded-md text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition shrink-0 ml-0.5 cursor-pointer"
           title="Nueva pestaña (Ctrl+T)"

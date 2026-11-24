@@ -115,7 +115,7 @@ export function CommandPalette({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.97, y: -6 }}
             transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-            className="w-full max-w-xl rounded-3xl bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] shadow-2xl backdrop-blur-2xl overflow-hidden flex flex-col text-[var(--app-text-primary)] p-1.5"
+            className="w-full max-w-xl rounded-xl bg-[var(--app-bg-overlay)] border border-[var(--app-border-strong)] shadow-[var(--app-shadow-popover)] overflow-hidden flex flex-col text-[var(--app-text-primary)] p-1.5"
           >
             <Command
               label="Búsqueda global y comandos"
@@ -125,16 +125,18 @@ export function CommandPalette({
               }}
             >
               {/* Search Bar */}
-              <div className="flex items-center gap-3 px-4 py-3 border-b border-black/[0.06] dark:border-white/[0.08]">
-                <SearchIcon className="w-4 h-4 text-neutral-400 shrink-0" />
+              <div className="flex items-center gap-3 px-3.5 py-2.5 border-b border-[var(--app-divider)]">
+                <SearchIcon className="w-4 h-4 text-[var(--app-text-muted)] shrink-0" />
                 <Command.Input
                   autoFocus
                   placeholder="Escribe un comando o busca notas..."
-                  className="flex-1 text-sm bg-transparent border-none outline-none text-[var(--app-text-primary)] placeholder:text-neutral-400 font-sans"
+                  className="flex-1 text-sm bg-transparent border-none outline-none text-[var(--app-text-primary)] placeholder:text-[var(--app-text-muted)] font-sans"
                 />
                 <button
+                  type="button"
+                  aria-label="Cerrar búsqueda rápida"
                   onClick={onClose}
-                  className="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-neutral-400 hover:text-neutral-800 dark:hover:text-white transition cursor-pointer"
+                  className="p-1.5 rounded-md hover:bg-[var(--app-hover)] text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] transition cursor-pointer"
                 >
                   <CloseIcon className="w-3.5 h-3.5" />
                 </button>
@@ -178,10 +180,10 @@ export function CommandPalette({
                   >
                     <div className="flex items-center gap-2.5">
                       <AppleEmoji emoji="✨" size={16} />
-                      <span className="font-medium">Catálogo completo de Emojis de Apple (1,870)</span>
+                      <span className="font-medium">Catálogo de emojis (1,870)</span>
                     </div>
-                    <span className="text-[10px] text-blue-500 font-semibold px-2 py-0.5 rounded-full bg-blue-500/10">
-                      Copiar & Pegar
+                    <span className="text-[10px] text-[var(--app-accent)] font-semibold px-2 py-0.5 rounded-md bg-[var(--app-accent-soft)]">
+                      Copiar y pegar
                     </span>
                   </Command.Item>
 
@@ -191,14 +193,14 @@ export function CommandPalette({
                         onToggleViewMode()
                         onClose()
                       }}
-                      className="w-full flex items-center justify-between px-3 py-2 rounded-2xl text-left cursor-pointer transition text-xs text-[var(--app-text-primary)] data-[selected=true]:bg-black/[0.05] dark:data-[selected=true]:bg-white/[0.08] active:scale-[0.99]"
+                      className="w-full flex items-center justify-between px-3 py-2 rounded-md text-left cursor-pointer transition text-xs text-[var(--app-text-primary)] data-[selected=true]:bg-[var(--app-hover)] active:scale-[0.99]"
                     >
                       <div className="flex items-center gap-2.5">
-                        <EdgelessIcon className="w-4 h-4 text-blue-500" />
-                        <span className="font-medium">Alternar Documento / Lienzo</span>
+                        <EdgelessIcon className="w-4 h-4 text-[var(--app-accent)]" />
+                        <span className="font-medium">Alternar Nota / Lienzo</span>
                       </div>
-                      <span className="text-[10px] text-neutral-400 bg-black/[0.04] dark:bg-white/[0.06] px-2 py-0.5 rounded-full border border-black/[0.04] dark:border-white/[0.06]">
-                        Space
+                      <span className="text-[10px] text-[var(--app-text-muted)] bg-[var(--app-bg-tertiary)] px-2 py-0.5 rounded border border-[var(--app-border)]">
+                        Alt+S
                       </span>
                     </Command.Item>
                   )}

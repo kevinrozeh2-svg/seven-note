@@ -166,16 +166,16 @@ export const SourceNodeBadge = memo(function SourceNodeBadge({
 }) {
   if (isConnectSource) {
     return (
-      <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-40 px-2.5 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-bold tracking-wide flex items-center gap-1 shadow-lg pointer-events-none animate-bounce whitespace-nowrap">
+      <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-40 px-2.5 py-0.5 rounded-full bg-[var(--app-accent)] text-white text-[10px] font-bold tracking-wide flex items-center gap-1 shadow-md pointer-events-none whitespace-nowrap">
         <span>Origen</span>
-        <span className="text-blue-200">➔</span>
+        <span className="opacity-80">➔</span>
       </div>
     )
   }
 
   if (isConnectorActive) {
     return (
-      <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-30 px-2 py-0.2 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-[9px] font-semibold tracking-wide opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap border border-blue-500/20">
+      <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-30 px-2 py-0.5 rounded-full bg-[var(--app-accent-soft)] text-[var(--app-accent)] text-[9px] font-semibold tracking-wide opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity pointer-events-none whitespace-nowrap border border-[var(--app-accent)]/25">
         Conectar
       </div>
     )

@@ -134,7 +134,7 @@ export function getDefaultDatabaseData(initialView: NotionDatabaseViewType = 'ta
         endDate: nextWeek,
         tags: ['Release'],
         assignee: 'Marcos',
-        coverColor: 'from-purple-600 to-pink-500',
+        coverColor: 'from-slate-600 to-zinc-700',
         description: 'Publicar actualización y escribir guía de usuario.'
       }
     ]
@@ -184,11 +184,11 @@ export const NotionDatabaseView: React.FC<NotionDatabaseViewProps> = ({
   const handleAddItem = (partial?: Partial<NotionDatabaseItem>) => {
     const today = new Date().toISOString().split('T')[0]
     const gradients = [
-      'from-blue-600 to-indigo-600',
-      'from-purple-600 to-pink-600',
+      'from-stone-600 to-neutral-700',
+      'from-slate-600 to-zinc-700',
       'from-amber-500 to-orange-600',
       'from-emerald-500 to-teal-600',
-      'from-cyan-500 to-blue-600'
+      'from-sky-600 to-blue-700'
     ]
     const randomGrad = gradients[Math.floor(Math.random() * gradients.length)]
 

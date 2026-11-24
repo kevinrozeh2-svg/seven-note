@@ -2770,21 +2770,21 @@ export function Sidebar({
   return (
     <aside
       style={{ '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties}
-      className={`relative h-full w-[calc(100vw-44px)] md:w-[var(--sidebar-width)] flex flex-col bg-[var(--obsidian-sidebar-bg,#181818)] border-r border-[var(--app-border)] text-[var(--app-text-primary)] select-none shrink-0 text-xs font-sans shadow-2xl md:shadow-none ${
+      className={`relative h-full w-[calc(100vw-48px)] md:w-[var(--sidebar-width)] flex flex-col bg-[var(--obsidian-sidebar-bg)] border-r border-[var(--app-border)] text-[var(--app-text-primary)] select-none shrink-0 text-[13px] font-sans shadow-2xl md:shadow-none ${
         isResizing ? '' : 'transition-[width] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]'
       }`}
     >
-      {/* 1. Workspace Bar (Minimalist Obsidian Vault style) */}
-      <div className="px-3 pt-2 pb-1 relative">
+      {/* 1. Workspace Bar */}
+      <div className="px-3 pt-2 pb-1.5 relative">
         <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={() => setShowSpaceMenu(!showSpaceMenu)}
-            className="flex-1 min-w-0 flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-black/[0.04] dark:hover:bg-white/[0.06] cursor-pointer transition text-left group"
+            className="flex-1 min-w-0 flex items-center justify-between px-2.5 py-2 rounded-md hover:bg-[var(--app-hover)] cursor-pointer transition text-left group"
             title="Cambiar espacio de trabajo"
           >
             <div className="flex items-center gap-1.5 min-w-0 flex-1">
-              <span className="font-semibold text-neutral-800 dark:text-neutral-200 truncate text-[13px] tracking-tight">
+              <span className="font-semibold text-[var(--app-text-primary)] truncate text-sm tracking-tight">
                 {currentSpace.name}
               </span>
               {isCurrentSpacePrivate && (
@@ -2827,7 +2827,7 @@ export function Sidebar({
               }}
             />
             <div
-              className="absolute left-3 right-3 top-10 z-50 bg-[#252525] dark:bg-[#202020] text-neutral-200 border border-black/20 dark:border-white/10 rounded-lg shadow-xl p-1 animate-in fade-in zoom-in-95 duration-100 flex flex-col max-h-[calc(100vh-5rem)] overflow-y-auto custom-scrollbar"
+              className="absolute left-3 right-3 top-10 z-50 bg-[var(--app-bg-overlay)] text-[var(--app-text-primary)] border border-[var(--app-border-strong)] rounded-xl shadow-[var(--app-shadow-popover)] p-1 animate-in fade-in zoom-in-95 duration-100 flex flex-col max-h-[calc(100vh-5rem)] overflow-y-auto custom-scrollbar"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="space-y-0.5">
@@ -3247,27 +3247,29 @@ export function Sidebar({
           <>
         {/* FAVORITES */}
         <div>
-          <div
+          <button
+            type="button"
+            aria-expanded={favoritesOpen}
             onClick={() => setFavoritesOpen(!favoritesOpen)}
-            className="flex items-center justify-between px-2.5 py-1.5 pb-2 mb-1.5 border-b border-black/[0.06] dark:border-white/[0.08] text-[13px] font-semibold tracking-tight text-neutral-800 dark:text-neutral-200 hover:text-neutral-950 dark:hover:text-white cursor-pointer transition group"
+            className="w-full flex items-center justify-between px-2.5 py-1.5 pb-2 mb-1.5 border-b border-[var(--app-divider)] text-[13px] font-semibold tracking-tight text-[var(--app-text-primary)] cursor-pointer transition group"
           >
             <div className="flex items-center gap-2">
-              <Star size={15} className="text-neutral-500 dark:text-neutral-400 shrink-0" />
+              <Star size={15} className="text-[var(--app-text-secondary)] shrink-0" />
               <span>Favoritos</span>
             </div>
             <div className="flex items-center gap-1.5">
               {favorites.length > 0 && (
-                <span className="text-[10px] font-mono font-normal text-neutral-400">
+                <span className="text-[10px] font-mono font-normal text-[var(--app-text-muted)]">
                   {favorites.length}
                 </span>
               )}
               {favoritesOpen ? (
-                <CaretDown size={12} className="text-neutral-400 opacity-60 group-hover:opacity-100 transition" />
+                <CaretDown size={12} className="text-[var(--app-text-muted)] opacity-70 group-hover:opacity-100 transition" />
               ) : (
-                <CaretRight size={12} className="text-neutral-400 opacity-60 group-hover:opacity-100 transition" />
+                <CaretRight size={12} className="text-[var(--app-text-muted)] opacity-70 group-hover:opacity-100 transition" />
               )}
             </div>
-          </div>
+          </button>
 
           {favoritesOpen && (
             <div className="mt-1 space-y-0.5">
@@ -3437,16 +3439,18 @@ export function Sidebar({
                             setEmojiPickerTarget({ id: doc.id, type: 'doc', currentIcon: doc.icon })
                           }}
                         />
-                        <span className="truncate flex-1 text-[13px] select-none pointer-events-none">{renderWithAppleEmoji(doc.title || 'Untitled')}</span>
+                        <span className="truncate flex-1 text-[13px] select-none pointer-events-none">{renderWithAppleEmoji(doc.title || 'Sin título')}</span>
                         {isItemUnread(doc, 'workspace', activeMember, authUser?.id) && (
                           <NewBadge className="ml-1.5" />
                         )}
                       </div>
                       <div
-                        className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                        className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity shrink-0"
                         onMouseDown={(e) => e.stopPropagation()}
                       >
                         <button
+                          type="button"
+                          aria-label={`Opciones de ${doc.title || 'nota'}`}
                           onClick={(e) => {
                             e.stopPropagation()
                             const rect = e.currentTarget.getBoundingClientRect()
@@ -3459,7 +3463,7 @@ export function Sidebar({
                               isPrivate: true
                             })
                           }}
-                          className="p-1 rounded text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
+                          className="p-1 rounded text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] cursor-pointer"
                           title="Opciones de nota"
                         >
                           <DotsThree size={14} weight="bold" />
@@ -3752,7 +3756,7 @@ export function Sidebar({
 
           return (
         <div
-          className="fixed z-[99999] bg-[#252525] dark:bg-[#202020] border border-white/[0.08] text-[var(--app-text-primary)] rounded-xl shadow-2xl p-1 text-xs select-none w-56 max-h-[80vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-75"
+          className="fixed z-[99999] bg-[var(--app-bg-overlay)] border border-[var(--app-border-strong)] text-[var(--app-text-primary)] rounded-xl shadow-[var(--app-shadow-popover)] p-1 text-xs select-none w-56 max-h-[80vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-75"
           style={{
             left: `${Math.max(8, Math.min(activeItemMenu.x, window.innerWidth - 236))}px`,
             top: `${Math.max(8, Math.min(activeItemMenu.y, window.innerHeight - (isMoveSpaceExpanded ? 440 : 360)))}px`

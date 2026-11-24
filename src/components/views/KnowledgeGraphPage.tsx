@@ -30,6 +30,11 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { type WorkspaceItem } from '../../db'
+import {
+  buildWorkspaceIndex,
+  extractExplicitLinkedIds,
+  findUnlinkedMentionExcerpt
+} from '../../lib/bidirectionalLinks'
 
 export interface GraphNode {
   id: string
@@ -225,45 +230,28 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = ({
       if (n2) n2.degree += 1
     }
 
-    // 2. Scan content of each doc for links, wikilinks [[...]], and tags
+    // 2. Scan content of each doc using the shared bidirectional links engine
+    const workspaceIndex = buildWorkspaceIndex(activeDocs)
+
     activeDocs.forEach((doc) => {
       const content = doc.docContent || ''
+      const { linkedIds, wikilinkIds, unresolvedTitles } = extractExplicitLinkedIds(
+        content,
+        doc.id,
+        workspaceIndex
+      )
 
-      // a) Check data-note-id="..."
-      const noteIdMatches = content.matchAll(/data-note-id="([^"]+)"/g)
-      for (const m of noteIdMatches) {
-        const targetId = m[1]
+      // a) Explicit links (noteLinkCard, noteMention, #note=..., [[wikilinks]])
+      linkedIds.forEach((targetId) => {
         if (docMapById.has(targetId)) {
-          addEdge(doc.id, targetId, 'link')
+          addEdge(doc.id, targetId, wikilinkIds.has(targetId) ? 'wikilink' : 'link')
         }
-      }
+      })
 
-      // b) Check <a href="#note=...">
-      const noteHrefMatches = content.matchAll(/href="#note=([^"]+)"/g)
-      for (const m of noteHrefMatches) {
-        const targetId = m[1]
-        if (docMapById.has(targetId)) {
-          addEdge(doc.id, targetId, 'link')
-        }
-      }
-
-      // c) Check Wikilinks [[Title]] or [[Title|Alias]]
-      const wikilinkMatches = content.matchAll(/\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g)
-      for (const m of wikilinkMatches) {
-        const targetRaw = m[1].trim()
-        const targetLower = targetRaw.toLowerCase()
-
-        // Check if matching doc exists
-        let targetDoc = docMapByTitle.get(targetLower)
-        if (!targetDoc && docMapById.has(targetRaw)) {
-          targetDoc = docMapById.get(targetRaw)
-        }
-
-        if (targetDoc) {
-          addEdge(doc.id, targetDoc.id, 'wikilink')
-        } else if (settings.showUnresolved && targetRaw.length > 0) {
-          // Unresolved / ghost link (e.g. "cree un enlace")
-          const ghostId = `unresolved:${targetLower}`
+      // b) Unresolved [[wikilinks]]
+      if (settings.showUnresolved) {
+        unresolvedTitles.forEach((targetRaw) => {
+          const ghostId = `unresolved:${targetRaw.toLowerCase()}`
           if (!rawNodesMap.has(ghostId)) {
             rawNodesMap.set(ghostId, {
               id: ghostId,
@@ -274,19 +262,19 @@ export const KnowledgeGraphPage: React.FC<KnowledgeGraphPageProps> = ({
             })
           }
           addEdge(doc.id, ghostId, 'unresolved')
-        }
+        })
       }
 
-      // d) Check textual mentions of titles (length >= 3)
-      docMapByTitle.forEach((otherDoc, titleLower) => {
-        if (otherDoc.id !== doc.id && titleLower.length >= 3) {
-          if (content.toLowerCase().includes(titleLower)) {
+      // c) Whole-word plain-text mentions of other titles (no raw-HTML false positives)
+      docMapByTitle.forEach((otherDoc) => {
+        if (otherDoc.id !== doc.id && !linkedIds.has(otherDoc.id)) {
+          if (findUnlinkedMentionExcerpt(content, otherDoc.title)) {
             addEdge(doc.id, otherDoc.id, 'mention')
           }
         }
       })
 
-      // e) Tags: if enabled, create tag nodes
+      // d) Tags: if enabled, create tag nodes
       if (settings.showTags && doc.tags && doc.tags.length > 0) {
         doc.tags.forEach((tag) => {
           const tagId = `tag:${tag.toLowerCase()}`

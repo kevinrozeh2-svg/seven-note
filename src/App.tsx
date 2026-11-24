@@ -7,7 +7,6 @@ import {
   SidebarSimple,
   Columns,
   Star,
-  Info,
   DotsThree,
   Presentation,
   ShareNetwork,
@@ -18,7 +17,6 @@ import {
   DownloadSimple,
   FileHtml,
   FileCode,
-  Graph,
   PencilSimpleLine,
   LockKey,
   LockKeyOpen,
@@ -54,7 +52,7 @@ import {
   showUpdateAvailableToast
 } from './lib/pwaUpdater'
 import { FindInPage } from './components/search/FindInPage'
-import { WorkbenchTabs, type WorkbenchTab } from './components/tabs/WorkbenchTabs'
+import { type WorkbenchTab } from './components/tabs/WorkbenchTabs'
 const ExternalShareView = lazy(() => import('./components/views/ExternalShareView').then(m => ({ default: m.ExternalShareView })))
 const CalendarPage = lazy(() => import('./components/views/CalendarPage').then(m => ({ default: m.CalendarPage })))
 import { type AppTemplate } from './lib/templates'
@@ -377,7 +375,7 @@ function MainApp() {
   const [isFindInPageOpen, setIsFindInPageOpen] = useState(false)
   const [isQuickCaptureOpen, setIsQuickCaptureOpen] = useState(false)
 
-  const [activeDropdown, setActiveDropdown] = useState<'info' | 'more' | 'export' | 'readers' | null>(null)
+  const [activeDropdown, setActiveDropdown] = useState<'info' | 'more' | 'export' | 'readers' | 'privacy' | null>(null)
   const [focusMode, setFocusMode] = useState(false)
 
   // Workbench tabs state (Browser-grade tab management)
@@ -416,16 +414,11 @@ function MainApp() {
     return 'tab-initial'
   })
 
-  // History of closed tabs for Reopening (Ctrl+Shift+T)
-  const [closedTabsHistory, setClosedTabsHistory] = useState<WorkbenchTab[]>([])
-
   // Keep refs for event listeners so they don't capture stale closures
   const tabsRef = useRef(tabs)
   tabsRef.current = tabs
   const activeTabIdRef = useRef(activeTabId)
   activeTabIdRef.current = activeTabId
-  const closedTabsHistoryRef = useRef(closedTabsHistory)
-  closedTabsHistoryRef.current = closedTabsHistory
 
   // Persist tabs and active tab
   useEffect(() => {
@@ -650,50 +643,57 @@ function MainApp() {
     })
   }
 
-  const handleSelectTab = (tabId: string) => {
-    const tab = tabs.find((t) => t.id === tabId)
-    if (tab) {
-      setActiveTabId(tabId)
-      // 1. Special views (all-docs, knowledge-graph, trash, templates)
-      if (tab.viewType && tab.viewType !== 'doc') {
-        return
+  const handleDeleteWorkspaceWithUndo = async (targetWs: WorkspaceItem) => {
+    if (!canUserDeleteWorkspace(targetWs, currentMember, authUser?.id)) {
+      toast.error('Solo el autor o un administrador pueden eliminar esta nota.')
+      return
+    }
+    await db.workspaces.update(targetWs.id, {
+      isDeleted: true,
+      trashedFolder: undefined,
+      trashedWithSpaceId: undefined,
+      updatedAt: getSafeTimestamp(targetWs.updatedAt),
+      syncStatus: 'pending'
+    })
+    const children = workspaces.filter((w) => w.parentId === targetWs.id && !w.isDeleted)
+    const promotedChildIds: string[] = []
+    for (const child of children) {
+      if (canUserEditWorkspace(child, currentMember, authUser?.id)) {
+        promotedChildIds.push(child.id)
+        await db.workspaces.update(child.id, {
+          parentId: targetWs.parentId || null,
+          folder: child.folder || targetWs.folder || null,
+          updatedAt: getSafeTimestamp(child.updatedAt),
+          syncStatus: 'pending'
+        })
       }
-
-      // 2. Regular document / canvas
-      if (tab.workspaceId) {
-        const ws = workspaces.find((w) => w.id === tab.workspaceId)
-        if (ws) {
-          if (ws.spaceId && ws.spaceId !== currentSpaceId) {
-            setCurrentSpaceId(ws.spaceId)
-          }
-          setCurrentWorkspaceId(ws.id)
-          setViewMode(ws.viewMode || 'doc')
-        } else {
-          setCurrentWorkspaceId(tab.workspaceId)
+    }
+    syncEngine.scheduleSync(50)
+    toast('Nota movida a la papelera', {
+      description: targetWs.title || 'Sin título',
+      duration: 6000,
+      action: {
+        label: 'Deshacer',
+        onClick: () => {
+          void (async () => {
+            await db.workspaces.update(targetWs.id, {
+              isDeleted: false,
+              updatedAt: Date.now(),
+              syncStatus: 'pending'
+            })
+            for (const cid of promotedChildIds) {
+              await db.workspaces.update(cid, {
+                parentId: targetWs.id,
+                updatedAt: Date.now(),
+                syncStatus: 'pending'
+              })
+            }
+            syncEngine.scheduleSync(50)
+            toast.success('Nota restaurada')
+          })()
         }
       }
-    }
-  }
-
-  const handleCloseTab = (tabId: string) => {
-    const tabIndex = tabs.findIndex((t) => t.id === tabId)
-    if (tabIndex === -1) return
-    const closingTab = tabs[tabIndex]
-
-    // Save to closed tabs history (max 20)
-    setClosedTabsHistory((prev) => [closingTab, ...prev].slice(0, 20))
-
-    const remaining = tabs.filter((t) => t.id !== tabId)
-    setTabs(remaining)
-    if (remaining.length === 0) {
-      setActiveTabId('')
-      setCurrentWorkspaceId('')
-    } else {
-      if (activeTabId === tabId) {
-        const nextActive = remaining[Math.min(tabIndex, remaining.length - 1)]
-        handleSelectTab(nextActive.id)
-      }
-    }
+    })
   }
 
   const handleNewTab = async () => {
@@ -706,9 +706,9 @@ function MainApp() {
       id: newId,
       parentId: null,
       spaceId: currentSpaceId,
-      title: 'Untitled',
+      title: 'Sin título',
       icon: '',
-      color: '#1e96eb',
+      color: '#7c3aed',
       viewMode: 'doc',
       docContent: '<p></p>',
       createdAt: now,
@@ -730,79 +730,14 @@ function MainApp() {
       id: `tab-${crypto.randomUUID()}`,
       workspaceId: newId,
       viewType: 'doc',
-      title: 'Untitled',
-      icon: '📄',
+      title: 'Sin título',
+      icon: '',
       spaceId: currentSpaceId,
       pinned: false
     }
     setTabs((prev) => [...prev, newTab])
     setActiveTabId(newTab.id)
     setCurrentWorkspaceId(newId)
-  }
-
-  const handleTogglePinTab = (tabId: string) => {
-    setTabs((prev) =>
-      prev.map((t) => (t.id === tabId ? { ...t, pinned: !t.pinned } : t))
-    )
-  }
-
-  const handleDuplicateTab = (tabId: string) => {
-    const tab = tabs.find((t) => t.id === tabId)
-    if (!tab) return
-    const newTab: WorkbenchTab = {
-      ...tab,
-      id: `tab-${crypto.randomUUID()}`,
-      pinned: false
-    }
-    setTabs((prev) => [...prev, newTab])
-    setActiveTabId(newTab.id)
-  }
-
-  const handleCloseOtherTabs = (tabId: string) => {
-    const closed = tabs.filter((t) => t.id !== tabId && !t.pinned)
-    if (closed.length > 0) {
-      setClosedTabsHistory((prev) => [...closed, ...prev].slice(0, 20))
-    }
-    setTabs((prev) => prev.filter((t) => t.id === tabId || t.pinned))
-    setActiveTabId(tabId)
-  }
-
-  const handleCloseTabsToRight = (tabId: string) => {
-    const tabIndex = tabs.findIndex((t) => t.id === tabId)
-    if (tabIndex === -1) return
-    const kept = tabs.filter((t, i) => i <= tabIndex || t.pinned)
-    const closed = tabs.filter((t, i) => i > tabIndex && !t.pinned)
-    if (closed.length > 0) {
-      setClosedTabsHistory((prev) => [...closed, ...prev].slice(0, 20))
-    }
-    setTabs(kept)
-    if (!kept.some((t) => t.id === activeTabId)) {
-      handleSelectTab(tabId)
-    }
-  }
-
-  const handleReopenClosedTab = () => {
-    if (closedTabsHistory.length === 0) return
-    const [tabToReopen, ...rest] = closedTabsHistory
-    setClosedTabsHistory(rest)
-    setTabs((prev) => {
-      if (prev.some((t) => t.id === tabToReopen.id || (tabToReopen.workspaceId && t.workspaceId === tabToReopen.workspaceId))) {
-        return prev
-      }
-      return [...prev, tabToReopen]
-    })
-    handleSelectTab(tabToReopen.id)
-    toast.info(`Pestaña "${tabToReopen.title || 'Documento'}" reabierta`)
-  }
-
-  const handleReorderTabs = (fromIndex: number, toIndex: number) => {
-    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return
-    setTabs((prev) => {
-      const next = [...prev]
-      const [moved] = next.splice(fromIndex, 1)
-      next.splice(toIndex, 0, moved)
-      return next
-    })
   }
 
   const [copiedLink, setCopiedLink] = useState(false)
@@ -1619,7 +1554,7 @@ function MainApp() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-              className="fixed inset-y-0 left-11 right-0 bg-black/50 backdrop-blur-xs z-40 md:hidden"
+              className="fixed inset-y-0 left-12 right-0 bg-black/50 backdrop-blur-xs z-40 md:hidden"
               onClick={() => setSidebarOpen(false)}
             />
             <motion.div
@@ -1628,7 +1563,7 @@ function MainApp() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -16 }}
               transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-              className="fixed inset-y-0 left-11 md:left-0 z-50 md:relative md:z-auto h-full w-[calc(100vw-44px)] md:w-auto flex shrink-0"
+              className="fixed inset-y-0 left-12 md:left-0 z-50 md:relative md:z-auto h-full w-[calc(100vw-48px)] md:w-auto flex shrink-0"
             >
               <Sidebar
                 spaces={visibleSpaces}
@@ -1672,134 +1607,157 @@ function MainApp() {
 
       {/* 2. Main Content Center Column */}
       <div className="flex-1 flex flex-col h-full min-w-0 overflow-hidden bg-transparent">
-        {/* Top Workbench Tabs Header */}
-        {!isPresentationMode && !focusMode && (
-          <WorkbenchTabs
-            tabs={tabs}
-            activeTabId={activeTabId}
-            workspaces={activeWorkspaces}
-            onSelectTab={handleSelectTab}
-            onCloseTab={handleCloseTab}
-            onNewTab={handleNewTab}
-            onTogglePinTab={handleTogglePinTab}
-            onDuplicateTab={handleDuplicateTab}
-            onCloseOtherTabs={handleCloseOtherTabs}
-            onCloseTabsToRight={handleCloseTabsToRight}
-            onReopenClosedTab={handleReopenClosedTab}
-            onReorderTabs={handleReorderTabs}
-            onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
-            sidebarOpen={sidebarOpen}
-          />
-        )}
-
         {/* Main Document / Canvas / Full Page Views */}
         <main className="flex-1 relative flex flex-col overflow-hidden">
           <AppErrorBoundary
             resetKey={`${activeTab?.id || ''}:${currentWorkspace?.id || ''}:${currentWorkspace?.coverUrl || ''}`}
           >
-          {/* Secondary Header for Document/Split Mode: Obsidian Minimalist Stealth Header */}
+          {/* Secondary Header for Document/Split Mode */}
           {!isPresentationMode && !focusMode && (!activeTab || !activeTab.viewType || activeTab.viewType === 'doc') && currentWorkspace && (
-            <header className={`h-8 sm:h-9 px-2 sm:px-3 flex items-center justify-between select-none text-xs transition-colors duration-150 ${
+            <header className={`h-12 px-3 sm:px-4 flex items-center justify-between select-none text-xs transition-colors duration-150 ${
               activeViewMode === 'canvas'
                 ? 'absolute top-0 left-0 right-0 z-20 pointer-events-none bg-transparent border-none'
-                : 'relative border-b border-[var(--app-border)] bg-[var(--obsidian-editor-bg,#1e1e1e)] shrink-0 z-15'
+                : 'relative border-b border-[var(--app-border)] bg-[var(--obsidian-editor-bg)] shrink-0 z-15'
             }`}>
-              {/* Left section: Mode Switcher, Favorite, Privacy */}
-              <div className="flex items-center gap-1 min-w-0 pointer-events-auto">
+              {/* Left section: Mode Switcher, Favorite, Privacy, Readers */}
+              <div className="flex items-center gap-1.5 min-w-0 pointer-events-auto">
               {/* Mode Switcher */}
-              <div className="inline-flex items-center bg-black/5 dark:bg-white/5 p-0.5 rounded-md border border-[var(--app-border)]">
+              <div className="inline-flex items-center bg-[var(--app-bg-secondary)] p-0.5 rounded-lg border border-[var(--app-border)]">
                 <button
+                  type="button"
                   onClick={() => setViewMode('doc')}
-                  className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] transition cursor-pointer ${
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition cursor-pointer ${
                     activeViewMode === 'doc'
-                      ? 'bg-white dark:bg-[#2c2c2c] text-[var(--app-text-primary)] font-medium shadow-xs'
+                      ? 'bg-[var(--app-bg-overlay)] text-[var(--app-text-primary)] font-medium shadow-xs'
                       : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)]'
                   }`}
-                  title="Modo Documento (Alt+S)"
+                  title="Modo Nota (Alt+S)"
                 >
-                  <FileText size={13} />
+                  <FileText size={15} />
                   <span className="hidden sm:inline">Nota</span>
                 </button>
                 <button
+                  type="button"
                   onClick={() => setViewMode('canvas')}
-                  className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] transition cursor-pointer ${
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition cursor-pointer ${
                     activeViewMode === 'canvas'
-                      ? 'bg-white dark:bg-[#2c2c2c] text-[var(--app-text-primary)] font-medium shadow-xs'
+                      ? 'bg-[var(--app-bg-overlay)] text-[var(--app-text-primary)] font-medium shadow-xs'
                       : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)]'
                   }`}
-                  title="Modo Lienzo / Canvas"
+                  title="Modo Lienzo (Alt+S)"
                 >
-                  <Kanban size={13} />
+                  <Kanban size={15} />
                   <span className="hidden sm:inline">Lienzo</span>
                 </button>
               </div>
 
               {/* Star Favorite Button */}
               <button
+                type="button"
                 onClick={handleToggleFavorite}
-                className={`w-6 h-6 rounded flex items-center justify-center transition cursor-pointer ${
+                aria-label={currentWorkspace?.isFavorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
+                aria-pressed={!!currentWorkspace?.isFavorite}
+                className={`w-8 h-8 rounded-md flex items-center justify-center transition cursor-pointer ${
                   currentWorkspace?.isFavorite
                     ? 'text-amber-400 hover:text-amber-300'
-                    : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5'
+                    : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
                 }`}
                 title={currentWorkspace?.isFavorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
               >
                 {currentWorkspace?.isFavorite ? (
-                  <Star size={14} weight="fill" />
+                  <Star size={17} weight="fill" />
                 ) : (
-                  <Star size={14} />
+                  <Star size={17} />
                 )}
               </button>
 
               {/* Read Only Indicator for Layer 2 & Layer 3 */}
               {isCurrentWorkspaceReadOnly && (
                 <div
-                  className="h-6 px-2 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-500 flex items-center gap-1 text-[11px] font-medium select-none"
+                  className="h-8 px-2.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-amber-500 flex items-center gap-1.5 text-xs font-medium select-none"
                   title={`Solo lectura: Creado por ${currentWorkspace?.ownerName || currentWorkspace?.createdBy || 'otro miembro'}`}
                 >
-                  <LockKey size={12} weight="fill" />
+                  <LockKey size={14} weight="fill" />
                   <span className="hidden sm:inline">Solo lectura</span>
                 </div>
               )}
 
-              {/* Privacy Selector Button (Pública / Privada) */}
-              <button
-                onClick={handleTogglePrivacy}
-                disabled={!canEditCurrentPrivacy}
-                className={`h-6 px-2 rounded flex items-center gap-1 text-[11px] font-normal transition select-none ${
-                  !canEditCurrentPrivacy ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
-                } ${
-                  currentWorkspace?.isPrivate
-                    ? 'text-amber-400 hover:bg-amber-400/10'
-                    : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5'
-                }`}
-                title={
-                  !canEditCurrentPrivacy
-                    ? `Privacidad gestionada por el autor original (${currentWorkspace?.ownerName || currentWorkspace?.createdBy || 'propietario'})`
-                    : currentWorkspace?.isPrivate
-                    ? 'Nota privada (solo tú). Clic para cambiar a pública para el equipo'
-                    : 'Nota pública (visible para todo el equipo). Clic para hacerla privada'
-                }
-              >
-                {currentWorkspace?.isPrivate ? (
-                  <LockKey size={13} weight="fill" className="text-amber-400 shrink-0" />
-                ) : (
-                  <LockKeyOpen size={13} className="shrink-0" />
-                )}
-                <span className="hidden sm:inline">
-                  {currentWorkspace?.isPrivate ? 'Privada' : 'Pública'}
-                </span>
-              </button>
+              {/* Privacy Selector Button (Canonical location with 2-step confirmation for Privada -> Pública) */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (!canEditCurrentPrivacy) return
+                    if (currentWorkspace?.isPrivate) {
+                      setActiveDropdown(activeDropdown === 'privacy' ? null : 'privacy')
+                    } else {
+                      void handleTogglePrivacy()
+                    }
+                  }}
+                  disabled={!canEditCurrentPrivacy}
+                  aria-label={currentWorkspace?.isPrivate ? 'Nota privada, cambiar visibilidad' : 'Nota pública, hacer privada'}
+                  aria-expanded={activeDropdown === 'privacy'}
+                  className={`h-8 px-2.5 rounded-md flex items-center gap-1.5 text-xs font-medium transition select-none ${
+                    !canEditCurrentPrivacy ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
+                  } ${
+                    currentWorkspace?.isPrivate
+                      ? 'text-amber-400 hover:bg-amber-400/10'
+                      : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
+                  }`}
+                  title={
+                    !canEditCurrentPrivacy
+                      ? `Privacidad gestionada por el autor original (${currentWorkspace?.ownerName || currentWorkspace?.createdBy || 'propietario'})`
+                      : currentWorkspace?.isPrivate
+                      ? 'Nota privada (solo tú). Pulsa para compartir con el equipo'
+                      : 'Nota pública (visible para todo el equipo). Pulsa para hacerla privada'
+                  }
+                >
+                  {currentWorkspace?.isPrivate ? (
+                    <LockKey size={15} weight="fill" className="text-amber-400 shrink-0" />
+                  ) : (
+                    <LockKeyOpen size={15} className="shrink-0" />
+                  )}
+                  <span className="hidden sm:inline">
+                    {currentWorkspace?.isPrivate ? 'Privada' : 'Pública'}
+                  </span>
+                </button>
 
-              {/* Quick Scratchpad / Captura Rápida (Alt + N) */}
-              <button
-                onClick={() => setIsQuickCaptureOpen(true)}
-                className="h-6 px-2 rounded text-[11px] text-[var(--app-text-muted)] hover:text-amber-400 hover:bg-amber-400/10 flex items-center gap-1 transition cursor-pointer"
-                title="Captura Rápida (Alt + N)"
-              >
-                <Sparkle size={13} />
-                <span className="hidden md:inline">Rápida</span>
-              </button>
+                {activeDropdown === 'privacy' && currentWorkspace?.isPrivate && (
+                  <div
+                    role="dialog"
+                    aria-label="Confirmar cambio a nota pública"
+                    onClick={(e) => e.stopPropagation()}
+                    className="fixed right-3 top-14 sm:absolute sm:left-0 sm:right-auto sm:top-10 z-50 w-64 bg-[var(--app-bg-overlay)] border border-[var(--app-border-strong)] rounded-xl shadow-[var(--app-shadow-popover)] p-3 text-xs text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 duration-100"
+                  >
+                    <p className="font-semibold text-[var(--app-text-primary)] mb-1">
+                      ¿Hacer pública esta nota?
+                    </p>
+                    <p className="text-[11px] text-[var(--app-text-secondary)] leading-relaxed mb-3">
+                      Pasará a ser visible para todos los miembros del equipo en este espacio.
+                    </p>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setActiveDropdown(null)}
+                        className="px-2.5 py-1 rounded-md text-[11px] font-medium text-[var(--app-text-secondary)] hover:bg-[var(--app-hover)] transition cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void handleTogglePrivacy()
+                          setActiveDropdown(null)
+                        }}
+                        className="px-2.5 py-1 rounded-md text-[11px] font-semibold bg-[var(--app-accent)] hover:bg-[var(--app-accent-hover)] text-white transition cursor-pointer"
+                      >
+                        Hacer pública
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {/* Admin-only Read Receipts: "Leído por X persona" */}
               {isUserAdmin(currentMember) && currentWorkspace && (
@@ -1814,387 +1772,41 @@ function MainApp() {
                 />
               )}
 
-              {/* Info Button ⓘ */}
-              <div className="relative hidden sm:block">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setActiveDropdown(activeDropdown === 'info' ? null : 'info')
-                  }}
-                  className={`w-6 h-6 rounded flex items-center justify-center transition cursor-pointer ${
-                    activeDropdown === 'info'
-                      ? 'bg-white/10 text-[var(--app-text-primary)]'
-                      : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5'
+              {/* Ambient Sync Status Indicator */}
+              <button
+                type="button"
+                onClick={() => void syncEngine.triggerSync()}
+                aria-label={
+                  syncStatus.state === 'syncing'
+                    ? 'Sincronizando cambios'
+                    : syncStatus.state === 'error'
+                    ? 'Error de sincronización, pulsar para reintentar'
+                    : syncStatus.state === 'offline'
+                    ? 'Sin conexión, guardado localmente'
+                    : 'Cambios guardados y sincronizados'
+                }
+                className="hidden lg:inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md text-xs text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition cursor-pointer"
+                title="Estado de sincronización (pulsa para sincronizar)"
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    syncStatus.state === 'syncing'
+                      ? 'bg-[var(--app-accent)] animate-pulse'
+                      : syncStatus.state === 'error' || syncStatus.state === 'offline'
+                      ? 'bg-amber-400'
+                      : 'bg-emerald-500/80'
                   }`}
-                  title="Información de la nota"
-                >
-                  <Info size={14} />
-                </button>
-
-                {activeDropdown === 'info' && (
-                  <div
-                    className="fixed right-3 top-12 sm:absolute sm:left-0 sm:right-auto sm:top-10 z-50 w-[calc(100vw-24px)] max-w-[270px] sm:w-72 sm:max-w-none bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] rounded-2xl sm:rounded-3xl shadow-2xl backdrop-blur-2xl p-2.5 sm:p-4 text-[11px] sm:text-xs text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 duration-100 max-h-[calc(100vh-64px)] overflow-y-auto custom-scrollbar"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="font-bold pb-1.5 sm:pb-2.5 border-b border-black/[0.06] dark:border-white/[0.08] mb-1.5 sm:mb-2.5 flex items-center justify-between">
-                      <span className="text-[11px] sm:text-xs font-semibold">Estadísticas de la página</span>
-                      <span className="text-[9px] sm:text-[10px] text-neutral-400 uppercase font-mono px-1.5 sm:px-2 py-0.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06]">Info</span>
-                    </div>
-                    <div className="space-y-1 sm:space-y-2 text-[11px] sm:text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-neutral-500">Palabras:</span>
-                        <span className="font-mono font-semibold">{stats.words}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-neutral-500">Caracteres:</span>
-                        <span className="font-mono font-semibold">{stats.chars}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-neutral-500">Tiempo de lectura:</span>
-                        <span className="font-mono font-semibold">~{stats.time} min</span>
-                      </div>
-                      <div className="flex justify-between pt-1.5 sm:pt-2 border-t border-black/[0.06] dark:border-white/[0.08]">
-                        <span className="text-neutral-500">Modo:</span>
-                        <span className="capitalize font-semibold text-blue-500">{currentWorkspace?.viewMode}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* More options menu `...` */}
-              <div className="relative">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setActiveDropdown(activeDropdown === 'more' ? null : 'more')
-                  }}
-                  className={`w-6 h-6 rounded flex items-center justify-center transition cursor-pointer ${
-                    activeDropdown === 'more'
-                      ? 'bg-white/10 text-[var(--app-text-primary)]'
-                      : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5'
-                  }`}
-                  title="Más acciones de la nota"
-                >
-                  <DotsThree size={16} weight="bold" />
-                </button>
-
-                {activeDropdown === 'more' && (
-                  <div
-                    className="fixed right-3 top-12 sm:absolute sm:left-0 sm:right-auto sm:top-10 z-50 w-[calc(100vw-24px)] max-w-[260px] sm:w-64 sm:max-w-none bg-white/95 dark:bg-[#1a1b1e]/95 border border-black/[0.08] dark:border-white/[0.1] rounded-2xl sm:rounded-3xl shadow-2xl backdrop-blur-2xl p-1.5 sm:p-2.5 text-[11px] sm:text-xs text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 duration-100 space-y-0.5 max-h-[calc(100vh-64px)] overflow-y-auto custom-scrollbar"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <button
-                      onClick={() => {
-                        setViewMode('doc')
-                        setActiveDropdown(null)
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
-                    >
-                      <FileText size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
-                      <span>Modo Página</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setViewMode('canvas')
-                        setActiveDropdown(null)
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
-                    >
-                      <Kanban size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
-                      <span>Modo Tablero (Milanote)</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setViewMode(activeViewMode === 'split' ? 'doc' : 'split')
-                        setActiveDropdown(null)
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
-                    >
-                      <Columns size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
-                      <span>{activeViewMode === 'split' ? 'Cerrar vista dividida' : 'Vista dividida'}</span>
-                    </button>
-
-                    {(activeViewMode === 'doc' || activeViewMode === 'split') && (
-                      <button
-                        onClick={() => {
-                          setRightSidebarOpen((prev) => !prev)
-                          setActiveDropdown(null)
-                        }}
-                        className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
-                      >
-                        <SidebarSimple size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
-                        <span>{rightSidebarOpen ? 'Ocultar Propiedades y Esquema' : 'Propiedades y Esquema (TOC)'}</span>
-                      </button>
-                    )}
-
-                    {/* Toggle Ancho completo (Notion Full Width Style) */}
-                    <button
-                      onClick={async () => {
-                        if (!currentWorkspace) return
-                        const isCurrentFull = (currentWorkspace.pageWidth || 'full') === 'full'
-                        const nextWidth = isCurrentFull ? 'standard' : 'full'
-                        await db.workspaces.update(currentWorkspace.id, {
-                          pageWidth: nextWidth,
-                          updatedAt: Date.now(),
-                          syncStatus: 'pending'
-                        })
-                        syncEngine.scheduleSync(500)
-                        toast.success(nextWidth === 'full' ? 'Ancho completo activado' : 'Ancho estándar activado')
-                        setActiveDropdown(null)
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center justify-between text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
-                    >
-                      <div className="flex items-center gap-2 sm:gap-2.5 truncate">
-                        <ArrowsOutLineHorizontal size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
-                        <span className="truncate">Ancho completo</span>
-                      </div>
-                      <div
-                        className={`w-7 h-4 rounded-full transition-colors p-0.5 flex items-center ${
-                          (currentWorkspace?.pageWidth || 'full') === 'full'
-                            ? 'bg-blue-600 justify-end'
-                            : 'bg-neutral-300 dark:bg-neutral-700 justify-start'
-                        }`}
-                      >
-                        <div className="w-3 h-3 rounded-full bg-white shadow-xs" />
-                      </div>
-                    </button>
-
-                    <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-0.5 sm:my-1" />
-
-                    <button
-                      onClick={() => {
-                        handleTogglePrivacy()
-                        setActiveDropdown(null)
-                      }}
-                      className={`w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl flex items-center justify-between text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer ${
-                        currentWorkspace?.isPrivate
-                          ? 'hover:bg-amber-500/10 text-amber-700 dark:text-amber-300'
-                          : 'hover:bg-blue-500/10 text-blue-600 dark:text-blue-400'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 sm:gap-2.5 truncate">
-                        {currentWorkspace?.isPrivate ? (
-                          <LockKey size={15} weight="fill" className="shrink-0 text-amber-600 dark:text-amber-400" />
-                        ) : (
-                          <LockKeyOpen size={15} weight="duotone" className="shrink-0 text-blue-600 dark:text-blue-400" />
-                        )}
-                        <span className="truncate">
-                          {currentWorkspace?.isPrivate ? 'Nota Privada (Hacer Pública)' : 'Nota Pública (Hacer Privada)'}
-                        </span>
-                      </div>
-                      <span className={`text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-semibold shrink-0 ${
-                        currentWorkspace?.isPrivate
-                          ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300'
-                          : 'bg-blue-500/15 text-blue-600 dark:text-blue-400'
-                      }`}>
-                        {currentWorkspace?.isPrivate ? 'Privada' : 'Pública'}
-                      </span>
-                    </button>
-
-                    <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-0.5 sm:my-1" />
-
-                    <button
-                      onClick={() => {
-                        openSpecialViewTab('knowledge-graph', 'Vista gráfica')
-                        setActiveDropdown(null)
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center justify-between text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
-                    >
-                      <div className="flex items-center gap-2 sm:gap-2.5 truncate">
-                        <Graph size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
-                        <span className="truncate">Grafo Global</span>
-                      </div>
-                      <span className="text-[9px] sm:text-[10px] text-neutral-500 font-mono px-1.5 sm:px-2 py-0.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06] shrink-0">Obsidian</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setIsFindInPageOpen(true)
-                        setActiveDropdown(null)
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center justify-between text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
-                    >
-                      <div className="flex items-center gap-2 sm:gap-2.5 truncate">
-                        <MagnifyingGlass size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
-                        <span className="truncate">Buscar en página</span>
-                      </div>
-                      <kbd className="text-[9px] sm:text-[10px] bg-black/[0.04] dark:bg-white/[0.06] px-1.5 sm:px-2 py-0.5 rounded-full text-neutral-400 border border-black/[0.04] dark:border-white/[0.06] shrink-0">
-                        Ctrl F
-                      </kbd>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        const targetId = currentWorkspace?.id || currentWorkspaceId
-                        const noteUrl = targetId
-                          ? `${window.location.origin}/#note=${encodeURIComponent(targetId)}`
-                          : window.location.href
-                        navigator.clipboard.writeText(noteUrl)
-                        setCopiedLink(true)
-                        toast.success('Enlace copiado al portapapeles')
-                        setTimeout(() => setCopiedLink(false), 2000)
-                        setActiveDropdown(null)
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
-                    >
-                      <Copy size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
-                      <span className="truncate">{copiedLink ? '¡Enlace copiado!' : 'Copiar enlace a nota'}</span>
-                    </button>
-
-                    <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-0.5 sm:my-1" />
-
-                    {/* Export suite */}
-                    <div className="px-2.5 py-0.5 sm:px-3 sm:py-1 text-[9px] sm:text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
-                      Exportar
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        if (currentWorkspace) exportDocumentAsMarkdown(currentWorkspace)
-                        setActiveDropdown(null)
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
-                    >
-                      <DownloadSimple size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
-                      <span className="truncate">Exportar como Markdown (.md)</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        if (currentWorkspace) exportDocumentAsHtml(currentWorkspace)
-                        setActiveDropdown(null)
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
-                    >
-                      <FileHtml size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
-                      <span className="truncate">Exportar como HTML (.html)</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        printDocument()
-                        setActiveDropdown(null)
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
-                    >
-                      <Printer size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
-                      <span className="truncate">Imprimir / Guardar como PDF</span>
-                    </button>
-
-                    <button
-                      onClick={async () => {
-                        if (currentWorkspace) {
-                          const nodes = await db.canvasNodes.where('workspaceId').equals(currentWorkspace.id).and((n) => !n.isDeleted).toArray()
-                          exportDocumentAsJson(currentWorkspace, nodes)
-                        }
-                        setActiveDropdown(null)
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
-                    >
-                      <FileCode size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
-                      <span className="truncate">Exportar copia JSON (.json)</span>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        if (currentWorkspace) copyAsPlainText(currentWorkspace.docContent)
-                        setActiveDropdown(null)
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
-                    >
-                      <Copy size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
-                      <span className="truncate">Copiar como texto plano</span>
-                    </button>
-
-                    <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-0.5 sm:my-1" />
-
-                    {/* Quick Scale controls in More Menu */}
-                    <div className="px-2.5 py-0.5 sm:px-3 sm:py-1 text-[9px] sm:text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
-                      Escala de interfaz: {uiScale}%
-                    </div>
-                    <div className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2 pb-0.5 sm:pb-1">
-                      <button
-                        onClick={() => handleStepUiScale(-1)}
-                        className="flex-1 py-1 px-1.5 sm:px-2 rounded-full bg-black/[0.04] dark:bg-white/[0.06] hover:bg-black/[0.08] dark:hover:bg-white/[0.12] text-[10px] sm:text-xs font-semibold text-center transition cursor-pointer active:scale-95"
-                      >
-                        - Reducir
-                      </button>
-                      <button
-                        onClick={() => {
-                          setUiScale('100')
-                          toast.info('Escala restablecida al 100%')
-                        }}
-                        className="py-1 px-2 sm:px-2.5 rounded-full bg-black/[0.04] dark:bg-white/[0.06] hover:bg-black/[0.08] dark:hover:bg-white/[0.12] text-[10px] sm:text-xs font-mono font-semibold transition cursor-pointer active:scale-95"
-                      >
-                        100%
-                      </button>
-                      <button
-                        onClick={() => handleStepUiScale(1)}
-                        className="flex-1 py-1 px-1.5 sm:px-2 rounded-full bg-black/[0.04] dark:bg-white/[0.06] hover:bg-black/[0.08] dark:hover:bg-white/[0.12] text-[10px] sm:text-xs font-semibold text-center transition cursor-pointer active:scale-95"
-                      >
-                        + Aumentar
-                      </button>
-                    </div>
-
-                    <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-0.5 sm:my-1" />
-
-                    <button
-                      onClick={() => {
-                        setIsShortcutsOpen(true)
-                        setActiveDropdown(null)
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center justify-between text-[11px] sm:text-xs font-medium transition active:scale-[0.98] cursor-pointer"
-                    >
-                      <div className="flex items-center gap-2 sm:gap-2.5 truncate">
-                        <Keyboard size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
-                        <span className="truncate">Atajos de teclado</span>
-                      </div>
-                      <kbd className="text-[9px] sm:text-[10px] bg-black/[0.04] dark:bg-white/[0.06] px-1.5 sm:px-2 py-0.5 rounded-full text-neutral-400 border border-black/[0.04] dark:border-white/[0.06] shrink-0">?</kbd>
-                    </button>
-
-                    <div className="border-t border-black/[0.06] dark:border-white/[0.08] my-0.5 sm:my-1" />
-
-                    <button
-                      onClick={async () => {
-                        if (currentWorkspace) {
-                          if (!canUserDeleteWorkspace(currentWorkspace, currentMember, authUser?.id)) {
-                            toast.error('Solo el autor o un administrador pueden eliminar esta nota.')
-                            setActiveDropdown(null)
-                            return
-                          }
-                          await db.workspaces.update(currentWorkspace.id, {
-                            isDeleted: true,
-                            trashedFolder: undefined,
-                            trashedWithSpaceId: undefined,
-                            updatedAt: getSafeTimestamp(currentWorkspace.updatedAt),
-                            syncStatus: 'pending'
-                          })
-                          const children = workspaces.filter((w) => w.parentId === currentWorkspace.id && !w.isDeleted)
-                          for (const child of children) {
-                            if (canUserEditWorkspace(child, currentMember, authUser?.id)) {
-                              await db.workspaces.update(child.id, {
-                                parentId: currentWorkspace.parentId || null,
-                                folder: child.folder || currentWorkspace.folder || null,
-                                updatedAt: getSafeTimestamp(child.updatedAt),
-                                syncStatus: 'pending'
-                              })
-                            }
-                          }
-                          syncEngine.scheduleSync(50)
-                        }
-                        setActiveDropdown(null)
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-rose-500/10 text-rose-500 flex items-center gap-2 sm:gap-2.5 text-[11px] sm:text-xs font-semibold transition active:scale-[0.98] cursor-pointer"
-                    >
-                      <Trash size={15} weight="duotone" className="shrink-0 text-rose-500" />
-                      <span className="truncate">Eliminar página</span>
-                    </button>
-                  </div>
-                )}
-              </div>
+                />
+                <span>
+                  {syncStatus.state === 'syncing'
+                    ? 'Sincronizando…'
+                    : syncStatus.state === 'error'
+                    ? 'Reintentar sync'
+                    : syncStatus.state === 'offline'
+                    ? 'Sin conexión'
+                    : 'Guardado'}
+                </span>
+              </button>
             </div>
 
             {/* Center: Board Title (touch/click to rename) */}
@@ -2211,121 +1823,121 @@ function MainApp() {
                       if (e.key === 'Escape') setIsEditingBoardTitle(false)
                     }}
                     autoFocus
-                    placeholder="Título del tablero..."
-                    className="font-serif font-bold text-base md:text-lg text-center text-neutral-900 dark:text-neutral-100 bg-white dark:bg-[#28292d] px-4 py-1 rounded-full border border-black/15 dark:border-white/20 shadow-md outline-none min-w-[220px] max-w-full focus:ring-2 focus:ring-blue-500/50"
+                    placeholder="Título del lienzo..."
+                    className="font-serif font-bold text-base md:text-lg text-center text-[var(--app-text-primary)] bg-[var(--app-bg-overlay)] px-4 py-1 rounded-lg border border-[var(--app-border-strong)] shadow-md outline-none min-w-[220px] max-w-full focus:border-[var(--app-accent)]"
                   />
                 ) : (
                   <button
+                    type="button"
                     onClick={startEditingBoardTitle}
-                    className="group flex items-center gap-2 px-3 py-1 rounded-xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] transition cursor-pointer select-none tracking-tight text-center active:scale-95"
-                    title="Toca para cambiar el nombre del tablero"
+                    className="group flex items-center gap-2 px-3 py-1 rounded-lg hover:bg-[var(--app-hover)] transition cursor-pointer select-none tracking-tight text-center active:scale-95"
+                    title="Toca para cambiar el nombre del lienzo"
                   >
-                    <span className="font-serif font-bold text-base md:text-lg text-neutral-800 dark:text-neutral-100 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition truncate max-w-[250px] md:max-w-[420px]">
+                    <span className="font-serif font-bold text-base md:text-lg text-[var(--app-text-primary)] group-hover:text-[var(--app-accent)] transition truncate max-w-[250px] md:max-w-[420px]">
                       {currentWorkspace?.title || 'Sin título'}
                     </span>
-                    <PencilSimpleLine size={15} weight="duotone" className="text-neutral-400 group-hover:text-blue-500 opacity-0 group-hover:opacity-100 transition shrink-0" />
+                    <PencilSimpleLine size={15} weight="duotone" className="text-[var(--app-text-muted)] group-hover:text-[var(--app-accent)] opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition shrink-0" />
                   </button>
                 )}
               </div>
             )}
 
-            {/* Right section: Actualizar, Modo Focus, Presentation, Propiedades, Exportar, Compartir */}
-            <div className="flex items-center gap-1 shrink-0 pointer-events-auto">
+            {/* Right section: Actualizar, Propiedades, Exportar, Compartir, Más acciones */}
+            <div className="flex items-center gap-1.5 shrink-0 pointer-events-auto">
               {webUpdateAvailable && (
                 <button
+                  type="button"
                   onClick={() => applyWebUpdate()}
-                  className="h-6 px-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-medium flex items-center gap-1 transition cursor-pointer shadow-xs"
+                  className="h-8 px-3 rounded-md bg-[var(--app-accent)] hover:bg-[var(--app-accent-hover)] text-white text-xs font-medium flex items-center gap-1.5 transition cursor-pointer shadow-xs"
                   title="Hay una nueva versión disponible. Haz clic para actualizar la página."
                 >
-                  <Sparkle size={12} weight="fill" />
+                  <Sparkle size={14} weight="fill" />
                   <span>Actualizar</span>
                 </button>
               )}
 
               {(activeViewMode === 'doc' || activeViewMode === 'split') && (
                 <button
+                  type="button"
                   onClick={() => setRightSidebarOpen((prev) => !prev)}
-                  className={`w-6 h-6 rounded flex items-center justify-center transition cursor-pointer ${
+                  aria-label={rightSidebarOpen ? 'Ocultar propiedades y esquema' : 'Mostrar propiedades y esquema'}
+                  aria-pressed={rightSidebarOpen}
+                  className={`w-8 h-8 rounded-md flex items-center justify-center transition cursor-pointer ${
                     rightSidebarOpen
-                      ? 'bg-[var(--app-hover)] text-[var(--app-text-primary)]'
-                      : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
+                      ? 'bg-[var(--app-active)] text-[var(--app-text-primary)]'
+                      : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
                   }`}
                   title="Propiedades y Esquema (Ctrl+Shift+\)"
                 >
-                  <SidebarSimple size={14} weight={rightSidebarOpen ? 'fill' : 'regular'} />
+                  <SidebarSimple size={17} weight={rightSidebarOpen ? 'fill' : 'regular'} />
                 </button>
               )}
 
-              {/* Focus mode toggle */}
-              <button
-                onClick={() => setFocusMode(true)}
-                className="w-6 h-6 rounded flex items-center justify-center text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition cursor-pointer"
-                title="Modo Concentración Zen (Ctrl+Shift+F)"
-              >
-                <ArrowsOutLineHorizontal size={14} />
-              </button>
-
-              {/* Presentation Icon */}
-              <button
-                onClick={() => setIsPresentationMode(true)}
-                className="w-6 h-6 rounded flex items-center justify-center text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5 transition cursor-pointer"
-                title="Modo Presentación (F5)"
-              >
-                <Presentation size={14} />
-              </button>
-
-              {/* Exportar ⌵ Dropdown */}
+              {/* Exportar Dropdown (Single canonical export entry) */}
               <div className="relative">
                 <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation()
                     setActiveDropdown(activeDropdown === 'export' ? null : 'export')
                   }}
-                  className={`h-6 px-2 rounded flex items-center gap-1 text-[11px] text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5 transition cursor-pointer select-none ${
-                    activeDropdown === 'export' ? 'bg-white/10 text-[var(--app-text-primary)]' : ''
+                  aria-label="Exportar nota"
+                  aria-haspopup="menu"
+                  aria-expanded={activeDropdown === 'export'}
+                  className={`h-8 px-2.5 rounded-md flex items-center gap-1.5 text-xs font-medium text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition cursor-pointer select-none ${
+                    activeDropdown === 'export' ? 'bg-[var(--app-active)] text-[var(--app-text-primary)]' : ''
                   }`}
-                  title="Exportar documento o tablero"
+                  title="Exportar nota o lienzo"
                 >
-                  <DownloadSimple size={13} />
+                  <DownloadSimple size={15} />
                   <span className="hidden sm:inline">Exportar</span>
                 </button>
 
                 {activeDropdown === 'export' && (
                   <div
-                    className="fixed right-3 top-12 sm:absolute sm:right-0 sm:top-8 z-50 w-[calc(100vw-24px)] max-w-[240px] sm:w-56 bg-[var(--app-bg-overlay)] border border-[var(--app-border)] rounded-xl shadow-2xl p-1.5 text-xs text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 space-y-0.5"
+                    role="menu"
+                    className="fixed right-3 top-14 sm:absolute sm:right-0 sm:top-10 z-50 w-[calc(100vw-24px)] max-w-[240px] sm:w-56 bg-[var(--app-bg-overlay)] border border-[var(--app-border-strong)] rounded-xl shadow-[var(--app-shadow-popover)] p-1.5 text-xs text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 space-y-0.5"
                     onClick={(e) => e.stopPropagation()}
                   >
                     <button
+                      type="button"
+                      role="menuitem"
                       onClick={() => {
                         if (currentWorkspace) exportDocumentAsMarkdown(currentWorkspace)
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
+                      className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-[var(--app-hover)] flex items-center gap-2 font-medium transition cursor-pointer"
                     >
-                      <DownloadSimple size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
+                      <DownloadSimple size={15} weight="duotone" className="shrink-0 text-[var(--app-text-secondary)]" />
                       <span className="truncate">Exportar como Markdown (.md)</span>
                     </button>
                     <button
+                      type="button"
+                      role="menuitem"
                       onClick={() => {
                         if (currentWorkspace) exportDocumentAsHtml(currentWorkspace)
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
+                      className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-[var(--app-hover)] flex items-center gap-2 font-medium transition cursor-pointer"
                     >
-                      <FileHtml size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
+                      <FileHtml size={15} weight="duotone" className="shrink-0 text-[var(--app-text-secondary)]" />
                       <span className="truncate">Exportar como HTML (.html)</span>
                     </button>
                     <button
+                      type="button"
+                      role="menuitem"
                       onClick={() => {
                         printDocument()
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
+                      className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-[var(--app-hover)] flex items-center gap-2 font-medium transition cursor-pointer"
                     >
-                      <Printer size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
+                      <Printer size={15} weight="duotone" className="shrink-0 text-[var(--app-text-secondary)]" />
                       <span className="truncate">Imprimir / Guardar como PDF</span>
                     </button>
                     <button
+                      type="button"
+                      role="menuitem"
                       onClick={async () => {
                         if (currentWorkspace) {
                           const nodes = await db.canvasNodes.where('workspaceId').equals(currentWorkspace.id).and((n) => !n.isDeleted).toArray()
@@ -2333,10 +1945,22 @@ function MainApp() {
                         }
                         setActiveDropdown(null)
                       }}
-                      className="w-full text-left px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-xl sm:rounded-2xl hover:bg-black/[0.05] dark:hover:bg-white/[0.08] flex items-center gap-2 sm:gap-2.5 font-medium transition active:scale-[0.98] cursor-pointer"
+                      className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-[var(--app-hover)] flex items-center gap-2 font-medium transition cursor-pointer"
                     >
-                      <FileCode size={15} weight="duotone" className="shrink-0 text-neutral-700 dark:text-neutral-300" />
+                      <FileCode size={15} weight="duotone" className="shrink-0 text-[var(--app-text-secondary)]" />
                       <span className="truncate">Exportar copia JSON (.json)</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        if (currentWorkspace) copyAsPlainText(currentWorkspace.docContent)
+                        setActiveDropdown(null)
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-[var(--app-hover)] flex items-center gap-2 font-medium transition cursor-pointer"
+                    >
+                      <Copy size={15} weight="duotone" className="shrink-0 text-[var(--app-text-secondary)]" />
+                      <span className="truncate">Copiar como texto plano</span>
                     </button>
                   </div>
                 )}
@@ -2344,13 +1968,225 @@ function MainApp() {
 
               {/* Compartir Button */}
               <button
+                type="button"
                 onClick={() => setIsShareOpen(true)}
-                className="h-6 px-2 rounded text-[11px] text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5 flex items-center gap-1 transition cursor-pointer select-none"
+                className="h-8 px-3 rounded-md text-xs font-medium text-[var(--app-text-primary)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover-filled)] border border-[var(--app-border-strong)] flex items-center gap-1.5 transition cursor-pointer select-none"
                 title="Compartir con colaboradores"
               >
-                <ShareNetwork size={13} />
+                <ShareNetwork size={15} />
                 <span className="hidden sm:inline">Compartir</span>
               </button>
+
+              {/* More options menu `...` (Distilled, zero duplicates) */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setActiveDropdown(activeDropdown === 'more' ? null : 'more')
+                  }}
+                  aria-label="Más acciones de la nota"
+                  aria-haspopup="menu"
+                  aria-expanded={activeDropdown === 'more'}
+                  className={`w-8 h-8 rounded-md flex items-center justify-center transition cursor-pointer ${
+                    activeDropdown === 'more'
+                      ? 'bg-[var(--app-active)] text-[var(--app-text-primary)]'
+                      : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
+                  }`}
+                  title="Más acciones de la nota"
+                >
+                  <DotsThree size={19} weight="bold" />
+                </button>
+
+                {activeDropdown === 'more' && (
+                  <div
+                    role="menu"
+                    className="fixed right-3 top-14 sm:absolute sm:right-0 sm:top-10 z-50 w-[calc(100vw-24px)] max-w-[260px] sm:w-64 bg-[var(--app-bg-overlay)] border border-[var(--app-border-strong)] rounded-xl shadow-[var(--app-shadow-popover)] p-1.5 text-xs text-[var(--app-text-primary)] animate-in fade-in zoom-in-95 duration-100 space-y-0.5 max-h-[calc(100vh-64px)] overflow-y-auto custom-scrollbar"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setViewMode(activeViewMode === 'split' ? 'doc' : 'split')
+                        setActiveDropdown(null)
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-[var(--app-hover)] flex items-center gap-2 font-medium transition cursor-pointer"
+                    >
+                      <Columns size={15} weight="duotone" className="shrink-0 text-[var(--app-text-secondary)]" />
+                      <span>{activeViewMode === 'split' ? 'Cerrar vista dividida' : 'Vista dividida'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={async () => {
+                        if (!currentWorkspace) return
+                        const isCurrentFull = (currentWorkspace.pageWidth || 'full') === 'full'
+                        const nextWidth = isCurrentFull ? 'standard' : 'full'
+                        await db.workspaces.update(currentWorkspace.id, {
+                          pageWidth: nextWidth,
+                          updatedAt: Date.now(),
+                          syncStatus: 'pending'
+                        })
+                        syncEngine.scheduleSync(500)
+                        toast.success(nextWidth === 'full' ? 'Ancho completo activado' : 'Ancho estándar activado')
+                        setActiveDropdown(null)
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-[var(--app-hover)] flex items-center justify-between font-medium transition cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <ArrowsOutLineHorizontal size={15} weight="duotone" className="shrink-0 text-[var(--app-text-secondary)]" />
+                        <span className="truncate">Ancho completo</span>
+                      </div>
+                      <div
+                        className={`w-7 h-4 rounded-full transition-colors p-0.5 flex items-center ${
+                          (currentWorkspace?.pageWidth || 'full') === 'full'
+                            ? 'bg-[var(--app-accent)] justify-end'
+                            : 'bg-[var(--app-border-strong)] justify-start'
+                        }`}
+                      >
+                        <div className="w-3 h-3 rounded-full bg-white shadow-xs" />
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setFocusMode(true)
+                        setActiveDropdown(null)
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-[var(--app-hover)] flex items-center justify-between font-medium transition cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <ArrowsOutLineHorizontal size={15} weight="duotone" className="shrink-0 text-[var(--app-text-secondary)]" />
+                        <span className="truncate">Modo concentración</span>
+                      </div>
+                      <kbd className="text-[10px] bg-[var(--app-bg-tertiary)] px-1.5 py-0.5 rounded text-[var(--app-text-muted)] border border-[var(--app-border)] shrink-0">
+                        Ctrl+Shift+F
+                      </kbd>
+                    </button>
+
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setIsPresentationMode(true)
+                        setActiveDropdown(null)
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-[var(--app-hover)] flex items-center justify-between font-medium transition cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <Presentation size={15} weight="duotone" className="shrink-0 text-[var(--app-text-secondary)]" />
+                        <span className="truncate">Modo presentación</span>
+                      </div>
+                      <kbd className="text-[10px] bg-[var(--app-bg-tertiary)] px-1.5 py-0.5 rounded text-[var(--app-text-muted)] border border-[var(--app-border)] shrink-0">
+                        F5
+                      </kbd>
+                    </button>
+
+                    <div className="border-t border-[var(--app-divider)] my-1" />
+
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setIsQuickCaptureOpen(true)
+                        setActiveDropdown(null)
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-[var(--app-hover)] flex items-center justify-between font-medium transition cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <Sparkle size={15} weight="duotone" className="shrink-0 text-[var(--app-text-secondary)]" />
+                        <span className="truncate">Captura rápida</span>
+                      </div>
+                      <kbd className="text-[10px] bg-[var(--app-bg-tertiary)] px-1.5 py-0.5 rounded text-[var(--app-text-muted)] border border-[var(--app-border)] shrink-0">
+                        Alt+N
+                      </kbd>
+                    </button>
+
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setIsFindInPageOpen(true)
+                        setActiveDropdown(null)
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-[var(--app-hover)] flex items-center justify-between font-medium transition cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <MagnifyingGlass size={15} weight="duotone" className="shrink-0 text-[var(--app-text-secondary)]" />
+                        <span className="truncate">Buscar en nota</span>
+                      </div>
+                      <kbd className="text-[10px] bg-[var(--app-bg-tertiary)] px-1.5 py-0.5 rounded text-[var(--app-text-muted)] border border-[var(--app-border)] shrink-0">
+                        Ctrl+F
+                      </kbd>
+                    </button>
+
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        const targetId = currentWorkspace?.id || currentWorkspaceId
+                        const noteUrl = targetId
+                          ? `${window.location.origin}/#note=${encodeURIComponent(targetId)}`
+                          : window.location.href
+                        navigator.clipboard.writeText(noteUrl)
+                        setCopiedLink(true)
+                        toast.success('Enlace copiado al portapapeles')
+                        setTimeout(() => setCopiedLink(false), 2000)
+                        setActiveDropdown(null)
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-[var(--app-hover)] flex items-center gap-2 font-medium transition cursor-pointer"
+                    >
+                      <Copy size={15} weight="duotone" className="shrink-0 text-[var(--app-text-secondary)]" />
+                      <span className="truncate">{copiedLink ? '¡Enlace copiado!' : 'Copiar enlace'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setIsShortcutsOpen(true)
+                        setActiveDropdown(null)
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-[var(--app-hover)] flex items-center justify-between font-medium transition cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <Keyboard size={15} weight="duotone" className="shrink-0 text-[var(--app-text-secondary)]" />
+                        <span className="truncate">Atajos de teclado</span>
+                      </div>
+                      <kbd className="text-[10px] bg-[var(--app-bg-tertiary)] px-1.5 py-0.5 rounded text-[var(--app-text-muted)] border border-[var(--app-border)] shrink-0">
+                        ?
+                      </kbd>
+                    </button>
+
+                    {/* Compact inline note statistics */}
+                    <div className="border-t border-[var(--app-divider)] my-1 pt-1.5 px-2.5 flex items-center justify-between text-[11px] text-[var(--app-text-muted)] font-mono">
+                      <span>{stats.words} palabras</span>
+                      <span>~{stats.time} min</span>
+                    </div>
+
+                    <div className="border-t border-[var(--app-divider)] my-1" />
+
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={async () => {
+                        if (currentWorkspace) {
+                          await handleDeleteWorkspaceWithUndo(currentWorkspace)
+                        }
+                        setActiveDropdown(null)
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 rounded-md hover:bg-rose-500/10 text-rose-500 flex items-center gap-2 font-semibold transition cursor-pointer"
+                    >
+                      <Trash size={15} weight="duotone" className="shrink-0 text-rose-500" />
+                      <span className="truncate">Eliminar nota</span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </header>
         )}
@@ -2379,10 +2215,10 @@ function MainApp() {
                     id: newId,
                     parentId: null,
                     spaceId: currentSpaceId,
-                    title: 'Untitled',
+                    title: 'Sin título',
                     icon: '',
-                    color: '#3b82f6',
-                    viewMode: 'canvas',
+                    color: '#7c3aed',
+                    viewMode: 'doc',
                     docContent: '<p></p>',
                     createdAt: now,
                     updatedAt: now,
@@ -2500,7 +2336,7 @@ function MainApp() {
               />
             ) : currentWorkspace ? (
               activeViewMode === 'doc' ? (
-                <div key={`doc-${currentWorkspace.id}`} className="flex-1 h-full overflow-hidden sn-view-enter">
+                <div key={`doc-${currentWorkspace.id}`} className="flex-1 h-full overflow-hidden relative sn-view-enter">
                   <DocEditor
                     workspace={currentWorkspace}
                     allWorkspaces={publicWorkspaces}
@@ -2510,7 +2346,18 @@ function MainApp() {
                     onToggleViewMode={() => setViewMode('canvas')}
                     onOpenTemplatesModal={() => setIsTemplatesOpen(true)}
                     readOnly={isCurrentWorkspaceReadOnly}
+                    hideChrome={focusMode}
                   />
+                  {focusMode && (
+                    <button
+                      type="button"
+                      onClick={() => setFocusMode(false)}
+                      className="absolute top-3 right-3 z-50 h-8 px-3 rounded-md bg-[var(--app-bg-overlay)] border border-[var(--app-border-strong)] text-xs font-medium text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] opacity-50 hover:opacity-100 transition shadow-[var(--app-shadow-popover)] cursor-pointer"
+                      title="Salir de modo concentración (Esc)"
+                    >
+                      Salir de concentración
+                    </button>
+                  )}
                 </div>
               ) : activeViewMode === 'canvas' ? (
                 <div key={`canvas-${currentWorkspace.id}`} className="flex-1 h-full overflow-hidden relative sn-view-enter">
@@ -2524,17 +2371,18 @@ function MainApp() {
                   />
                   {focusMode && (
                     <button
+                      type="button"
                       onClick={() => setFocusMode(false)}
-                      className="absolute top-3 right-3 z-50 h-7 px-2.5 rounded-md bg-[var(--app-bg-overlay)] border border-[var(--app-border)] text-xs font-medium text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] opacity-40 hover:opacity-100 transition shadow-[var(--app-shadow-popover)]"
+                      className="absolute top-3 right-3 z-50 h-8 px-3 rounded-md bg-[var(--app-bg-overlay)] border border-[var(--app-border-strong)] text-xs font-medium text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] opacity-50 hover:opacity-100 transition shadow-[var(--app-shadow-popover)] cursor-pointer"
                       title="Mostrar herramientas y menús (Esc)"
                     >
-                      Mostrar herramientas
+                      Salir de concentración
                     </button>
                   )}
                 </div>
               ) : (
                 /* Split View */
-                <div key={`split-${currentWorkspace.id}`} className="flex-1 flex h-full overflow-hidden sn-view-enter">
+                <div key={`split-${currentWorkspace.id}`} className="flex-1 flex h-full overflow-hidden relative sn-view-enter">
                   <div className="w-1/2 h-full overflow-hidden border-r border-[var(--app-border)]">
                     <DocEditor
                       workspace={currentWorkspace}
@@ -2545,6 +2393,7 @@ function MainApp() {
                       onToggleViewMode={() => setViewMode('canvas')}
                       onOpenTemplatesModal={() => setIsTemplatesOpen(true)}
                       readOnly={isCurrentWorkspaceReadOnly}
+                      hideChrome={focusMode}
                     />
                   </div>
                   <div className="w-1/2 h-full overflow-hidden">
@@ -2553,9 +2402,20 @@ function MainApp() {
                       currentWorkspace={currentWorkspace}
                       onSwitchToDoc={handleSwitchToDoc}
                       darkMode={darkMode}
+                      hideChrome={focusMode}
                       readOnly={isCurrentWorkspaceReadOnly}
                     />
                   </div>
+                  {focusMode && (
+                    <button
+                      type="button"
+                      onClick={() => setFocusMode(false)}
+                      className="absolute top-3 right-3 z-50 h-8 px-3 rounded-md bg-[var(--app-bg-overlay)] border border-[var(--app-border-strong)] text-xs font-medium text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] opacity-50 hover:opacity-100 transition shadow-[var(--app-shadow-popover)] cursor-pointer"
+                      title="Salir de modo concentración (Esc)"
+                    >
+                      Salir de concentración
+                    </button>
+                  )}
                 </div>
               )
             ) : isWorkspacesLoading ? (
@@ -2633,10 +2493,10 @@ function MainApp() {
             id: newId,
             parentId: null,
             spaceId: currentSpaceId,
-            title: 'Untitled',
+            title: 'Sin título',
             icon: '',
-            color: '#3b82f6',
-            viewMode: 'canvas',
+            color: '#7c3aed',
+            viewMode: 'doc',
             docContent: '<p></p>',
             createdAt: now,
             updatedAt: now,
@@ -2822,21 +2682,21 @@ class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorBoundary
             !
           </div>
           <div className="text-sm font-semibold">Ocurrió un error al mostrar esta vista</div>
-          <p className="text-xs text-[var(--app-text-muted)] max-w-sm break-words">
-            {this.state.errorMessage}
+          <p className="text-xs text-[var(--app-text-muted)] max-w-sm">
+            Algo salió mal al cargar esta pantalla. Tus notas siguen guardadas de forma segura.
           </p>
           <div className="flex items-center gap-2 pt-1">
             <button
               type="button"
               onClick={() => this.setState({ hasError: false, errorMessage: '' })}
-              className="px-3.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium transition cursor-pointer"
+              className="px-3.5 py-1.5 rounded-md bg-[var(--app-accent)] hover:bg-[var(--app-accent-hover)] text-white text-xs font-medium transition cursor-pointer"
             >
               Reintentar
             </button>
             <button
               type="button"
               onClick={() => window.location.reload()}
-              className="px-3.5 py-1.5 rounded-lg bg-black/5 dark:bg-white/10 hover:bg-black/10 dark:hover:bg-white/15 text-xs font-medium transition cursor-pointer"
+              className="px-3.5 py-1.5 rounded-md bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] border border-[var(--app-border)] text-xs font-medium transition cursor-pointer"
             >
               Recargar página
             </button>

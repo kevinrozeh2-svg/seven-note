@@ -221,67 +221,82 @@ export function RightSidebar({
         onClick={onClose}
       />
       <aside className="fixed inset-y-0 right-0 md:relative z-50 md:z-20 w-80 max-w-[85vw] h-full bg-[var(--app-bg-secondary)] border-l border-[var(--app-border)] shadow-2xl md:shadow-none flex flex-col shrink-0 select-none text-[var(--app-text-primary)] text-sm">
-      {/* Top Header Icon Tabs (Notion Style) */}
-      <div className="h-11 border-b border-[var(--app-border)] flex items-center justify-between px-3 shrink-0">
-        <div className="flex items-center gap-1">
+      {/* Top Header Icon Tabs */}
+      <div className="h-12 border-b border-[var(--app-border)] flex items-center justify-between px-3 shrink-0">
+        <div role="tablist" aria-label="Inspector del documento" className="flex items-center gap-1">
           {/* Outline Tab */}
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'outline'}
+            aria-label="Esquema del documento"
             onClick={() => onTabChange('outline')}
-            className={`p-1.5 rounded-md transition ${
+            className={`w-8 h-8 rounded-md flex items-center justify-center transition cursor-pointer ${
               activeTab === 'outline'
-                ? 'bg-[var(--app-hover)] text-[var(--app-accent)] shadow-xs font-semibold'
+                ? 'bg-[var(--app-active)] text-[var(--app-text-primary)] font-semibold'
                 : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
             }`}
             title="Esquema del documento"
           >
-            <TocIcon className="w-4 h-4" />
+            <TocIcon className="w-[18px] h-[18px]" />
           </button>
 
           {/* Journal / Calendar Tab */}
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'history'}
+            aria-label="Actividad e historial"
             onClick={() => onTabChange('history')}
-            className={`p-1.5 rounded-md transition ${
+            className={`w-8 h-8 rounded-md flex items-center justify-center transition cursor-pointer ${
               activeTab === 'history'
-                ? 'bg-[var(--app-hover)] text-[var(--app-accent)] shadow-xs font-semibold'
+                ? 'bg-[var(--app-active)] text-[var(--app-text-primary)] font-semibold'
                 : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
             }`}
-            title="Diarios e Historial"
+            title="Actividad e historial"
           >
-            <JournalIcon className="w-4 h-4" />
+            <JournalIcon className="w-[18px] h-[18px]" />
           </button>
 
           {/* Properties Tab */}
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'properties'}
+            aria-label="Propiedades del documento"
             onClick={() => onTabChange('properties')}
-            className={`p-1.5 rounded-md transition ${
+            className={`w-8 h-8 rounded-md flex items-center justify-center transition cursor-pointer ${
               activeTab === 'properties'
-                ? 'bg-[var(--app-hover)] text-[var(--app-accent)] shadow-xs font-semibold'
+                ? 'bg-[var(--app-active)] text-[var(--app-text-primary)] font-semibold'
                 : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
             }`}
             title="Propiedades del documento"
           >
-            <PropertyIcon className="w-4 h-4" />
+            <PropertyIcon className="w-[18px] h-[18px]" />
           </button>
         </div>
 
         {/* Close Right Sidebar Button */}
         <button
+          type="button"
           onClick={onClose}
-          className="p-1.5 rounded-md text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition"
+          aria-label="Cerrar panel lateral"
+          className="w-8 h-8 rounded-md flex items-center justify-center text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition cursor-pointer"
           title="Cerrar panel lateral"
         >
-          <CloseIcon className="w-4 h-4" />
+          <CloseIcon className="w-[18px] h-[18px]" />
         </button>
       </div>
 
       {/* Tab 1: Properties Inspector */}
       {activeTab === 'properties' && (
-        <div className="flex-1 overflow-y-auto divide-y divide-[var(--affine-divider-color)] py-2 text-sm">
+        <div className="flex-1 overflow-y-auto divide-y divide-[var(--app-divider)] py-2 text-sm">
           {/* Section: Propiedades */}
           <div className="px-3 pb-3">
             <button
+              type="button"
               onClick={() => setPropertiesExpanded(!propertiesExpanded)}
-              className="w-full flex items-center justify-between py-2 text-[var(--affine-text-primary-color)] font-semibold text-sm hover:text-[#1e96eb] transition"
+              className="w-full flex items-center justify-between py-2 text-[var(--app-text-primary)] font-semibold text-sm hover:text-[var(--app-accent)] transition cursor-pointer"
             >
               <div className="flex items-center gap-1.5">
                 <span>Propiedades</span>
@@ -353,25 +368,28 @@ export function RightSidebar({
                               Visibilidad
                             </div>
                             <button
+                              type="button"
                               onClick={() => handleSetVisibility(propId, 'always_show')}
-                              className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] flex items-center justify-between transition"
+                              className="w-full text-left px-3 py-1.5 hover:bg-[var(--app-hover)] flex items-center justify-between transition"
                             >
                               <span>Siempre mostrar</span>
-                              {visibility === 'always_show' && <DoneIcon className="w-3.5 h-3.5 text-[#1e96eb]" />}
+                              {visibility === 'always_show' && <DoneIcon className="w-3.5 h-3.5 text-[var(--app-accent)]" />}
                             </button>
                             <button
+                              type="button"
                               onClick={() => handleSetVisibility(propId, 'always_hide')}
-                              className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] flex items-center justify-between transition"
+                              className="w-full text-left px-3 py-1.5 hover:bg-[var(--app-hover)] flex items-center justify-between transition"
                             >
                               <span>Siempre ocultar</span>
-                              {visibility === 'always_hide' && <DoneIcon className="w-3.5 h-3.5 text-[#1e96eb]" />}
+                              {visibility === 'always_hide' && <DoneIcon className="w-3.5 h-3.5 text-[var(--app-accent)]" />}
                             </button>
                             <button
+                              type="button"
                               onClick={() => handleSetVisibility(propId, 'hide_empty')}
-                              className="w-full text-left px-3 py-1.5 hover:bg-[var(--affine-hover-color)] flex items-center justify-between transition"
+                              className="w-full text-left px-3 py-1.5 hover:bg-[var(--app-hover)] flex items-center justify-between transition"
                             >
                               <span>Ocultar cuando esté vacío</span>
-                              {visibility === 'hide_empty' && <DoneIcon className="w-3.5 h-3.5 text-[#1e96eb]" />}
+                              {visibility === 'hide_empty' && <DoneIcon className="w-3.5 h-3.5 text-[var(--app-accent)]" />}
                             </button>
 
                             <div className="border-t border-[var(--affine-divider-color)] my-1" />
@@ -406,12 +424,14 @@ export function RightSidebar({
             {editingPropId && (
               <div className="mt-2 p-2.5 bg-[var(--affine-background-primary-color)] rounded-xl border border-[var(--affine-border-color)]">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="font-semibold text-[11px] text-[var(--affine-text-primary-color)]">
-                    Modificar {editingPropId}
+                  <span className="font-semibold text-[11px] text-[var(--app-text-primary)]">
+                    Modificar {BUILT_IN_PROPERTIES.find((p) => p.id === editingPropId)?.name || (workspace.customProperties || []).find((c) => c.id === editingPropId)?.name || editingPropId}
                   </span>
                   <button
+                    type="button"
+                    aria-label="Cerrar editor de propiedad"
                     onClick={() => setEditingPropId(null)}
-                    className="p-0.5 rounded text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)]"
+                    className="p-0.5 rounded text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)]"
                   >
                     <CloseIcon className="w-3 h-3" />
                   </button>
@@ -423,12 +443,14 @@ export function RightSidebar({
                       {(workspace.tags || []).map((t) => (
                         <span
                           key={t}
-                          className="px-2 py-0.5 rounded-full bg-indigo-950/60 border border-indigo-700/50 text-indigo-300 flex items-center gap-1 text-[11px]"
+                          className="px-2 py-0.5 rounded-full bg-[var(--app-accent-soft)] border border-[var(--app-accent)]/30 text-[var(--app-accent)] flex items-center gap-1 text-[11px]"
                         >
                           #{t}
                           <button
+                            type="button"
+                            aria-label={`Quitar etiqueta ${t}`}
                             onClick={() => handleRemoveTag(t)}
-                            className="hover:text-indigo-100"
+                            className="hover:opacity-75"
                           >
                             <CloseIcon className="w-2.5 h-2.5" />
                           </button>
@@ -442,11 +464,12 @@ export function RightSidebar({
                         onChange={(e) => setNewTagInput(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleAddTag()}
                         placeholder="Nueva etiqueta..."
-                        className="flex-1 bg-[var(--app-bg-primary)] border border-[var(--app-border)] rounded px-2 py-1 text-xs text-[var(--app-text-primary)] focus:outline-none focus:border-[var(--app-accent)]"
+                        className="flex-1 bg-[var(--app-bg-primary)] border border-[var(--app-border)] rounded-md px-2 py-1 text-xs text-[var(--app-text-primary)] focus:outline-none focus:border-[var(--app-accent)]"
                       />
                       <button
+                        type="button"
                         onClick={handleAddTag}
-                        className="px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs"
+                        className="px-2 py-1 bg-[var(--app-accent)] hover:bg-[var(--app-accent-hover)] text-white rounded-md text-xs font-medium cursor-pointer"
                       >
                         Añadir
                       </button>
@@ -458,10 +481,10 @@ export function RightSidebar({
                   <select
                     value={workspace.documentMode || 'Estándar'}
                     onChange={(e) => handleUpdateFieldValue('documentMode', e.target.value)}
-                    className="w-full bg-[var(--app-bg-primary)] border border-[var(--app-border)] rounded px-2 py-1.5 text-xs text-[var(--app-text-primary)] focus:outline-none"
+                    className="w-full bg-[var(--app-bg-primary)] border border-[var(--app-border)] rounded-md px-2 py-1.5 text-xs text-[var(--app-text-primary)] focus:outline-none"
                   >
-                    <option value="Estándar">Página estándar (Documento)</option>
-                    <option value="Sin bordes">Sin bordes (Lienzo infinito)</option>
+                    <option value="Estándar">Nota estándar (Documento)</option>
+                    <option value="Sin bordes">Lienzo infinito</option>
                     <option value="Dividido">Vista dividida híbrida</option>
                   </select>
                 )}
@@ -471,11 +494,12 @@ export function RightSidebar({
                     {(['standard', 'wide', 'full'] as const).map((width) => (
                       <button
                         key={width}
+                        type="button"
                         onClick={() => handleUpdateFieldValue('pageWidth', width)}
-                        className={`flex-1 py-1 rounded text-xs capitalize ${
+                        className={`flex-1 py-1 rounded-md text-xs capitalize transition cursor-pointer ${
                           (workspace.pageWidth || 'full') === width
-                            ? 'bg-blue-600 text-white font-medium'
-                            : 'bg-[#222226] text-zinc-400 hover:text-zinc-200'
+                            ? 'bg-[var(--app-accent)] text-white font-medium'
+                            : 'bg-[var(--app-bg-tertiary)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)]'
                         }`}
                       >
                         {width === 'standard' ? 'Estándar' : width === 'wide' ? 'Ancho' : 'Completo'}
@@ -490,9 +514,9 @@ export function RightSidebar({
                       type="checkbox"
                       checked={!!workspace.isJournal}
                       onChange={(e) => handleUpdateFieldValue('isJournal', e.target.checked)}
-                      className="rounded accent-blue-600"
+                      className="rounded accent-[var(--app-accent)]"
                     />
-                    <span className="text-zinc-300">Marcar como entrada de Diario</span>
+                    <span className="text-[var(--app-text-primary)]">Marcar como entrada de Diario</span>
                   </label>
                 )}
 
@@ -502,9 +526,9 @@ export function RightSidebar({
                       type="checkbox"
                       checked={!!workspace.borderlessTheme}
                       onChange={(e) => handleUpdateFieldValue('borderlessTheme', e.target.checked)}
-                      className="rounded accent-blue-600"
+                      className="rounded accent-[var(--app-accent)]"
                     />
-                    <span className="text-zinc-300">Activar tema sin bordes</span>
+                    <span className="text-[var(--app-text-primary)]">Activar tema sin bordes</span>
                   </label>
                 )}
 
@@ -529,8 +553,9 @@ export function RightSidebar({
           {!readOnly && (
             <div className="px-3 pt-3">
               <button
+                type="button"
                 onClick={() => setAddPropertiesExpanded(!addPropertiesExpanded)}
-                className="w-full flex items-center justify-between py-2 text-[var(--affine-text-primary-color)] font-medium text-xs hover:text-[#1e96eb] transition"
+                className="w-full flex items-center justify-between py-2 text-[var(--app-text-primary)] font-medium text-xs hover:text-[var(--app-accent)] transition cursor-pointer"
               >
                 <div className="flex items-center gap-1.5">
                   <span>Agregar más propiedades</span>
@@ -547,19 +572,21 @@ export function RightSidebar({
                     return (
                       <div
                         key={item.id}
-                        className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-[var(--affine-hover-color)] transition group text-xs"
+                        className="flex items-center justify-between py-1.5 px-2 rounded-md hover:bg-[var(--app-hover)] transition group text-xs"
                       >
-                        <div className="flex items-center gap-2 text-[var(--affine-text-secondary-color)] group-hover:text-[var(--affine-text-primary-color)] min-w-0">
+                        <div className="flex items-center gap-2 text-[var(--app-text-secondary)] group-hover:text-[var(--app-text-primary)] min-w-0">
                           <Icon size={14} className="shrink-0" />
                           <span className="truncate">{item.name}</span>
                         </div>
 
                         {isAdded ? (
-                          <span className="text-[11px] text-[var(--affine-text-secondary-color)] font-normal">Added</span>
+                          <span className="text-[11px] text-[var(--app-text-muted)] font-normal">Agregada</span>
                         ) : (
                           <button
+                            type="button"
+                            aria-label={`Agregar ${item.name}`}
                             onClick={() => handleAddProperty(item)}
-                            className="p-1 rounded text-[var(--affine-text-secondary-color)] hover:text-[var(--affine-text-primary-color)] hover:bg-[var(--affine-hover-color)] transition"
+                            className="p-1 rounded text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition cursor-pointer"
                             title={`Agregar ${item.name}`}
                           >
                             <PlusIcon className="w-3.5 h-3.5" />

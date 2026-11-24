@@ -264,24 +264,24 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-150">
       <div
-        className="w-full max-w-md bg-white dark:bg-[#1a1b1e] border border-black/[0.08] dark:border-white/[0.1] rounded-3xl shadow-2xl overflow-hidden flex flex-col text-neutral-900 dark:text-neutral-100 font-sans"
+        className="w-full max-w-md bg-[var(--app-bg-overlay)] border border-[var(--app-border-strong)] rounded-xl shadow-[var(--app-shadow-popover)] overflow-hidden flex flex-col text-[var(--app-text-primary)] font-sans"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-black/[0.06] dark:border-white/[0.08]">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--app-divider)]">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold shadow-2xs">
+            <div className="w-9 h-9 rounded-lg bg-[var(--app-accent-soft)] text-[var(--app-accent)] flex items-center justify-center font-bold">
               <Shield className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-sm font-bold">
-                {mode === 'login' && 'Iniciar Sesión en el Equipo'}
+                {mode === 'login' && 'Iniciar Sesión en Seven Note'}
                 {mode === 'register' && 'Crear Cuenta de Miembro'}
                 {mode === 'forgot' && 'Recuperar Contraseña'}
                 {mode === 'reset' && 'Nueva Contraseña'}
                 {mode === 'config' && 'Conectar con Supabase'}
               </h2>
-              <p className="text-[11px] text-neutral-400">
+              <p className="text-[11px] text-[var(--app-text-secondary)]">
                 {mode === 'login' && 'Ingresa con tu correo y contraseña'}
                 {mode === 'register' && 'Únete al espacio de trabajo de Seven Note'}
                 {mode === 'forgot' && 'Te enviaremos un enlace seguro a tu correo'}
@@ -292,8 +292,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           </div>
           {canDismiss && (
             <button
+              type="button"
+              aria-label="Cerrar ventana de acceso"
               onClick={onClose}
-              className="p-1.5 rounded-xl text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 hover:bg-black/5 dark:hover:bg-white/10 transition cursor-pointer"
+              className="p-1.5 rounded-md text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition cursor-pointer"
             >
               <CloseIcon style={{ width: 16, height: 16 }} />
             </button>
@@ -321,25 +323,32 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           {mode === 'login' && (
             <form onSubmit={handleLogin} className="space-y-3.5">
               <div>
-                <label className="block text-[11px] font-medium text-neutral-600 dark:text-neutral-400 mb-1">
+                <label
+                  htmlFor="auth-login-email"
+                  className="block text-[11px] font-medium text-[var(--app-text-secondary)] mb-1"
+                >
                   Correo electrónico:
                 </label>
                 <div className="relative flex items-center">
-                  <Mail className="w-4 h-4 absolute left-3 text-neutral-400 pointer-events-none" />
+                  <Mail className="w-4 h-4 absolute left-3 text-[var(--app-text-muted)] pointer-events-none" />
                   <input
+                    id="auth-login-email"
                     type="email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="ejemplo@equipo.com"
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.04] text-xs outline-none focus:border-blue-500 transition"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-lg border border-[var(--app-border-strong)] bg-[var(--app-bg-secondary)] text-xs outline-none focus:border-[var(--app-accent)] transition"
                   />
                 </div>
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-[11px] font-medium text-neutral-600 dark:text-neutral-400">
+                  <label
+                    htmlFor="auth-login-password"
+                    className="text-[11px] font-medium text-[var(--app-text-secondary)]"
+                  >
                     Contraseña:
                   </label>
                   <button
@@ -349,25 +358,27 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       setSuccessMsg(null)
                       setMode('forgot')
                     }}
-                    className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                    className="text-[11px] text-[var(--app-accent)] hover:underline cursor-pointer"
                   >
                     ¿Olvidaste tu contraseña?
                   </button>
                 </div>
                 <div className="relative flex items-center">
-                  <Lock className="w-4 h-4 absolute left-3 text-neutral-400 pointer-events-none" />
+                  <Lock className="w-4 h-4 absolute left-3 text-[var(--app-text-muted)] pointer-events-none" />
                   <input
+                    id="auth-login-password"
                     type={showPassword ? 'text' : 'password'}
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full pl-9 pr-10 py-2.5 rounded-xl border border-black/10 dark:border-white/10 bg-black/[0.02] dark:bg-white/[0.04] text-xs outline-none focus:border-blue-500 transition"
+                    className="w-full pl-9 pr-10 py-2.5 rounded-lg border border-[var(--app-border-strong)] bg-[var(--app-bg-secondary)] text-xs outline-none focus:border-[var(--app-accent)] transition"
                   />
                   <button
                     type="button"
+                    aria-label={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 cursor-pointer"
+                    className="absolute right-3 text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] cursor-pointer"
                     title={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}

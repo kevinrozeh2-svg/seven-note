@@ -125,20 +125,23 @@ export function DocumentReadersBadge({
   return (
     <div className="relative">
       <button
+        type="button"
         onClick={(e) => {
           e.stopPropagation()
           onToggle()
         }}
-        className={`h-6 px-2 rounded-full flex items-center gap-1.5 text-[11px] transition cursor-pointer select-none border ${
+        aria-label={summaryText}
+        aria-expanded={isOpen}
+        className={`h-8 px-2.5 rounded-md flex items-center gap-1.5 text-xs transition cursor-pointer select-none border ${
           isOpen
-            ? 'bg-emerald-500/15 border-emerald-500/35 text-emerald-600 dark:text-emerald-300'
+            ? 'bg-[var(--app-active)] border-[var(--app-border-strong)] text-[var(--app-text-primary)]'
             : reads.length > 0
-            ? 'bg-emerald-500/[0.08] border-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/15'
-            : 'bg-black/[0.03] dark:bg-white/[0.04] border-[var(--app-border)] text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-white/5'
+            ? 'bg-[var(--app-bg-secondary)] border-[var(--app-border)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
+            : 'bg-transparent border-transparent text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
         }`}
         title={`Solo administradores · ${summaryText}`}
       >
-        <Eye size={13} weight={reads.length > 0 ? 'duotone' : 'regular'} className="shrink-0" />
+        <Eye size={15} weight={reads.length > 0 ? 'duotone' : 'regular'} className="shrink-0" />
         {reads.length > 0 && (
           <span className="hidden md:flex items-center -space-x-1.5 shrink-0">
             {reads.slice(0, 3).map((reader) => (
