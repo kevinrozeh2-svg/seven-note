@@ -1,5 +1,5 @@
 import { registerSW } from 'virtual:pwa-register';
-import { toast } from 'sonner';
+import { toast } from './toast';
 import { isTauri } from './tauriUpdater';
 
 const UPDATE_CHECK_INTERVAL_MS = 15 * 60 * 1000;

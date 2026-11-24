@@ -1,67 +1,35 @@
-import { Toaster } from 'sonner'
-import {
-  CheckCircle,
-  Info,
-  SpinnerGap,
-  WarningCircle,
-  X,
-  XCircle,
-} from '@phosphor-icons/react'
+import { useMemo } from 'react'
+import { Toaster, type SileoPosition } from 'sileo'
 
 interface AppToasterProps {
   theme?: 'light' | 'dark' | 'system'
-  position?:
-    | 'top-left'
-    | 'top-right'
-    | 'bottom-left'
-    | 'bottom-right'
-    | 'top-center'
-    | 'bottom-center'
+  position?: SileoPosition
 }
 
 export function AppToaster({
   theme = 'system',
   position = 'bottom-right',
 }: AppToasterProps) {
+  const options = useMemo(
+    () => ({
+      fill: theme === 'light' ? '#17171b' : '#131317',
+      roundness: 18,
+      styles: {
+        title: 'sn-sileo-title',
+        description: 'sn-sileo-description',
+        badge: 'sn-sileo-badge',
+        button: 'sn-sileo-button',
+      },
+    }),
+    [theme]
+  )
+
   return (
     <Toaster
       theme={theme}
       position={position}
-      closeButton
-      gap={10}
-      visibleToasts={4}
-      offset={20}
-      toastOptions={{
-        className: 'seven-toast',
-      }}
-      icons={{
-        success: (
-          <span className="seven-toast-badge seven-toast-badge--success">
-            <CheckCircle size={16} weight="fill" />
-          </span>
-        ),
-        info: (
-          <span className="seven-toast-badge seven-toast-badge--info">
-            <Info size={16} weight="fill" />
-          </span>
-        ),
-        warning: (
-          <span className="seven-toast-badge seven-toast-badge--warning">
-            <WarningCircle size={16} weight="fill" />
-          </span>
-        ),
-        error: (
-          <span className="seven-toast-badge seven-toast-badge--error">
-            <XCircle size={16} weight="fill" />
-          </span>
-        ),
-        loading: (
-          <span className="seven-toast-badge seven-toast-badge--loading">
-            <SpinnerGap size={16} weight="bold" className="animate-spin" />
-          </span>
-        ),
-        close: <X size={13} weight="bold" />,
-      }}
+      offset={16}
+      options={options}
     />
   )
 }

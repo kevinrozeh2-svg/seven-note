@@ -98,20 +98,34 @@ export function PastelFolderIcon({
         strokeWidth="1.25"
         strokeLinejoin="round"
       />
-      {/* paper sheet peeking out smoothly when open or hovered */}
+      {/* secondary stacked paper sheet peeking behind when open */}
+      <rect
+        x="6.2"
+        y="5.9"
+        width="11.6"
+        height="7.4"
+        rx="1.3"
+        fill="white"
+        fillOpacity="0.88"
+        stroke={c.stroke}
+        strokeOpacity="0.4"
+        strokeWidth="0.95"
+        className="sn-folder-sheet-back"
+      />
+      {/* primary paper sheet peeking out smoothly when open or hovered */}
       <rect
         x="5"
-        y="6.6"
+        y="6.8"
         width="14"
         height="8"
         rx="1.4"
         fill="white"
         stroke={c.stroke}
-        strokeOpacity="0.55"
+        strokeOpacity="0.6"
         strokeWidth="1"
         className="sn-folder-sheet"
       />
-      {/* front flap with smooth CSS open/close transform */}
+      {/* front flap with smooth 3D-like CSS open/close transform */}
       <g className="sn-folder-flap">
         <path
           d="M2.75 10.75A2 2 0 0 1 4.75 8.75h14.5a2 2 0 0 1 2 2v6.5a2.25 2.25 0 0 1-2.25 2.25H5a2.25 2.25 0 0 1-2.25-2.25Z"

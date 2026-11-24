@@ -1,4 +1,4 @@
-import { toast } from 'sonner';
+import { toast } from './toast';
 
 export const isTauri =
   typeof window !== 'undefined' &&

@@ -11,7 +11,7 @@ import { importObsidianCanvas } from '../../lib/canvasExchange'
 import { getCurrentMember } from '../../lib/teamAuth'
 import { sanitizeHtmlContent } from '../../lib/pasteUtils'
 import { escapeHtml } from '../../lib/securityUtils'
-import { toast } from 'sonner'
+import { toast } from '../../lib/toast'
 
 interface ImportModalProps {
   isOpen: boolean

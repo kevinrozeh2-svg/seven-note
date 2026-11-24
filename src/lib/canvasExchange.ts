@@ -1,5 +1,5 @@
 import { db } from '../db'
-import { toast } from 'sonner'
+import { toast } from './toast'
 
 export interface ObsidianCanvasNode {
   id: string

@@ -2,7 +2,7 @@ import { memo, useState } from 'react'
 import { Plus, Trash2, Check } from 'lucide-react'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
-import { toast } from 'sonner'
+import { toast } from '../../../lib/toast'
 import { areNodePropsEqual, NodeHandles, SourceNodeBadge } from './nodeUtils'
 
 export interface ColorSwatchItem {

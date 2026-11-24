@@ -34,9 +34,10 @@ import {
   type AvatarCategoryId
 } from '../../lib/avatars'
 import { invalidateDocumentReadsProfileCache } from '../../lib/documentReads'
+import { updateCachedTeamProfile } from '../../lib/teamProfiles'
 import { UserAvatar } from '../ui/UserAvatar'
 import { clearLocalUserData } from '../../db'
-import { toast } from 'sonner'
+import { toast } from '../../lib/toast'
 
 interface UserProfileModalProps {
   isOpen: boolean
@@ -173,6 +174,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
       }
 
       invalidateDocumentReadsProfileCache()
+      updateCachedTeamProfile({
+        id: updated.id,
+        email: updated.email,
+        fullName: updated.fullName,
+        color: updated.color,
+        avatarUrl: avatarUrl || ''
+      })
       setCurrentMember(updated)
       onProfileUpdated?.(updated)
       toast.success('¡Perfil actualizado con éxito!')

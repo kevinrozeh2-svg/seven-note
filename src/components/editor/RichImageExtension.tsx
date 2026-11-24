@@ -21,7 +21,7 @@ import {
   RefreshCw,
   Image as ImageIcon
 } from 'lucide-react'
-import { toast } from 'sonner'
+import { toast } from '../../lib/toast'
 import {
   ASPECT_RATIO_OPTIONS,
   IMAGE_FILTER_PRESETS,

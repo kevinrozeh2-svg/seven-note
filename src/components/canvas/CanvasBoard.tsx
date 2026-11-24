@@ -70,7 +70,7 @@ import { syncEngine } from '../../lib/syncEngine'
 import { getCurrentMember } from '../../lib/teamAuth'
 const TemplatesModal = lazy(() => import('../modals/TemplatesModal').then(m => ({ default: m.TemplatesModal })))
 import { type AppTemplate } from '../../lib/templates'
-import { toast } from 'sonner'
+import { toast } from '../../lib/toast'
 import {
   NoteSeniorWidget,
   PencilSeniorWidget,
@@ -832,10 +832,13 @@ function CanvasBoardInner({
         ...customData
       }
     } else if (type === 'comment') {
+      const currentAuthor = getCurrentMember()
       initialData = {
-        commentAuthor: customData.commentAuthor || 'Natali',
-        commentDate: customData.commentDate || '16 Jan 2026',
-        commentText: customData.commentText || '¡Me encanta este tráiler! 💜💜',
+        commentAuthor: customData.commentAuthor || currentAuthor.fullName || currentAuthor.name || 'Usuario',
+        commentAuthorId: customData.commentAuthorId || currentAuthor.id,
+        commentAuthorEmail: customData.commentAuthorEmail || currentAuthor.email,
+        commentDate: customData.commentDate || new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }),
+        commentText: customData.commentText || '',
         ...customData
       }
     } else if (type === 'subboard') {

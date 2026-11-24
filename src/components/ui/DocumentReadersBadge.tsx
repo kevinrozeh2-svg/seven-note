@@ -11,6 +11,7 @@ import {
   type DocumentReadEntry
 } from '../../lib/documentReads'
 import { UserAvatar } from './UserAvatar'
+import { subscribeToTeamProfiles } from '../../lib/teamProfiles'
 
 interface DocumentReadersBadgeProps {
   workspace: WorkspaceItem
@@ -102,9 +103,13 @@ export function DocumentReadersBadge({
     const unsubscribe = subscribeToDocumentReads(workspace.id, () => {
       void run()
     })
+    const unsubscribeProfiles = subscribeToTeamProfiles(() => {
+      void run()
+    })
     return () => {
       cancelled = true
       unsubscribe()
+      unsubscribeProfiles()
     }
   }, [workspace.id, isOpen, fetchReads])
 

@@ -28,7 +28,7 @@ import {
 } from '../../lib/supabase'
 import { setCurrentMember, mapSupabaseUserToMember, type TeamMember } from '../../lib/teamAuth'
 import { syncEngine } from '../../lib/syncEngine'
-import { toast } from 'sonner'
+import { toast } from '../../lib/toast'
 
 export type AuthMode = 'login' | 'register' | 'forgot' | 'reset' | 'config'
 

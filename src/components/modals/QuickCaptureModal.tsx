@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Sparkles, StickyNote, Inbox, X, Check, ArrowRight } from 'lucide-react'
 import { db } from '../../db'
 import { syncEngine } from '../../lib/syncEngine'
-import { toast } from 'sonner'
+import { toast } from '../../lib/toast'
 
 interface QuickCaptureModalProps {
   isOpen: boolean

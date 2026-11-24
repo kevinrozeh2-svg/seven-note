@@ -5,7 +5,7 @@ import { Sparkles } from 'lucide-react'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
 import { processAndUploadImage, deleteImageFromStorage, formatBytes } from '../../../lib/imageOptimizer'
-import { toast } from 'sonner'
+import { toast } from '../../../lib/toast'
 import { areNodePropsEqual, NodeHandles, SourceNodeBadge } from './nodeUtils'
 import { PhotoEditorModal, type PhotoEditorResult } from '../../editor/PhotoEditorModal'
 

@@ -20,7 +20,7 @@ import {
   exportDocumentAsJson,
   printDocument
 } from '../../lib/exportUtils'
-import { toast } from 'sonner'
+import { toast } from '../../lib/toast'
 import { AppleEmoji } from '../ui/AppleEmoji'
 
 interface ShareModalProps {

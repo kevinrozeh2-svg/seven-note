@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { getEditorPreferences, subscribeEditorPreferences } from '../../lib/editorPreferences'
+import { useTeamProfiles, resolveTeamProfile } from '../../lib/teamProfiles'
+import { UserAvatar } from '../ui/UserAvatar'
 import { useEditor, EditorContent } from '@tiptap/react'
 import { Extension, Mark, mergeAttributes } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
@@ -41,7 +43,7 @@ import { TableHeader } from '@tiptap/extension-table-header'
 import { TableCell } from '@tiptap/extension-table-cell'
 import { CodeBlockLowlight } from '@tiptap/extension-code-block-lowlight'
 import { common, createLowlight } from 'lowlight'
-import { toast } from 'sonner'
+import { toast } from '../../lib/toast'
 import confetti from 'canvas-confetti'
 import {
   Lock,
@@ -347,6 +349,7 @@ export function DocEditor({
   readOnly = false,
   hideChrome = false
 }: DocEditorProps) {
+  const teamProfiles = useTeamProfiles()
   const hideEditControls = readOnly || hideChrome
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved')
   const [isIconModalOpen, setIsIconModalOpen] = useState(false)
@@ -2809,15 +2812,31 @@ export function DocEditor({
             <span>{workspace.isPrivate ? 'Privada' : 'Pública'}</span>
           </button>
 
-          {/* Creator attribution pill */}
-          {(workspace.ownerName || workspace.createdBy) && (
-            <span className="flex items-center gap-1 text-[11px] text-[var(--app-text-muted)]">
-              <span>Por:</span>
-              <span className="text-[var(--app-text-secondary)] font-medium">
-                {workspace.ownerName || workspace.createdBy}
+          {/* Creator attribution pill with synced user avatar */}
+          {(workspace.ownerName || workspace.createdBy || workspace.ownerMember || workspace.userId) && (() => {
+            const creatorProfile = resolveTeamProfile(
+              {
+                id: workspace.userId || workspace.ownerMember,
+                name: workspace.ownerName || workspace.createdBy
+              },
+              teamProfiles
+            )
+            const creatorName = creatorProfile?.fullName || workspace.ownerName || workspace.createdBy || 'Equipo'
+            return (
+              <span className="flex items-center gap-1.5 text-[11px] text-[var(--app-text-muted)]">
+                <UserAvatar
+                  name={creatorName}
+                  avatarUrl={creatorProfile?.avatarUrl}
+                  color={creatorProfile?.color || '#7c3aed'}
+                  size="xs"
+                  shape="circle"
+                />
+                <span className="text-[var(--app-text-secondary)] font-medium">
+                  {creatorName}
+                </span>
               </span>
-            </span>
-          )}
+            )
+          })()}
 
           {workspace.isPublicShared && (
             <span className="flex items-center gap-1 text-[11px] text-emerald-400">

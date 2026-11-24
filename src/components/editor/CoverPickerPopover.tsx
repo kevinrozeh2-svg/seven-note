@@ -10,7 +10,7 @@ import {
   Sparkles,
   Check
 } from 'lucide-react'
-import { toast } from 'sonner'
+import { toast } from '../../lib/toast'
 import { processAndUploadImage } from '../../lib/imageOptimizer'
 
 export interface CoverConfig {

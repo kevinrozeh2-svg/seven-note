@@ -21,7 +21,8 @@ import {
 } from '../../lib/supabase'
 import { type UserProfile, type UserRole, type UserStatus } from '../../lib/teamAuth'
 import { UserAvatar } from '../ui/UserAvatar'
-import { toast } from 'sonner'
+import { subscribeToTeamProfiles, refreshTeamProfiles } from '../../lib/teamProfiles'
+import { toast } from '../../lib/toast'
 
 interface UserManagementModalProps {
   isOpen: boolean
@@ -73,9 +74,12 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   }
 
   useEffect(() => {
-    if (isOpen) {
-      loadData()
-    }
+    if (!isOpen) return
+    loadData()
+    void refreshTeamProfiles(true)
+    return subscribeToTeamProfiles((next) => {
+      if (next.length > 0) setProfiles(next)
+    })
   }, [isOpen])
 
   if (!isOpen) return null

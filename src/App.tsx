@@ -57,6 +57,11 @@ const ExternalShareView = lazy(() => import('./components/views/ExternalShareVie
 const CalendarPage = lazy(() => import('./components/views/CalendarPage').then(m => ({ default: m.CalendarPage })))
 import { type AppTemplate, resolveTemplateContent } from './lib/templates'
 import {
+  initTeamProfilesRealtime,
+  refreshTeamProfiles,
+  cleanupTeamProfilesRealtime
+} from './lib/teamProfiles'
+import {
   getCurrentMember,
   setCurrentMember,
   clearCurrentMember,
@@ -79,7 +84,7 @@ import {
   copyAsPlainText,
   printDocument
 } from './lib/exportUtils'
-import { toast } from 'sonner'
+import { toast } from './lib/toast'
 import { AppToaster } from './components/ui/AppToaster'
 import { NotificationCenter } from './components/notifications/NotificationCenter'
 import {
@@ -273,10 +278,13 @@ function MainApp() {
             void hydrateAuthenticatedUser(user, { resetSync: isDifferentUser || isFreshSignIn })
           }, 0)
         }
+        initTeamProfilesRealtime()
+        void refreshTeamProfiles(true)
       } else {
         lastAuthUserIdRef.current = null
         setAuthUser(null)
         syncEngine.stopRealtimeSubscription()
+        cleanupTeamProfilesRealtime()
       }
       setAuthLoading(false)
     })
@@ -303,6 +311,7 @@ function MainApp() {
   const handleSignOut = async () => {
     lastAuthUserIdRef.current = null
     syncEngine.abortForSignOut()
+    cleanupTeamProfilesRealtime()
     await signOutUser()
     await clearLocalUserData()
     clearCurrentMember()
@@ -2772,7 +2781,7 @@ function MainApp() {
         authUserId={authUser?.id}
       />
 
-      {/* 7. Pro Sonner Notification Toaster */}
+      {/* 7. Sileo Physics-Based Notification Toaster */}
       <AppToaster position="bottom-right" theme={darkMode ? 'dark' : 'light'} />
     </div>
     </MotionConfig>

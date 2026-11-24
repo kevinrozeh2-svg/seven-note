@@ -4,9 +4,11 @@ import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
 import { notificationService, extractMentions, getMemberIdentifiers } from '../../../lib/notificationService'
 import { getCurrentMember, TEAM_MEMBERS } from '../../../lib/teamAuth'
-import { toast } from 'sonner'
+import { toast } from '../../../lib/toast'
 import { areNodePropsEqual, NodeHandles, SourceNodeBadge } from './nodeUtils'
 import { renderWithAppleEmoji } from '../../ui/AppleEmoji'
+import { UserAvatar } from '../../ui/UserAvatar'
+import { useTeamProfiles, resolveTeamProfile } from '../../../lib/teamProfiles'
 
 export const CommentNode = memo(({ id, data, selected }: any) => {
   const [author] = useState(data.commentAuthor || 'Natali')
@@ -18,6 +20,11 @@ export const CommentNode = memo(({ id, data, selected }: any) => {
   const [isReplying, setIsReplying] = useState(false)
   const [replyText, setReplyText] = useState('')
   const [isEditingContent, setIsEditingContent] = useState(false)
+  const teamProfiles = useTeamProfiles()
+  const authorProfile = resolveTeamProfile(
+    { id: data.commentAuthorId, email: data.commentAuthorEmail, name: author },
+    teamProfiles
+  )
 
   const save = async (updates: any) => {
     try {
@@ -156,12 +163,17 @@ export const CommentNode = memo(({ id, data, selected }: any) => {
       {/* Header: User avatar + Author + Date + Thread icon */}
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-amber-500 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs">
-            {author.charAt(0)}
-          </div>
+          <UserAvatar
+            name={authorProfile?.fullName || author}
+            avatarUrl={authorProfile?.avatarUrl}
+            color={authorProfile?.color || '#f59e0b'}
+            size="sm"
+            shape="circle"
+            className="shadow-xs"
+          />
           <div className="flex items-baseline gap-1.5">
             <span className="text-xs font-semibold text-neutral-900 dark:text-neutral-100">
-              {author}
+              {authorProfile?.fullName || author}
             </span>
             <span className="text-[10px] text-neutral-400">
               {date}

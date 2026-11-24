@@ -30,7 +30,7 @@ import {
   Copy,
 } from '@phosphor-icons/react'
 import { GOOGLE_APPS_SCRIPT_TEMPLATE } from '../../lib/googleAppsScriptTemplate'
-import { toast } from 'sonner'
+import { toast } from '../../lib/toast'
 import {
   useCalendarStore,
   getVisibleEvents,

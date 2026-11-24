@@ -1,5 +1,5 @@
 import DOMPurify from 'dompurify'
-import { toast } from 'sonner'
+import { toast } from './toast'
 import { type WorkspaceItem, type CanvasNodeItem, type CanvasEdgeItem } from '../db'
 import { escapeHtml } from './securityUtils'
 

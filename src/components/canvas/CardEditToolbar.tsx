@@ -23,7 +23,7 @@ import {
   Ban
 } from 'lucide-react'
 import { toBlob } from 'html-to-image'
-import { toast } from 'sonner'
+import { toast } from '../../lib/toast'
 
 export interface CardEditToolbarProps {
   node: any

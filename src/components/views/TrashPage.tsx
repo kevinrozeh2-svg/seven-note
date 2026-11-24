@@ -15,7 +15,7 @@ import {
   normalizeFolderPath
 } from '../../db'
 import { syncEngine } from '../../lib/syncEngine'
-import { toast } from 'sonner'
+import { toast } from '../../lib/toast'
 import { AppleEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
 import { deleteImageFromStorage, extractStorageUrlsFromHtml } from '../../lib/imageOptimizer'
 import { getSupabaseClient } from '../../lib/supabase'

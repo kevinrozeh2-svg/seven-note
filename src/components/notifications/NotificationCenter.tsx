@@ -8,7 +8,7 @@ import {
 } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { AnimatePresence, motion } from 'motion/react'
-import { toast } from 'sonner'
+import { toast } from '../../lib/toast'
 import { UserAvatar } from '../ui/UserAvatar'
 import {
   Archive,
@@ -49,7 +49,8 @@ import {
   type NotificationCategory,
   type ResolvedActorProfile
 } from '../../lib/notificationService'
-import { fetchAllProfiles, isSupabaseConfigured } from '../../lib/supabase'
+import { isSupabaseConfigured } from '../../lib/supabase'
+import { refreshTeamProfiles, subscribeToTeamProfiles } from '../../lib/teamProfiles'
 import { getCurrentMember, type TeamMember, type UserProfile } from '../../lib/teamAuth'
 
 interface NotificationCenterProps {
@@ -451,12 +452,16 @@ export function NotificationCenter({
     }, 60_000)
 
     if (isSupabaseConfigured()) {
-      void fetchAllProfiles().then((rows) => {
+      void refreshTeamProfiles(true).then((rows) => {
         if (rows.length > 0) setProfiles(rows)
       })
     }
+    const unsubProfiles = subscribeToTeamProfiles((next) => {
+      if (next.length > 0) setProfiles(next)
+    })
 
     return () => {
+      unsubProfiles()
       window.clearTimeout(focusTimer)
       window.clearInterval(tickInterval)
       safeHidePopover(viewEl)

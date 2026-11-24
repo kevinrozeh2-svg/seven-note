@@ -19,7 +19,7 @@ import {
   WarningCircle,
   VideoCamera,
 } from '@phosphor-icons/react'
-import { toast } from 'sonner'
+import { toast } from '../../lib/toast'
 import {
   useCalendarStore,
   getVisibleEvents,

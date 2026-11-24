@@ -18,7 +18,7 @@ import {
   setServerClockOffset,
   isValidUuid
 } from '../db'
-import { toast } from 'sonner'
+import { toast } from './toast'
 import { getSupabaseClient, getStoredSupabaseConfig, getAuthUser } from './supabase'
 import {
   getCurrentMember,

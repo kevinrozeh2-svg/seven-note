@@ -1,4 +1,4 @@
-import { getSupabaseClient, isSupabaseConfigured, fetchAllProfiles } from './supabase'
+import { getSupabaseClient, isSupabaseConfigured } from './supabase'
 import {
   TEAM_MEMBERS,
   getCurrentMember,
@@ -6,6 +6,12 @@ import {
   type UserProfile,
   type UserRole
 } from './teamAuth'
+import {
+  refreshTeamProfiles,
+  invalidateTeamProfilesCache,
+  resolveTeamProfile,
+  sanitizeAvatarUrl
+} from './teamProfiles'
 
 export const DOCUMENT_READS_CHANGED_EVENT = 'seven_note_document_reads_changed'
 
@@ -38,6 +44,7 @@ let cachedProfiles: { items: UserProfile[]; fetchedAt: number } | null = null
 
 export function invalidateDocumentReadsProfileCache(): void {
   cachedProfiles = null
+  invalidateTeamProfilesCache()
 }
 
 function readLocalStore(): LocalReadsStore {
@@ -104,16 +111,12 @@ function isMissingTableOrFunctionError(error: any): boolean {
 }
 
 async function getProfilesCached(forceRefresh = false): Promise<UserProfile[]> {
-  const now = Date.now()
-  if (!forceRefresh && cachedProfiles && now - cachedProfiles.fetchedAt < 60_000) {
-    return cachedProfiles.items
-  }
   if (!isSupabaseConfigured()) {
     return TEAM_MEMBERS
   }
-  const profiles = await fetchAllProfiles()
+  const profiles = await refreshTeamProfiles(forceRefresh)
   if (profiles.length > 0) {
-    cachedProfiles = { items: profiles, fetchedAt: now }
+    cachedProfiles = { items: profiles, fetchedAt: Date.now() }
     return profiles
   }
   return cachedProfiles?.items || TEAM_MEMBERS
@@ -250,6 +253,10 @@ export async function fetchDocumentReads(
 
   const addOrMergeEntry = (raw: DocumentReadEntry) => {
     const profile =
+      resolveTeamProfile(
+        { id: raw.userId, email: raw.userEmail, name: raw.userName },
+        profiles
+      ) ||
       (raw.userId && byId.get(raw.userId.toLowerCase())) ||
       (raw.userEmail && byEmail.get(raw.userEmail.toLowerCase().trim())) ||
       (raw.userName && byName.get(raw.userName.toLowerCase().trim())) ||
@@ -261,9 +268,7 @@ export async function fetchDocumentReads(
       userEmail: profile?.email || raw.userEmail,
       userColor: profile?.color || raw.userColor || '#2563eb',
       userAvatarUrl:
-        profile && typeof profile.avatarUrl === 'string'
-          ? (profile.avatarUrl.trim() || undefined)
-          : (profile?.avatarUrl || raw.userAvatarUrl),
+        sanitizeAvatarUrl(profile?.avatarUrl) || sanitizeAvatarUrl(raw.userAvatarUrl),
       role: profile?.role || raw.role
     }
 

@@ -292,11 +292,18 @@ export async function fetchUserProfile(userId: string): Promise<UserProfile | nu
       supabase.from('user_profiles').update({ role: 'admin' }).eq('id', userId).then()
     }
 
+    const cleanAvatar =
+      typeof data.avatar_url === 'string' &&
+      data.avatar_url.trim() &&
+      !/^https?:\/\/unavatar\.io\//i.test(data.avatar_url.trim())
+        ? data.avatar_url.trim()
+        : undefined
+
     return {
       id: data.id,
       email: data.email,
       fullName: data.full_name || '',
-      avatarUrl: data.avatar_url,
+      avatarUrl: cleanAvatar,
       color: data.color || '#2563eb',
       initial: (data.full_name || data.email || 'U').charAt(0).toUpperCase(),
       role: role,
@@ -410,11 +417,17 @@ export async function fetchAllProfiles(): Promise<UserProfile[]> {
 
     return data.map((d: any) => {
       const isAuthorized = isAuthorizedAdminEmail(d.email)
+      const cleanAvatar =
+        typeof d.avatar_url === 'string' &&
+        d.avatar_url.trim() &&
+        !/^https?:\/\/unavatar\.io\//i.test(d.avatar_url.trim())
+          ? d.avatar_url.trim()
+          : undefined
       return {
         id: d.id,
         email: d.email,
         fullName: d.full_name || '',
-        avatarUrl: d.avatar_url,
+        avatarUrl: cleanAvatar,
         color: d.color || '#2563eb',
         initial: (d.full_name || d.email || 'U').charAt(0).toUpperCase(),
         role: isAuthorized ? 'admin' : (d.role || 'member'),

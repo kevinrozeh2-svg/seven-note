@@ -5,7 +5,7 @@ import {
   AlignHorizontalCenterIcon,
   AlignRightIcon
 } from '@blocksuite/icons/rc'
-import { toast } from 'sonner'
+import { toast } from '../../../lib/toast'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
 import { areNodePropsEqual, NodeHandles, SourceNodeBadge } from './nodeUtils'

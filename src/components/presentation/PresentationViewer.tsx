@@ -39,7 +39,7 @@ import {
   Plus,
   Grid
 } from 'lucide-react'
-import { toast } from 'sonner'
+import { toast } from '../../lib/toast'
 import { db, type WorkspaceItem, type CanvasNodeItem, type CanvasEdgeItem } from '../../db'
 import { syncEngine } from '../../lib/syncEngine'
 import { renderWithAppleEmoji, AppleEmoji } from '../ui/AppleEmoji'

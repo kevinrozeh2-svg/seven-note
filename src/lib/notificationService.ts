@@ -1,4 +1,4 @@
-import { toast } from 'sonner'
+import { toast } from './toast'
 import {
   db,
   type NotificationItem,
@@ -15,6 +15,7 @@ import {
   type UserProfile
 } from './teamAuth'
 import { triggerRemoteWebPush } from './webPush'
+import { resolveTeamProfile, sanitizeAvatarUrl } from './teamProfiles'
 
 export type NotificationCategory = 'collaboration' | 'activity' | 'reminders' | 'sync' | 'system'
 
@@ -221,46 +222,18 @@ export function resolveActorProfile(
       ? cleanNameRaw
       : undefined
 
-  const idLower = cleanId?.toLowerCase()
-  const nameLower = cleanName?.toLowerCase()
+  const matched = resolveTeamProfile(
+    { id: cleanId, name: cleanName },
+    profiles
+  )
 
-  if (profiles && profiles.length > 0) {
-    const matchedProfile = profiles.find((p) => {
-      const pId = p.id?.toLowerCase().trim()
-      const pEmail = p.email?.toLowerCase().trim()
-      const pName = p.fullName?.toLowerCase().trim()
-      return (
-        (idLower && (pId === idLower || pEmail === idLower || pName === idLower)) ||
-        (nameLower && (pName === nameLower || pEmail === nameLower || pId === nameLower))
-      )
-    })
-    if (matchedProfile) {
-      const displayName = matchedProfile.fullName?.trim() || cleanName || 'Equipo'
-      return {
-        name: displayName,
-        initial: matchedProfile.initial || displayName.charAt(0).toUpperCase() || 'E',
-        color: matchedProfile.color || '#2563eb',
-        avatarUrl: matchedProfile.avatarUrl
-      }
-    }
-  }
-
-  const matchedPreset = TEAM_MEMBERS.find((m) => {
-    const mId = m.id.toLowerCase()
-    const mName = m.name.toLowerCase()
-    const mEmail = m.email?.toLowerCase()
-    return (
-      (idLower && (mId === idLower || mName === idLower || mEmail === idLower)) ||
-      (nameLower && (mName === nameLower || mId === nameLower || mEmail === nameLower))
-    )
-  })
-
-  if (matchedPreset) {
+  if (matched) {
+    const displayName = matched.fullName?.trim() || cleanName || 'Equipo'
     return {
-      name: matchedPreset.name,
-      initial: matchedPreset.initial,
-      color: matchedPreset.color,
-      avatarUrl: matchedPreset.avatarUrl
+      name: displayName,
+      initial: matched.initial || displayName.charAt(0).toUpperCase() || 'E',
+      color: matched.color || '#2563eb',
+      avatarUrl: sanitizeAvatarUrl(matched.avatarUrl)
     }
   }
 

@@ -2,7 +2,7 @@ import { memo, useState } from 'react'
 import { Folder, Trash2, Sparkles, FileText, Film, Skull, ChevronRight } from 'lucide-react'
 import { db } from '../../../db'
 import { syncEngine } from '../../../lib/syncEngine'
-import { toast } from 'sonner'
+import { toast } from '../../../lib/toast'
 import { areNodePropsEqual, NodeHandles, SourceNodeBadge, getCardCustomStyle, isColorDark, CardSelectionOverlay } from './nodeUtils'
 import { renderWithAppleEmoji } from '../../ui/AppleEmoji'
 

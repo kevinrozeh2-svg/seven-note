@@ -10,7 +10,7 @@ import {
   createCustomTemplateFromWorkspace
 } from '../../lib/customTemplates'
 import { type WorkspaceItem } from '../../db'
-import { toast } from 'sonner'
+import { toast } from '../../lib/toast'
 
 interface CreateTemplateModalProps {
   isOpen: boolean

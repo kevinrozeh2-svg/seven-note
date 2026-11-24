@@ -39,7 +39,7 @@ import { type WorkspaceItem } from '../../db'
 import { TemplateVisualPreview } from '../templates/TemplateVisualPreview'
 import { TemplatePreviewModal } from '../templates/TemplatePreviewModal'
 import { CreateTemplateModal } from '../templates/CreateTemplateModal'
-import { toast } from 'sonner'
+import { toast } from '../../lib/toast'
 
 interface TemplatesPageProps {
   onSelectTemplate: (template: AppTemplate) => void

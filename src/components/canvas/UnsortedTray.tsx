@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { X, Plus, ArrowLeft, Trash2, StickyNote, Link2, FileText, CheckCircle2 } from 'lucide-react'
-import { toast } from 'sonner'
+import { toast } from '../../lib/toast'
 
 export interface UnsortedItem {
   id: string

@@ -3,7 +3,7 @@ import { db, type WorkspaceItem } from '../../db'
 import { getSupabaseClient } from '../../lib/supabase'
 import { Globe, Download, Check, AlertCircle } from 'lucide-react'
 import { exportDocumentAsMarkdown } from '../../lib/exportUtils'
-import { toast } from 'sonner'
+import { toast } from '../../lib/toast'
 
 const DocEditor = lazy(() => import('../editor/DocEditor').then(m => ({ default: m.DocEditor })))
 const CanvasBoard = lazy(() => import('../canvas/CanvasBoard').then(m => ({ default: m.CanvasBoard })))

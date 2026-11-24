@@ -70,7 +70,7 @@ import {
   canUserTogglePrivacy,
   canUserManageSpace
 } from '../../lib/teamAuth'
-import { toast } from 'sonner'
+import { toast } from '../../lib/toast'
 
 export interface SidebarProps {
   spaces?: SpaceItem[]
@@ -2535,9 +2535,15 @@ export function Sidebar({
     const isBeingDraggedFolder = draggedFolderName === folderPath
     const isInsideDropTarget =
       dropTarget?.type === 'folder' && dropTarget?.position === 'inside' && dropTarget?.folder === folderPath
+    const totalDirectItems = childFolders.length + folderDocs.length
+    const getStaggerStyle = (idx: number): React.CSSProperties =>
+      ({
+        '--sn-open-i': Math.min(idx, 8),
+        '--sn-close-i': Math.min(Math.max(0, totalDirectItems - 1 - idx), 5)
+      }) as React.CSSProperties
 
     return (
-      <div key={`folder-${folderPath}`} className="mb-0.5 relative">
+      <div key={`folder-${folderPath}`} className="sn-folder-group mb-0.5 relative">
         <div
           draggable={true}
           onDragStart={(e) => handleFolderDragStart(e, folderPath)}
@@ -2661,7 +2667,14 @@ export function Sidebar({
           aria-hidden={!isFolderOpen}
           inert={!isFolderOpen ? true : undefined}
         >
-          <div className="sn-folder-collapse-inner py-0.5">
+          <div className="sn-folder-collapse-inner py-1">
+            {(childFolders.length > 0 || folderDocs.length > 0) && (
+              <div
+                className="sn-folder-tree-rail"
+                style={{ left: `${14 + level * 14}px` }}
+                aria-hidden="true"
+              />
+            )}
             {/* Input inline para crear subcarpeta dentro de esta carpeta */}
             {creatingSubfolderParent === folderPath && (
               <div
@@ -2727,7 +2740,11 @@ export function Sidebar({
                     className="sn-folder-stagger space-y-0.5 my-0.5"
                     data-open={isFolderOpen ? 'true' : 'false'}
                   >
-                    {childFolders.map((childPath: string) => renderFolderItem(childPath, level + 1))}
+                    {childFolders.map((childPath: string, idx: number) => (
+                      <div key={`subwrap-${childPath}`} style={getStaggerStyle(idx)}>
+                        {renderFolderItem(childPath, level + 1)}
+                      </div>
+                    ))}
                   </div>
                 )}
                 {/* Direct docs inside this folder */}
@@ -2737,7 +2754,11 @@ export function Sidebar({
                     className="sn-folder-stagger space-y-0.5 my-0.5 mr-0.5"
                     data-open={isFolderOpen ? 'true' : 'false'}
                   >
-                    {folderDocs.map((doc) => renderDocNode(doc, folderPath))}
+                    {folderDocs.map((doc, idx) => (
+                      <div key={`docwrap-${doc.id}`} style={getStaggerStyle(childFolders.length + idx)}>
+                        {renderDocNode(doc, folderPath)}
+                      </div>
+                    ))}
                   </div>
                 )}
               </>
@@ -2766,14 +2787,18 @@ export function Sidebar({
                       updated: doc.updatedAt || doc.createdAt || 0,
                       created: doc.createdAt || 0
                     }))
-                  ]).map((item) => {
+                  ]).map((item, idx) => {
                     if (item.type === 'folder') {
-                      return renderFolderItem(item.path, level + 1)
+                      return (
+                        <div key={`mix-folder-${item.path}`} style={getStaggerStyle(idx)}>
+                          {renderFolderItem(item.path, level + 1)}
+                        </div>
+                      )
                     }
                     return (
                       <div
                         key={item.doc.id}
-                        style={{ marginLeft: `${19 + level * 14}px` }}
+                        style={{ marginLeft: `${19 + level * 14}px`, ...getStaggerStyle(idx) }}
                         className="mr-0.5"
                       >
                         {renderDocNode(item.doc, folderPath)}
@@ -3298,9 +3323,9 @@ export function Sidebar({
             aria-hidden={!favoritesOpen}
             inert={!favoritesOpen ? true : undefined}
           >
-            <div className="sn-folder-collapse-inner py-0.5">
+            <div className="sn-folder-collapse-inner py-1">
               <div
-                className="sn-folder-stagger mt-1 space-y-0.5"
+                className="sn-section-stagger mt-1 space-y-0.5"
                 data-open={favoritesOpen ? 'true' : 'false'}
               >
                 {favorites.length === 0 ? (
@@ -3308,11 +3333,15 @@ export function Sidebar({
                     Sin favoritos fijados
                   </div>
                 ) : (
-                  favorites.map((fav) => {
+                  favorites.map((fav, idx) => {
                     const isActive = fav.id === currentWorkspaceId
                     return (
                       <div
                         key={`fav-${fav.id}`}
+                        style={{
+                          '--sn-open-i': Math.min(idx, 8),
+                          '--sn-close-i': Math.min(Math.max(0, favorites.length - 1 - idx), 5)
+                        } as React.CSSProperties}
                         onClick={() => onSelectWorkspace(fav.id)}
                         onContextMenu={(e) => {
                           e.preventDefault()
@@ -3406,9 +3435,9 @@ export function Sidebar({
             aria-hidden={!privateNotesOpen}
             inert={!privateNotesOpen ? true : undefined}
           >
-            <div className="sn-folder-collapse-inner py-0.5">
+            <div className="sn-folder-collapse-inner py-1">
               <div
-                className="sn-folder-stagger mt-1 space-y-0.5"
+                className="sn-section-stagger mt-1 space-y-0.5"
                 data-open={privateNotesOpen ? 'true' : 'false'}
               >
                 {privateDocs.length === 0 ? (
@@ -3422,7 +3451,7 @@ export function Sidebar({
                     </button>
                   </div>
                 ) : (
-                  privateDocs.map((doc) => {
+                  privateDocs.map((doc, idx) => {
                     const isActive = doc.id === currentWorkspaceId
                     const isBeingDragged = draggedDocId === doc.id
                     const isDropTargetBefore = dropTarget?.id === doc.id && dropTarget?.position === 'before'
@@ -3431,6 +3460,10 @@ export function Sidebar({
                     return (
                       <div
                         key={`priv-${doc.id}`}
+                        style={{
+                          '--sn-open-i': Math.min(idx, 8),
+                          '--sn-close-i': Math.min(Math.max(0, privateDocs.length - 1 - idx), 5)
+                        } as React.CSSProperties}
                         draggable={true}
                         onDragStart={(e) => handleDocDragStart(e, doc)}
                         onDragEnd={handleDocDragEnd}
@@ -3583,7 +3616,7 @@ export function Sidebar({
             aria-hidden={!pagesOpen}
             inert={!pagesOpen ? true : undefined}
           >
-            <div className="sn-folder-collapse-inner py-0.5">
+            <div className="sn-folder-collapse-inner py-1">
               <div className="mt-1 space-y-0.5">
                 {/* Inline input for creating a new folder */}
                 {isCreatingFolder && (

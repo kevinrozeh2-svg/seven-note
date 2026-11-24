@@ -33,7 +33,7 @@ import {
 import { syncEngine, type SyncEngineStatus } from '../../lib/syncEngine'
 import { db, markAccountSeeded, normalizeFolderPath } from '../../db'
 import schemaSql from '../../supabase_schema.sql?raw'
-import { toast } from 'sonner'
+import { toast } from '../../lib/toast'
 import { isTauri, checkForAppUpdates } from '../../lib/tauriUpdater'
 import { checkForWebUpdates } from '../../lib/pwaUpdater'
 import { notificationService, type NotificationPreferences } from '../../lib/notificationService'

@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { Command } from 'cmdk'
 import { motion, AnimatePresence } from 'motion/react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { toast } from 'sonner'
+import { toast } from '../../lib/toast'
 import { EmojiPickerPopover } from './EmojiPickerPopover'
 import {
   SearchIcon,
