@@ -7,6 +7,7 @@
 
 @layer base {
   :root {
+    interpolate-size: allow-keywords;
     --app-ui-base-font: 16px;
 
     /* Typography Stacks */
@@ -299,6 +300,32 @@
     --app-canvas-dot: #26312a;
   }
 
+  /* 5. Rose Velvet Dark (Warm Plum & Dusty Rose) */
+  html[data-color-theme="rose-velvet"] {
+    color-scheme: dark;
+    --app-bg-primary: #1f191e;
+    --app-bg-secondary: #191418;
+    --app-bg-tertiary: #130f13;
+    --app-bg-overlay: #282027;
+    --app-bg-canvas: #171217;
+    --obsidian-ribbon-bg: #130f13;
+    --obsidian-sidebar-bg: #191418;
+    --obsidian-editor-bg: #1f191e;
+    --app-text-primary: #f0e6ec;
+    --app-text-secondary: #b49eab;
+    --app-text-muted: #7e6977;
+    --app-border: rgba(240, 220, 232, 0.08);
+    --app-border-strong: rgba(240, 220, 232, 0.16);
+    --app-divider: rgba(240, 220, 232, 0.07);
+    --app-hover: rgba(240, 220, 232, 0.06);
+    --app-hover-filled: #2a2129;
+    --app-active: rgba(240, 220, 232, 0.11);
+    --app-accent: #d97a9e;
+    --app-accent-hover: #e391b0;
+    --app-accent-soft: rgba(217, 122, 158, 0.16);
+    --app-canvas-dot: #312630;
+  }
+
   /* 5. Obsidian Light */
   html[data-color-theme="obsidian-light"] {
     color-scheme: light;
@@ -384,13 +411,22 @@ textarea:focus-visible {
   outline-offset: 1px;
 }
 
-/* TipTap Editor Styling - Authentic Notion Typography */
+/* TipTap Editor Styling */
 .ProseMirror {
   outline: none !important;
   color: var(--app-text-primary);
-  font-family: var(--app-font-sans);
-  font-size: 15px;
-  line-height: 1.6;
+  font-family: var(--sn-editor-font, var(--app-font-sans));
+  font-size: var(--sn-editor-font-size, 15px);
+  line-height: var(--sn-editor-line-height, 1.65);
+}
+
+html[data-reduce-motion="true"] *,
+html[data-reduce-motion="true"] *::before,
+html[data-reduce-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
 }
 
 /* TipTap Images */
@@ -1460,6 +1496,282 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
   min-height: 0;
 }
 
+/* ==========================================================================
+   Sidebar Folders & Documents: Hover Micro-Interactions & Smooth Collapse
+   ========================================================================== */
+.sn-tree-row {
+  position: relative;
+  transition:
+    background-color 150ms var(--ease-out-quart),
+    color 150ms var(--ease-out-quart),
+    border-color 150ms var(--ease-out-quart),
+    box-shadow 180ms var(--ease-out-quart),
+    transform 140ms var(--ease-out-expo);
+}
+
+.sn-tree-row:active:not([data-dragging="true"]) {
+  transform: scale(0.985);
+}
+
+/* Active document sleek left accent indicator */
+.sn-doc-row::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  width: 2.5px;
+  height: 14px;
+  border-radius: 999px;
+  background-color: var(--app-accent);
+  opacity: 0;
+  transform: translateY(-50%) scaleY(0.35);
+  transition:
+    opacity 180ms var(--ease-out-quart),
+    transform 220ms var(--ease-out-expo);
+  pointer-events: none;
+}
+
+.sn-doc-row[data-active="true"]::before {
+  opacity: 1;
+  transform: translateY(-50%) scaleY(1);
+}
+
+/* Subtle horizontal glide on hover (doesn't shift hit target) */
+.sn-tree-content {
+  transition: transform 180ms var(--ease-out-expo);
+  will-change: transform;
+}
+
+.sn-tree-row:hover .sn-tree-content {
+  transform: translate3d(2.5px, 0, 0);
+}
+
+.sn-tree-row[data-active="true"]:hover .sn-tree-content,
+.sn-tree-row[data-dragging="true"] .sn-tree-content {
+  transform: translate3d(0, 0, 0);
+}
+
+/* Icon hover responses */
+.sn-doc-icon {
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.sn-doc-row:hover .sn-doc-icon {
+  transform: scale(1.08);
+}
+
+.sn-folder-caret {
+  transition:
+    transform 230ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 150ms var(--ease-out-quart),
+    opacity 150ms var(--ease-out-quart);
+  will-change: transform;
+}
+
+.sn-folder-row:hover .sn-folder-caret {
+  color: var(--app-text-primary);
+}
+
+/* PastelFolderIcon SVG internal animations */
+.sn-folder-svg {
+  overflow: visible;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.sn-folder-row:hover .sn-folder-svg {
+  transform: scale(1.08) rotate(-3deg);
+}
+
+.sn-folder-sheet {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  opacity: 0;
+  transform: translateY(2.4px) scaleY(0.65);
+  transition:
+    transform 250ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms var(--ease-out-quart);
+}
+
+.sn-folder-svg[data-open="true"] .sn-folder-sheet {
+  opacity: 1;
+  transform: translateY(0px) scaleY(1);
+}
+
+.sn-folder-row:hover .sn-folder-svg[data-open="false"] .sn-folder-sheet {
+  opacity: 0.72;
+  transform: translateY(1px) scaleY(0.85);
+}
+
+.sn-folder-flap {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  transform: scaleY(1);
+  transition: transform 250ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.sn-folder-svg[data-open="true"] .sn-folder-flap {
+  transform: scaleY(0.84) translateY(0.5px);
+}
+
+.sn-folder-row:hover .sn-folder-svg[data-open="false"] .sn-folder-flap {
+  transform: scaleY(0.93);
+}
+
+/* Smooth crossfade for folder doc counter & row action buttons */
+.sn-folder-right-slot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.sn-folder-count {
+  transition:
+    opacity 140ms var(--ease-out-quart),
+    transform 160ms var(--ease-out-expo);
+}
+
+.sn-row-actions {
+  transition:
+    opacity 160ms var(--ease-out-quart),
+    transform 180ms var(--ease-out-expo);
+}
+
+@media (min-width: 768px) {
+  .sn-folder-count {
+    position: absolute;
+    right: 2px;
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    pointer-events: none;
+  }
+
+  .sn-folder-row:hover .sn-folder-count,
+  .sn-folder-row:focus-within .sn-folder-count {
+    opacity: 0;
+    transform: translate3d(-4px, 0, 0);
+  }
+
+  .sn-row-actions {
+    opacity: 0;
+    transform: translate3d(4px, 0, 0);
+    pointer-events: none;
+  }
+
+  .sn-tree-row:hover .sn-row-actions,
+  .sn-tree-row:focus-within .sn-row-actions {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    pointer-events: auto;
+  }
+}
+
+.sn-row-action-btn {
+  transition:
+    background-color 140ms var(--ease-out-quart),
+    color 140ms var(--ease-out-quart),
+    transform 140ms var(--ease-out-expo);
+}
+
+.sn-row-action-btn:hover {
+  transform: scale(1.08);
+}
+
+.sn-row-action-btn:active {
+  transform: scale(0.92);
+}
+
+/* Smooth Folder & Section Expand/Collapse Container */
+/* Native intrinsic height animation where supported (Chrome/Edge/WebView2 129+) */
+@supports (interpolate-size: allow-keywords) {
+  .sn-folder-collapse {
+    block-size: 0;
+    overflow: hidden;
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      block-size 200ms cubic-bezier(0.4, 0, 0.2, 1),
+      opacity 150ms var(--ease-out-quart),
+      visibility 200ms step-end;
+  }
+
+  .sn-folder-collapse[data-open="true"] {
+    block-size: auto;
+    opacity: 1;
+    visibility: visible;
+    transition:
+      block-size 270ms var(--ease-out-expo),
+      opacity 210ms var(--ease-out-quart),
+      visibility 0ms step-start;
+  }
+}
+
+/* Universal CSS Grid fallback for Firefox & Safari */
+@supports not (interpolate-size: allow-keywords) {
+  .sn-folder-collapse {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      grid-template-rows 200ms cubic-bezier(0.4, 0, 0.2, 1),
+      opacity 150ms var(--ease-out-quart),
+      visibility 200ms step-end;
+  }
+
+  .sn-folder-collapse[data-open="true"] {
+    grid-template-rows: 1fr;
+    opacity: 1;
+    visibility: visible;
+    transition:
+      grid-template-rows 270ms var(--ease-out-expo),
+      opacity 210ms var(--ease-out-quart),
+      visibility 0ms step-start;
+  }
+}
+
+.sn-folder-collapse-inner {
+  overflow: hidden;
+  min-height: 0;
+  transform-origin: top center;
+  transform: translate3d(0, -6px, 0) scale(0.985);
+  transition: transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sn-folder-collapse[data-open="true"] > .sn-folder-collapse-inner {
+  transform: translate3d(0, 0, 0) scale(1);
+  transition: transform 270ms var(--ease-out-expo);
+}
+
+/* Subtle staggered cascade for direct items inside an expanding folder */
+.sn-folder-stagger > * {
+  opacity: 0;
+  transform: translate3d(0, -4px, 0);
+  transition:
+    opacity 130ms var(--ease-out-quart) 0ms,
+    transform 150ms cubic-bezier(0.4, 0, 0.2, 1) 0ms;
+}
+
+.sn-folder-stagger[data-open="true"] > * {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition:
+    opacity 200ms var(--ease-out-quart),
+    transform 250ms var(--ease-out-expo);
+}
+
+.sn-folder-stagger[data-open="true"] > *:nth-child(1) { transition-delay: 15ms; }
+.sn-folder-stagger[data-open="true"] > *:nth-child(2) { transition-delay: 35ms; }
+.sn-folder-stagger[data-open="true"] > *:nth-child(3) { transition-delay: 55ms; }
+.sn-folder-stagger[data-open="true"] > *:nth-child(4) { transition-delay: 75ms; }
+.sn-folder-stagger[data-open="true"] > *:nth-child(5) { transition-delay: 95ms; }
+.sn-folder-stagger[data-open="true"] > *:nth-child(6) { transition-delay: 115ms; }
+.sn-folder-stagger[data-open="true"] > *:nth-child(7) { transition-delay: 130ms; }
+.sn-folder-stagger[data-open="true"] > *:nth-child(n+8) { transition-delay: 145ms; }
+
 @media (prefers-reduced-motion: no-preference) {
   .custom-scrollbar {
     scroll-behavior: smooth;
@@ -1484,6 +1796,22 @@ ul[data-type="taskList"] li[data-checked="true"] > div {
 
   .sn-collapse-grid {
     transition-duration: 80ms;
+  }
+
+  .sn-folder-collapse,
+  .sn-folder-collapse-inner,
+  .sn-folder-stagger > * {
+    transition: none !important;
+    transform: none !important;
+  }
+
+  .sn-tree-row:active,
+  .sn-tree-row:hover .sn-tree-content,
+  .sn-doc-row:hover .sn-doc-icon,
+  .sn-folder-row:hover .sn-folder-svg,
+  .sn-row-action-btn:hover,
+  .sn-row-action-btn:active {
+    transform: none;
   }
 
   .affine-sidebar-item:active,

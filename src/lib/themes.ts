@@ -3,6 +3,7 @@ export type AppThemeId =
   | 'midnight'
   | 'nord'
   | 'forest'
+  | 'rose-velvet'
   | 'paper'
   | 'obsidian-light'
 
@@ -71,6 +72,19 @@ export const APP_THEMES: AppThemeDefinition[] = [
       editor: '#1a211d',
       accent: '#5fa882',
       text: '#dce3de'
+    }
+  },
+  {
+    id: 'rose-velvet',
+    name: 'Rosa Nocturno',
+    description: 'Ciruela terciopelo oscuro con rosa empolvado',
+    mode: 'dark',
+    swatches: {
+      ribbon: '#130f13',
+      sidebar: '#191418',
+      editor: '#1f191e',
+      accent: '#d97a9e',
+      text: '#f0e6ec'
     }
   },
   {

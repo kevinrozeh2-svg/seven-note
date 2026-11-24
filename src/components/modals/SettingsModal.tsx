@@ -21,6 +21,8 @@ import {
   PlugsConnected,
   Robot,
   ShieldCheck,
+  TextAa,
+  Trash,
   X
 } from '@phosphor-icons/react'
 import {
@@ -44,6 +46,12 @@ import {
 } from '../../lib/webPush'
 
 import { APP_THEMES, type AppThemeId, getThemeById } from '../../lib/themes'
+import {
+  type EditorPreferences,
+  getEditorPreferences,
+  updateEditorPreferences,
+  subscribeEditorPreferences
+} from '../../lib/editorPreferences'
 
 interface SettingsModalProps {
   isOpen: boolean
@@ -84,8 +92,82 @@ export function SettingsModal({
   const [vapidInput, setVapidInput] = useState('')
   const [pushLoading, setPushLoading] = useState(false)
   const [activeSection, setActiveSection] = useState<
-    'appearance' | 'notifications' | 'sync' | 'mcp' | 'backup'
+    'appearance' | 'editor' | 'notifications' | 'sync' | 'mcp' | 'backup'
   >('appearance')
+  const [editorPrefs, setEditorPrefs] = useState<EditorPreferences>(() => getEditorPreferences())
+  const [storageStats, setStorageStats] = useState<{
+    activeNotes: number
+    trashedNotes: number
+    canvasNodes: number
+    usageLabel: string
+  } | null>(null)
+  const [confirmEmptyTrash, setConfirmEmptyTrash] = useState(false)
+  const [emptyingTrash, setEmptyingTrash] = useState(false)
+
+  useEffect(() => {
+    return subscribeEditorPreferences(setEditorPrefs)
+  }, [])
+
+  useEffect(() => {
+    if (!isOpen || activeSection !== 'backup') return
+    let cancelled = false
+    const loadStats = async () => {
+      try {
+        const [allWs, allNodes] = await Promise.all([
+          db.workspaces.toArray(),
+          db.canvasNodes.toArray()
+        ])
+        const activeNotes = allWs.filter((w) => !w.isDeleted).length
+        const trashedNotes = allWs.filter((w) => w.isDeleted).length
+        const canvasNodes = allNodes.filter((n) => !n.isDeleted).length
+        let usageLabel = '—'
+        if (typeof navigator !== 'undefined' && navigator.storage?.estimate) {
+          const est = await navigator.storage.estimate()
+          if (typeof est.usage === 'number') {
+            const mb = est.usage / (1024 * 1024)
+            usageLabel = mb < 0.1 ? '< 0.1 MB' : `${mb.toFixed(1)} MB`
+          }
+        }
+        if (!cancelled) {
+          setStorageStats({ activeNotes, trashedNotes, canvasNodes, usageLabel })
+        }
+      } catch {
+        // ignore storage read failure
+      }
+    }
+    void loadStats()
+    return () => {
+      cancelled = true
+    }
+  }, [isOpen, activeSection])
+
+  const handleEmptyTrash = async () => {
+    setEmptyingTrash(true)
+    try {
+      const trashed = await db.workspaces.filter((w) => !!w.isDeleted).toArray()
+      const trashedIds = trashed.map((w) => w.id)
+      if (trashedIds.length > 0) {
+        await db.workspaces.bulkDelete(trashedIds)
+        const orphanNodes = await db.canvasNodes
+          .filter((n) => !!n.isDeleted || trashedIds.includes(n.workspaceId))
+          .toArray()
+        if (orphanNodes.length > 0) {
+          await db.canvasNodes.bulkDelete(orphanNodes.map((n) => n.id))
+        }
+      }
+      setConfirmEmptyTrash(false)
+      setStorageStats((prev) => (prev ? { ...prev, trashedNotes: 0 } : prev))
+      toast.success(
+        trashedIds.length > 0
+          ? `Papelera vaciada (${trashedIds.length} notas eliminadas)`
+          : 'La papelera ya estaba vacía'
+      )
+    } catch {
+      toast.error('No se pudo vaciar la papelera')
+    } finally {
+      setEmptyingTrash(false)
+    }
+  }
 
   useEffect(() => {
     if (!isOpen) return
@@ -427,6 +509,7 @@ export function SettingsModal({
 
   const navItems = [
     { id: 'appearance' as const, label: 'Apariencia', icon: Palette },
+    { id: 'editor' as const, label: 'Editor y Escritura', icon: TextAa },
     { id: 'notifications' as const, label: 'Notificaciones', icon: Bell },
     { id: 'sync' as const, label: 'Sincronización', icon: CloudCheck },
     { id: 'mcp' as const, label: 'Cerebro IA (MCP)', icon: Robot },
@@ -504,6 +587,7 @@ export function SettingsModal({
             <div>
               <h3 className="text-sm font-semibold text-[var(--app-text-primary)]">
                 {activeSection === 'appearance' && 'Apariencia'}
+                {activeSection === 'editor' && 'Editor y Escritura'}
                 {activeSection === 'notifications' && 'Notificaciones y Alertas'}
                 {activeSection === 'sync' && 'Sincronización en la nube'}
                 {activeSection === 'mcp' && 'Cerebro IA · Servidor MCP'}
@@ -511,10 +595,11 @@ export function SettingsModal({
               </h3>
               <p className="text-xs text-[var(--app-text-muted)] mt-0.5">
                 {activeSection === 'appearance' && 'Personaliza la paleta de colores y el tamaño global de la interfaz.'}
+                {activeSection === 'editor' && 'Configura tipografía, interlineado y valores por defecto para tus notas nuevas.'}
                 {activeSection === 'notifications' && 'Controla avisos flotantes, sonido, horario silencioso y push en segundo plano.'}
                 {activeSection === 'sync' && 'Gestiona la frecuencia de respaldo automático y tu conexión con Supabase.'}
                 {activeSection === 'mcp' && 'Conecta agentes externos y bots a Seven Note mediante Model Context Protocol.'}
-                {activeSection === 'backup' && 'Exporta copias de seguridad JSON, instala la app o busca actualizaciones.'}
+                {activeSection === 'backup' && 'Revisa el almacenamiento local, exporta copias JSON o actualiza la aplicación.'}
               </p>
             </div>
             <button
@@ -678,7 +763,289 @@ export function SettingsModal({
               </>
             )}
 
-            {/* TAB 2: NOTIFICACIONES */}
+            {/* TAB 2: EDITOR Y ESCRITURA */}
+            {activeSection === 'editor' && (
+              <div className="space-y-4">
+                {/* Typography & Live Preview */}
+                <div className="space-y-4 p-4 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)]">
+                  <div>
+                    <h4 className="text-[13px] font-semibold text-[var(--app-text-primary)]">
+                      Tipografía y lectura
+                    </h4>
+                    <p className="text-xs mt-0.5 text-[var(--app-text-muted)]">
+                      Se aplica al cuerpo del editor de notas sin alterar el tamaño de los botones.
+                    </p>
+                  </div>
+
+                  {/* Font family */}
+                  <div className="grid grid-cols-3 gap-2">
+                    {(
+                      [
+                        { id: 'sans', label: 'Sans', sample: 'Aa', font: 'var(--app-font-sans)' },
+                        { id: 'serif', label: 'Serif', sample: 'Aa', font: 'var(--app-font-serif)' },
+                        { id: 'mono', label: 'Mono', sample: 'Aa', font: 'var(--app-font-mono)' }
+                      ] as const
+                    ).map((f) => {
+                      const active = editorPrefs.editorFont === f.id
+                      return (
+                        <button
+                          key={f.id}
+                          type="button"
+                          aria-pressed={active}
+                          onClick={() => setEditorPrefs(updateEditorPreferences({ editorFont: f.id }))}
+                          className={`p-2.5 rounded-md border text-center transition cursor-pointer flex flex-col items-center gap-0.5 ${
+                            active
+                              ? 'border-[var(--app-accent)] bg-[var(--app-bg-primary)] ring-1 ring-[var(--app-accent)]/40 text-[var(--app-text-primary)]'
+                              : 'border-[var(--app-border)] bg-[var(--app-bg-primary)]/70 text-[var(--app-text-secondary)] hover:bg-[var(--app-hover)]'
+                          }`}
+                        >
+                          <span className="text-base font-semibold" style={{ fontFamily: f.font }}>
+                            {f.sample}
+                          </span>
+                          <span className="text-[11px] font-medium">{f.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {/* Font size & Line height */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div className="space-y-1.5">
+                      <span className="block text-[11px] font-medium text-[var(--app-text-secondary)]">
+                        Tamaño de fuente
+                      </span>
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {(['14', '15', '16', '18'] as const).map((size) => {
+                          const active = editorPrefs.editorFontSize === size
+                          return (
+                            <button
+                              key={size}
+                              type="button"
+                              aria-pressed={active}
+                              onClick={() =>
+                                setEditorPrefs(updateEditorPreferences({ editorFontSize: size }))
+                              }
+                              className={`h-8 rounded-md border text-xs font-medium transition cursor-pointer ${
+                                active
+                                  ? 'border-[var(--app-accent)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] font-semibold'
+                                  : 'border-[var(--app-border)] bg-[var(--app-bg-primary)]/70 text-[var(--app-text-secondary)] hover:bg-[var(--app-hover)]'
+                              }`}
+                            >
+                              {size}px
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <span className="block text-[11px] font-medium text-[var(--app-text-secondary)]">
+                        Interlineado
+                      </span>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {(
+                          [
+                            { id: 'compact', label: 'Compacto' },
+                            { id: 'comfortable', label: 'Cómodo' },
+                            { id: 'relaxed', label: 'Amplio' }
+                          ] as const
+                        ).map((lh) => {
+                          const active = editorPrefs.editorLineHeight === lh.id
+                          return (
+                            <button
+                              key={lh.id}
+                              type="button"
+                              aria-pressed={active}
+                              onClick={() =>
+                                setEditorPrefs(updateEditorPreferences({ editorLineHeight: lh.id }))
+                              }
+                              className={`h-8 rounded-md border text-xs font-medium transition cursor-pointer ${
+                                active
+                                  ? 'border-[var(--app-accent)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] font-semibold'
+                                  : 'border-[var(--app-border)] bg-[var(--app-bg-primary)]/70 text-[var(--app-text-secondary)] hover:bg-[var(--app-hover)]'
+                              }`}
+                            >
+                              {lh.label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Live text sample */}
+                  <div
+                    className="p-3.5 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)]"
+                    style={{
+                      fontFamily: 'var(--sn-editor-font, var(--app-font-sans))',
+                      fontSize: 'var(--sn-editor-font-size, 15px)',
+                      lineHeight: 'var(--sn-editor-line-height, 1.65)'
+                    }}
+                  >
+                    Las ideas claras nacen en espacios tranquilos. Así se verá el cuerpo de tus notas en Seven Note.
+                  </div>
+                </div>
+
+                {/* New Note Defaults & Privacy */}
+                <div className="space-y-3 p-4 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)]">
+                  <div>
+                    <h4 className="text-[13px] font-semibold text-[var(--app-text-primary)]">
+                      Valores por defecto en notas nuevas
+                    </h4>
+                    <p className="text-xs mt-0.5 text-[var(--app-text-muted)]">
+                      Define cómo se crea cada nueva nota cuando pulsas <span className="font-mono">+</span> o <span className="font-mono">Ctrl+N</span>.
+                    </p>
+                  </div>
+
+                  <div className="divide-y divide-[var(--app-divider)] rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)]">
+                    {/* Default View Mode */}
+                    <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+                      <div>
+                        <div className="text-xs font-medium text-[var(--app-text-primary)]">
+                          Vista inicial
+                        </div>
+                        <div className="text-[11px] text-[var(--app-text-muted)]">
+                          Abrir nuevas páginas en documento o en lienzo espacial
+                        </div>
+                      </div>
+                      <div className="inline-flex rounded-md border border-[var(--app-border)] bg-[var(--app-bg-secondary)] p-0.5 shrink-0">
+                        {(
+                          [
+                            { id: 'doc', label: 'Nota' },
+                            { id: 'canvas', label: 'Lienzo' }
+                          ] as const
+                        ).map((mode) => (
+                          <button
+                            key={mode.id}
+                            type="button"
+                            onClick={() =>
+                              setEditorPrefs(updateEditorPreferences({ defaultViewMode: mode.id }))
+                            }
+                            className={`px-2.5 py-1 rounded text-xs font-medium transition cursor-pointer ${
+                              editorPrefs.defaultViewMode === mode.id
+                                ? 'bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] shadow-xs'
+                                : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)]'
+                            }`}
+                          >
+                            {mode.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Default Page Width */}
+                    <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+                      <div>
+                        <div className="text-xs font-medium text-[var(--app-text-primary)]">
+                          Ancho de página por defecto
+                        </div>
+                        <div className="text-[11px] text-[var(--app-text-muted)]">
+                          Columna centrada de lectura o ancho completo
+                        </div>
+                      </div>
+                      <div className="inline-flex rounded-md border border-[var(--app-border)] bg-[var(--app-bg-secondary)] p-0.5 shrink-0">
+                        {(
+                          [
+                            { id: 'standard', label: 'Estándar' },
+                            { id: 'full', label: 'Completo' }
+                          ] as const
+                        ).map((w) => (
+                          <button
+                            key={w.id}
+                            type="button"
+                            onClick={() =>
+                              setEditorPrefs(updateEditorPreferences({ defaultPageWidth: w.id }))
+                            }
+                            className={`px-2.5 py-1 rounded text-xs font-medium transition cursor-pointer ${
+                              editorPrefs.defaultPageWidth === w.id
+                                ? 'bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] shadow-xs'
+                                : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)]'
+                            }`}
+                          >
+                            {w.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Default Privacy */}
+                    <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+                      <div>
+                        <div className="text-xs font-medium text-[var(--app-text-primary)]">
+                          Crear notas como Privadas por defecto
+                        </div>
+                        <div className="text-[11px] text-[var(--app-text-muted)]">
+                          Útil para borradores personales antes de compartir con el equipo
+                        </div>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={editorPrefs.defaultPrivate}
+                          onChange={(e) =>
+                            setEditorPrefs(
+                              updateEditorPreferences({ defaultPrivate: e.target.checked })
+                            )
+                          }
+                          className="sr-only peer"
+                        />
+                        <span className="w-9 h-5 bg-[var(--app-border-strong)] rounded-full peer peer-checked:after:translate-x-4 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--app-accent)]" />
+                      </label>
+                    </div>
+
+                    {/* Spellcheck */}
+                    <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+                      <div>
+                        <div className="text-xs font-medium text-[var(--app-text-primary)]">
+                          Corrector ortográfico
+                        </div>
+                        <div className="text-[11px] text-[var(--app-text-muted)]">
+                          Subraya posibles errores de ortografía al escribir
+                        </div>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={editorPrefs.spellCheck}
+                          onChange={(e) =>
+                            setEditorPrefs(updateEditorPreferences({ spellCheck: e.target.checked }))
+                          }
+                          className="sr-only peer"
+                        />
+                        <span className="w-9 h-5 bg-[var(--app-border-strong)] rounded-full peer peer-checked:after:translate-x-4 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--app-accent)]" />
+                      </label>
+                    </div>
+
+                    {/* Reduce Motion */}
+                    <div className="flex items-center justify-between gap-3 px-3.5 py-2.5">
+                      <div>
+                        <div className="text-xs font-medium text-[var(--app-text-primary)]">
+                          Reducir animaciones
+                        </div>
+                        <div className="text-[11px] text-[var(--app-text-muted)]">
+                          Desactiva transiciones y efectos de movimiento en la interfaz
+                        </div>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                        <input
+                          type="checkbox"
+                          checked={editorPrefs.reduceMotion}
+                          onChange={(e) =>
+                            setEditorPrefs(
+                              updateEditorPreferences({ reduceMotion: e.target.checked })
+                            )
+                          }
+                          className="sr-only peer"
+                        />
+                        <span className="w-9 h-5 bg-[var(--app-border-strong)] rounded-full peer peer-checked:after:translate-x-4 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--app-accent)]" />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 3: NOTIFICACIONES */}
             {activeSection === 'notifications' && (
               <div className="space-y-4">
                 <div className="space-y-3 p-4 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)]">
@@ -1215,6 +1582,81 @@ export function SettingsModal({
             {/* TAB 5: RESPALDO Y APP */}
             {activeSection === 'backup' && (
               <div className="space-y-4">
+                {/* Local Storage Summary (IndexedDB) */}
+                <div className="space-y-3 p-4 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)]">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <h4 className="text-[13px] font-semibold text-[var(--app-text-primary)]">
+                        Almacenamiento local (IndexedDB)
+                      </h4>
+                      <p className="text-xs text-[var(--app-text-muted)] mt-0.5">
+                        Resumen de datos guardados en este dispositivo para trabajo offline.
+                      </p>
+                    </div>
+                    <span className="text-xs font-mono font-medium px-2.5 py-1 rounded-md bg-[var(--app-bg-primary)] border border-[var(--app-border)] text-[var(--app-text-primary)] shrink-0">
+                      {storageStats ? storageStats.usageLabel : '…'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="p-2.5 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)]">
+                      <div className="text-[11px] text-[var(--app-text-muted)]">Notas activas</div>
+                      <div className="text-base font-semibold font-mono text-[var(--app-text-primary)] mt-0.5">
+                        {storageStats ? storageStats.activeNotes : '—'}
+                      </div>
+                    </div>
+                    <div className="p-2.5 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)]">
+                      <div className="text-[11px] text-[var(--app-text-muted)]">Nodos de lienzo</div>
+                      <div className="text-base font-semibold font-mono text-[var(--app-text-primary)] mt-0.5">
+                        {storageStats ? storageStats.canvasNodes : '—'}
+                      </div>
+                    </div>
+                    <div className="p-2.5 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-primary)]">
+                      <div className="text-[11px] text-[var(--app-text-muted)]">En papelera</div>
+                      <div className="text-base font-semibold font-mono text-[var(--app-text-primary)] mt-0.5">
+                        {storageStats ? storageStats.trashedNotes : '—'}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-[var(--app-divider)] gap-2 flex-wrap">
+                    <span className="text-[11px] text-[var(--app-text-muted)]">
+                      {confirmEmptyTrash
+                        ? 'Esta acción eliminará permanentemente las notas en papelera.'
+                        : 'Libera espacio borrando notas ya enviadas a la papelera.'}
+                    </span>
+                    {confirmEmptyTrash ? (
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setConfirmEmptyTrash(false)}
+                          className="h-8 px-2.5 rounded-md text-xs font-medium text-[var(--app-text-secondary)] hover:bg-[var(--app-hover)] transition cursor-pointer"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          disabled={emptyingTrash}
+                          onClick={() => void handleEmptyTrash()}
+                          className="h-8 px-3 rounded-md text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white transition cursor-pointer disabled:opacity-50"
+                        >
+                          {emptyingTrash ? 'Vaciando...' : 'Confirmar borrado'}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={!storageStats || storageStats.trashedNotes === 0}
+                        onClick={() => setConfirmEmptyTrash(true)}
+                        className="h-8 px-3 rounded-md text-xs font-medium border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] hover:bg-rose-500/10 hover:text-rose-500 hover:border-rose-500/30 text-[var(--app-text-primary)] transition flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                      >
+                        <Trash size={14} />
+                        <span>Vaciar papelera</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
                 {/* Local Backups (Offline First) */}
                 <div className="space-y-3 p-4 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)]">
                   <div>

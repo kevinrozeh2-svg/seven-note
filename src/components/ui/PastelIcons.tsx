@@ -80,7 +80,8 @@ export function PastelFolderIcon({
       height={size}
       viewBox="0 0 24 24"
       fill="none"
-      className={`shrink-0 ${className}`}
+      data-open={open ? 'true' : 'false'}
+      className={`sn-folder-svg shrink-0 ${className}`}
       aria-hidden
     >
       <defs>
@@ -97,40 +98,37 @@ export function PastelFolderIcon({
         strokeWidth="1.25"
         strokeLinejoin="round"
       />
-      {/* paper sheet peeking out when open */}
-      {open && (
-        <rect
-          x="5"
-          y="6.6"
-          width="14"
-          height="8"
-          rx="1.4"
-          fill="white"
-          stroke={c.stroke}
-          strokeOpacity="0.55"
-          strokeWidth="1"
-        />
-      )}
-      {/* front */}
-      <path
-        d={
-          open
-            ? 'M2.75 12.25A2 2 0 0 1 4.75 10.25h14.5a2 2 0 0 1 2 2v5a2.25 2.25 0 0 1-2.25 2.25H5a2.25 2.25 0 0 1-2.25-2.25Z'
-            : 'M2.75 10.75A2 2 0 0 1 4.75 8.75h14.5a2 2 0 0 1 2 2v6.5a2.25 2.25 0 0 1-2.25 2.25H5a2.25 2.25 0 0 1-2.25-2.25Z'
-        }
-        fill={`url(#pf-${gid})`}
+      {/* paper sheet peeking out smoothly when open or hovered */}
+      <rect
+        x="5"
+        y="6.6"
+        width="14"
+        height="8"
+        rx="1.4"
+        fill="white"
         stroke={c.stroke}
-        strokeWidth="1.25"
-        strokeLinejoin="round"
-      />
-      {/* soft highlight */}
-      <path
-        d={open ? 'M4.5 12.1h15' : 'M4.5 10.6h15'}
-        stroke="white"
-        strokeOpacity="0.85"
+        strokeOpacity="0.55"
         strokeWidth="1"
-        strokeLinecap="round"
+        className="sn-folder-sheet"
       />
+      {/* front flap with smooth CSS open/close transform */}
+      <g className="sn-folder-flap">
+        <path
+          d="M2.75 10.75A2 2 0 0 1 4.75 8.75h14.5a2 2 0 0 1 2 2v6.5a2.25 2.25 0 0 1-2.25 2.25H5a2.25 2.25 0 0 1-2.25-2.25Z"
+          fill={`url(#pf-${gid})`}
+          stroke={c.stroke}
+          strokeWidth="1.25"
+          strokeLinejoin="round"
+        />
+        {/* soft highlight */}
+        <path
+          d="M4.5 10.6h15"
+          stroke="white"
+          strokeOpacity="0.85"
+          strokeWidth="1"
+          strokeLinecap="round"
+        />
+      </g>
     </svg>
   )
 }

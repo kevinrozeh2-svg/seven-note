@@ -98,6 +98,12 @@ import {
   getToggledThemeId,
   applyAppTheme
 } from './lib/themes'
+import {
+  type EditorPreferences,
+  getEditorPreferences,
+  applyEditorPreferences,
+  subscribeEditorPreferences
+} from './lib/editorPreferences'
 
 // Lazy-loaded heavy components for instant initial load (code-splitting)
 const DocEditor = lazy(() => import('./components/editor/DocEditor').then(m => ({ default: m.DocEditor })))
@@ -325,6 +331,13 @@ function MainApp() {
   const handleToggleDarkMode = () => {
     setThemeId((prev) => getToggledThemeId(prev))
   }
+
+  const [editorPrefs, setEditorPrefs] = useState<EditorPreferences>(() => getEditorPreferences())
+
+  useEffect(() => {
+    applyEditorPreferences(editorPrefs)
+    return subscribeEditorPreferences(setEditorPrefs)
+  }, [])
 
   // Interface scaling (Zoom UI)
   const UI_SCALES = ['90', '100', '110', '120', '130']
@@ -718,7 +731,9 @@ function MainApp() {
       title: 'Sin título',
       icon: '',
       color: '#7c3aed',
-      viewMode: 'doc',
+      viewMode: editorPrefs.defaultViewMode,
+      pageWidth: editorPrefs.defaultPageWidth,
+      isPrivate: editorPrefs.defaultPrivate,
       docContent: '<p></p>',
       createdAt: now,
       updatedAt: now,
@@ -1598,7 +1613,7 @@ function MainApp() {
   }
 
   return (
-    <MotionConfig reducedMotion="user">
+    <MotionConfig reducedMotion={editorPrefs.reduceMotion ? 'always' : 'user'}>
     <div className="relative flex h-dvh w-full overflow-hidden bg-[var(--obsidian-sidebar-bg,#181818)] text-[var(--app-text-primary)] font-sans select-none">
       {/* 0. Obsidian Left Ribbon (Compact 40px Tool strip) */}
       {!isPresentationMode && !focusMode && (
@@ -2326,7 +2341,9 @@ function MainApp() {
                     title: 'Sin título',
                     icon: '',
                     color: '#7c3aed',
-                    viewMode: 'doc',
+                    viewMode: editorPrefs.defaultViewMode,
+                    pageWidth: editorPrefs.defaultPageWidth,
+                    isPrivate: editorPrefs.defaultPrivate,
                     docContent: '<p></p>',
                     createdAt: now,
                     updatedAt: now,
@@ -2609,7 +2626,9 @@ function MainApp() {
             title: 'Sin título',
             icon: '',
             color: '#7c3aed',
-            viewMode: 'doc',
+            viewMode: editorPrefs.defaultViewMode,
+            pageWidth: editorPrefs.defaultPageWidth,
+            isPrivate: editorPrefs.defaultPrivate,
             docContent: '<p></p>',
             createdAt: now,
             updatedAt: now,

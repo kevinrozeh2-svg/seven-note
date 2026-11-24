@@ -39,6 +39,16 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
   const [invitations, setInvitations] = useState<TeamInvitation[]>([])
   const [loading, setLoading] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [showPermissionsInfo, setShowPermissionsInfo] = useState(false)
+
+  useEffect(() => {
+    if (!isOpen) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [isOpen, onClose])
 
   // Invite form state
   const [inviteEmail, setInviteEmail] = useState('')
@@ -154,290 +164,353 @@ export const UserManagementModal: React.FC<UserManagementModalProps> = ({
     )
   })
 
+  const formatRoleBadge = (role: string) => {
+    if (role === 'admin') return 'Admin'
+    if (role === 'viewer') return 'Lector'
+    return 'Trabajador'
+  }
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-xs p-2 sm:p-5 animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-2xl bg-[var(--app-bg-overlay)] border border-[var(--app-border-strong)] rounded-xl shadow-[var(--app-shadow-popover)] overflow-hidden flex flex-col text-[var(--app-text-primary)] font-sans max-h-[85vh]"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Gestión de Usuarios y Equipo"
+        className="w-full max-w-4xl h-[86vh] sm:h-[78vh] max-h-[660px] bg-[var(--app-bg-primary)] border border-[var(--app-border-strong)] rounded-xl shadow-[var(--app-shadow-popover)] overflow-hidden flex flex-col md:flex-row text-[var(--app-text-primary)] font-sans"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--app-divider)] shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-8 h-8 rounded-md bg-[var(--app-hover)] text-[var(--app-text-secondary)] flex items-center justify-center shrink-0">
-              <Shield className="w-4 h-4" />
+        {/* Left Navigation Sidebar */}
+        <aside className="md:w-56 shrink-0 bg-[var(--app-bg-secondary)] border-b md:border-b-0 md:border-r border-[var(--app-border)] flex flex-col">
+          <div className="px-4 py-3.5 flex items-center justify-between border-b border-[var(--app-divider)]">
+            <div className="flex items-center gap-2 min-w-0">
+              <Shield className="w-4 h-4 text-[var(--app-text-secondary)] shrink-0" />
+              <h2 className="text-[13px] font-semibold truncate">Equipo</h2>
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-semibold truncate">Gestión de Usuarios y Equipo</h2>
-                <span className="hidden sm:inline-block text-[10px] px-1.5 py-0.5 rounded font-medium bg-[var(--app-hover)] text-[var(--app-text-secondary)]">
-                  Administrador
-                </span>
-              </div>
-              <p className="text-[11px] text-[var(--app-text-muted)]">
-                {profiles.length} miembros registrados • {invitations.length} invitaciones pendientes
+            <button
+              type="button"
+              aria-label="Cerrar gestión de usuarios"
+              onClick={onClose}
+              className="md:hidden w-8 h-8 rounded-md flex items-center justify-center text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition-colors cursor-pointer shrink-0"
+            >
+              <CloseIcon style={{ width: 16, height: 16 }} />
+            </button>
+          </div>
+
+          <nav
+            aria-label="Secciones de equipo"
+            className="flex md:flex-col gap-1 p-2 overflow-x-auto md:overflow-y-auto no-scrollbar flex-1"
+          >
+            <button
+              type="button"
+              aria-current={activeTab === 'members' ? 'page' : undefined}
+              onClick={() => setActiveTab('members')}
+              className={`flex items-center justify-between gap-2 px-3 py-2 rounded-md text-xs font-medium whitespace-nowrap transition cursor-pointer shrink-0 ${
+                activeTab === 'members'
+                  ? 'bg-[var(--app-active)] text-[var(--app-text-primary)] font-semibold'
+                  : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <Users className="w-4 h-4 shrink-0" />
+                <span>Miembros</span>
+              </span>
+              <span className="text-[11px] font-mono text-[var(--app-text-muted)]">{profiles.length}</span>
+            </button>
+
+            <button
+              type="button"
+              aria-current={activeTab === 'invitations' ? 'page' : undefined}
+              onClick={() => setActiveTab('invitations')}
+              className={`flex items-center justify-between gap-2 px-3 py-2 rounded-md text-xs font-medium whitespace-nowrap transition cursor-pointer shrink-0 ${
+                activeTab === 'invitations'
+                  ? 'bg-[var(--app-active)] text-[var(--app-text-primary)] font-semibold'
+                  : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <Mail className="w-4 h-4 shrink-0" />
+                <span>Invitaciones</span>
+              </span>
+              <span className="text-[11px] font-mono text-[var(--app-text-muted)]">{invitations.length}</span>
+            </button>
+          </nav>
+
+          <div className="hidden md:block px-4 py-3 border-t border-[var(--app-divider)] text-[11px] text-[var(--app-text-muted)]">
+            <span className="font-medium text-[var(--app-text-secondary)]">Rol:</span> Administrador
+          </div>
+        </aside>
+
+        {/* Right Content Pane */}
+        <div className="flex-1 flex flex-col min-w-0 min-h-0">
+          {/* Desktop Pane Header */}
+          <div className="hidden md:flex items-center justify-between px-6 py-3.5 border-b border-[var(--app-divider)] shrink-0">
+            <div>
+              <h3 className="text-sm font-semibold text-[var(--app-text-primary)]">
+                {activeTab === 'members' ? 'Miembros activos' : 'Invitaciones y pre-autorización'}
+              </h3>
+              <p className="text-xs text-[var(--app-text-muted)] mt-0.5">
+                {activeTab === 'members'
+                  ? `${profiles.length} miembros registrados en el espacio de trabajo.`
+                  : `${invitations.length} correos pre-autorizados pendientes de registro.`}
               </p>
             </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-md text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition-colors cursor-pointer shrink-0"
-          >
-            <CloseIcon style={{ width: 16, height: 16 }} />
-          </button>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex border-b border-[var(--app-divider)] px-5 bg-[var(--app-bg-secondary)] shrink-0 overflow-x-auto no-scrollbar gap-1">
-          <button
-            type="button"
-            onClick={() => setActiveTab('members')}
-            className={`py-2.5 px-3 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-              activeTab === 'members'
-                ? 'border-[var(--app-accent)] text-[var(--app-text-primary)]'
-                : 'border-transparent text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)]'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>Miembros Activos ({profiles.length})</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('invitations')}
-            className={`py-2.5 px-3 text-xs font-medium border-b-2 transition-colors flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
-              activeTab === 'invitations'
-                ? 'border-[var(--app-accent)] text-[var(--app-text-primary)]'
-                : 'border-transparent text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)]'
-            }`}
-          >
-            <Mail className="w-3.5 h-3.5" />
-            <span>Invitaciones ({invitations.length})</span>
-          </button>
-        </div>
-
-        {/* Tab Content */}
-        <div className="p-5 overflow-y-auto flex-1 custom-scrollbar space-y-4 text-xs">
-          {/* Architecture 3 Layers Info Banner */}
-          <div className="p-3 rounded-lg bg-[var(--app-bg-secondary)] border border-[var(--app-border)] text-[var(--app-text-secondary)] space-y-1.5 text-[11px] leading-relaxed">
-            <div className="font-semibold text-[var(--app-text-primary)] flex items-center gap-1.5 text-xs">
-              <Shield className="w-3.5 h-3.5 text-[var(--app-text-secondary)]" />
-              <span>Sistema de Permisos de 3 Capas</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowPermissionsInfo((v) => !v)}
+                aria-expanded={showPermissionsInfo}
+                className="h-8 px-2.5 rounded-md border border-[var(--app-border)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-xs font-medium text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] transition cursor-pointer flex items-center gap-1.5"
+              >
+                <Shield className="w-3.5 h-3.5" />
+                <span>Permisos</span>
+              </button>
+              <button
+                type="button"
+                aria-label="Cerrar gestión de usuarios"
+                onClick={onClose}
+                className="w-8 h-8 rounded-md flex items-center justify-center text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition-colors cursor-pointer"
+                title="Cerrar (Esc)"
+              >
+                <CloseIcon style={{ width: 16, height: 16 }} />
+              </button>
             </div>
-            <ul className="space-y-1 text-[11px] list-disc list-inside text-[var(--app-text-muted)]">
-              <li><strong className="text-[var(--app-text-primary)] font-medium">Capa 1 (Admins):</strong> Control total del equipo, editan y gestionan todo el contenido compartido. Privacidad personal preservada (nadie ve notas privadas ajenas).</li>
-              <li><strong className="text-[var(--app-text-primary)] font-medium">Capa 2 (Trabajadores):</strong> Acceso a todos los espacios de trabajo. Leen todas las notas y tableros. <em>Solo pueden editar lo que ellos mismos creen</em>.</li>
-              <li><strong className="text-[var(--app-text-primary)] font-medium">Capa 3 (Enlaces Externos):</strong> Invitados web sin registro con lectura exclusiva de la nota compartida.</li>
-            </ul>
           </div>
 
-          {/* TAB 1: MEMBERS */}
-          {activeTab === 'members' && (
-            <div className="space-y-3">
-              {/* Search & Refresh */}
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1 flex items-center">
-                  <Search className="w-3.5 h-3.5 absolute left-3 text-[var(--app-text-muted)] pointer-events-none" />
-                  <input
-                    type="text"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Buscar por nombre, correo o rol..."
-                    className="w-full pl-8 pr-3 py-1.5 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] placeholder:text-[var(--app-text-muted)] text-xs outline-none focus:border-[var(--app-accent)] transition-colors"
-                  />
+          {/* Scrollable Body */}
+          <div className="p-4 sm:p-6 overflow-y-auto flex-1 custom-scrollbar space-y-4 text-xs">
+            {/* Collapsible 3 Layers Info Banner */}
+            {showPermissionsInfo && (
+              <div className="p-3.5 rounded-lg bg-[var(--app-bg-secondary)] border border-[var(--app-border)] text-[var(--app-text-secondary)] space-y-1.5 text-xs leading-relaxed">
+                <div className="font-semibold text-[var(--app-text-primary)] flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-[var(--app-text-secondary)]" />
+                  <span>Sistema de Permisos de 3 Capas</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={loadData}
-                  disabled={loading}
-                  className="p-1.5 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] transition-colors cursor-pointer"
-                  title="Actualizar lista"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                </button>
+                <ul className="space-y-1 text-[11px] list-disc list-inside text-[var(--app-text-muted)]">
+                  <li><strong className="text-[var(--app-text-primary)] font-medium">Capa 1 (Admins):</strong> Control total del contenido compartido. Las notas privadas ajenas siempre quedan ocultas.</li>
+                  <li><strong className="text-[var(--app-text-primary)] font-medium">Capa 2 (Trabajadores):</strong> Leen todas las notas compartidas y solo editan las que ellos mismos crean.</li>
+                  <li><strong className="text-[var(--app-text-primary)] font-medium">Capa 3 (Enlaces externos):</strong> Invitados web sin registro con lectura exclusiva de la nota compartida.</li>
+                </ul>
               </div>
+            )}
 
-              {/* Members List */}
-              <div className="space-y-2">
+            {/* TAB 1: MEMBERS */}
+            {activeTab === 'members' && (
+              <div className="space-y-3">
+                {/* Search & Refresh */}
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1 flex items-center">
+                    <Search className="w-4 h-4 absolute left-3 text-[var(--app-text-muted)] pointer-events-none" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Buscar por nombre, correo o rol..."
+                      aria-label="Buscar miembros"
+                      className="w-full h-9 pl-9 pr-3 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-secondary)] text-[var(--app-text-primary)] placeholder:text-[var(--app-text-muted)] text-xs outline-none focus:border-[var(--app-accent)] transition-colors"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    aria-label="Actualizar lista de miembros"
+                    onClick={loadData}
+                    disabled={loading}
+                    className="w-9 h-9 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                    title="Actualizar lista"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+
+                {/* Members List (Unified hairline divider container) */}
                 {filteredProfiles.length === 0 ? (
-                  <div className="p-8 text-center text-[var(--app-text-muted)]">
+                  <div className="p-10 text-center text-[var(--app-text-muted)] rounded-lg border border-dashed border-[var(--app-border-strong)]">
                     No se encontraron miembros registrados.
                   </div>
                 ) : (
-                  filteredProfiles.map((p) => {
-                    const isSelf = p.id === currentUserId
-                    const isSuspended = p.status === 'suspended'
+                  <div className="rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)] divide-y divide-[var(--app-divider)] overflow-hidden">
+                    {filteredProfiles.map((p) => {
+                      const isSelf = p.id === currentUserId
+                      const isSuspended = p.status === 'suspended'
 
-                    return (
-                      <div
-                        key={p.id}
-                        className={`p-2.5 rounded-lg border transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 ${
-                          isSuspended
-                            ? 'bg-rose-500/5 border-rose-500/20 opacity-75'
-                            : 'bg-[var(--app-bg-secondary)] border-[var(--app-border)]'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <UserAvatar
-                            name={p.fullName || p.email || 'Usuario'}
-                            avatarUrl={p.avatarUrl}
-                            color={p.color || '#7c3aed'}
-                            size="md"
-                            shape="rounded"
-                            className="w-8 h-8"
-                          />
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium truncate max-w-[170px] text-[var(--app-text-primary)]">
-                                {p.fullName || 'Sin nombre'}
-                              </span>
-                              {isSelf && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--app-accent-soft)] text-[var(--app-accent)] font-medium">
-                                  Tú
+                      return (
+                        <div
+                          key={p.id}
+                          className={`px-3.5 py-3 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                            isSuspended ? 'bg-rose-500/5 opacity-75' : 'hover:bg-[var(--app-hover)]/50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <UserAvatar
+                              name={p.fullName || p.email || 'Usuario'}
+                              avatarUrl={p.avatarUrl}
+                              color={p.color || '#7c3aed'}
+                              size="md"
+                              shape="rounded"
+                              className="w-9 h-9"
+                            />
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-semibold text-[13px] truncate max-w-[180px] text-[var(--app-text-primary)]">
+                                  {p.fullName || 'Sin nombre'}
                                 </span>
-                              )}
-                              {isSuspended && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-500 font-medium">
-                                  Suspendido
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-[11px] text-[var(--app-text-muted)] truncate max-w-[200px]">
-                              {p.email}
+                                {isSelf && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-[var(--app-bg-primary)] border border-[var(--app-border-strong)] text-[var(--app-text-secondary)] font-medium">
+                                    Tú
+                                  </span>
+                                )}
+                                {isSuspended && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-rose-500/15 text-rose-500 font-medium">
+                                    Suspendido
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-[var(--app-text-muted)] truncate max-w-[220px]">
+                                {p.email}
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        {/* Actions: Role Selector and Status Toggle */}
-                        <div className="flex items-center justify-end gap-2 shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-[var(--app-divider)]">
-                          <select
-                            value={p.role}
-                            disabled={isSelf}
-                            onChange={(e) => handleRoleChange(p.id, e.target.value as UserRole, p.status)}
-                            className="text-xs px-2.5 py-1.5 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] outline-none focus:border-[var(--app-accent)] cursor-pointer disabled:opacity-60 flex-1 sm:flex-none"
-                          >
-                            <option value="admin">Administrador (Capa 1)</option>
-                            <option value="member">Trabajador (Capa 2)</option>
-                            <option value="viewer">Lector (Solo ver)</option>
-                          </select>
-
-                          {!isSelf && (
-                            <button
-                              type="button"
-                              onClick={() => handleToggleStatus(p.id, p.role, p.status)}
-                              className={`p-1.5 rounded-md border transition-colors cursor-pointer shrink-0 ${
-                                isSuspended
-                                  ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20'
-                                  : 'border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-[var(--app-text-muted)] hover:text-rose-500 hover:border-rose-500/25 hover:bg-rose-500/10'
-                              }`}
-                              title={isSuspended ? 'Reactivar usuario' : 'Suspender usuario'}
+                          {/* Actions: Role Selector and Status Toggle */}
+                          <div className="flex items-center justify-end gap-2 shrink-0">
+                            <select
+                              aria-label={`Rol de ${p.fullName || p.email}`}
+                              value={p.role}
+                              disabled={isSelf}
+                              onChange={(e) => handleRoleChange(p.id, e.target.value as UserRole, p.status)}
+                              className="h-8 text-xs px-2.5 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] outline-none focus:border-[var(--app-accent)] cursor-pointer disabled:opacity-55 flex-1 sm:flex-none"
                             >
-                              {isSuspended ? <UserCheck className="w-3.5 h-3.5" /> : <UserX className="w-3.5 h-3.5" />}
-                            </button>
-                          )}
+                              <option value="admin">Administrador (Capa 1)</option>
+                              <option value="member">Trabajador (Capa 2)</option>
+                              <option value="viewer">Lector (Solo ver)</option>
+                            </select>
+
+                            {!isSelf && (
+                              <button
+                                type="button"
+                                aria-label={isSuspended ? 'Reactivar usuario' : 'Suspender usuario'}
+                                onClick={() => handleToggleStatus(p.id, p.role, p.status)}
+                                className={`w-8 h-8 rounded-md border flex items-center justify-center transition-colors cursor-pointer shrink-0 ${
+                                  isSuspended
+                                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20'
+                                    : 'border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-[var(--app-text-muted)] hover:text-rose-500 hover:border-rose-500/30 hover:bg-rose-500/10'
+                                }`}
+                                title={isSuspended ? 'Reactivar usuario' : 'Suspender usuario'}
+                              >
+                                {isSuspended ? <UserCheck className="w-4 h-4" /> : <UserX className="w-4 h-4" />}
+                              </button>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )
-                  })
+                      )
+                    })}
+                  </div>
                 )}
               </div>
-            </div>
-          )}
+            )}
 
-          {/* TAB 2: INVITATIONS */}
-          {activeTab === 'invitations' && (
-            <div className="space-y-4">
-              {/* Form to Invite / Whitelist Email */}
-              <form
-                onSubmit={handleCreateInvitation}
-                className="p-3.5 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)] space-y-2.5"
-              >
-                <div className="font-medium text-xs text-[var(--app-text-primary)]">
-                  Pre-autorizar nuevo correo en el equipo
-                </div>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                  <div className="relative flex-1">
-                    <Mail className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[var(--app-text-muted)] pointer-events-none" />
-                    <input
-                      type="email"
-                      required
-                      value={inviteEmail}
-                      onChange={(e) => setInviteEmail(e.target.value)}
-                      placeholder="nuevo-miembro@equipo.com"
-                      className="w-full pl-8 pr-3 py-1.5 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] placeholder:text-[var(--app-text-muted)] text-xs outline-none focus:border-[var(--app-accent)] transition-colors"
-                    />
-                  </div>
-
-                  <select
-                    value={inviteRole}
-                    onChange={(e) => setInviteRole(e.target.value as UserRole)}
-                    className="text-xs px-2.5 py-1.5 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] outline-none focus:border-[var(--app-accent)] cursor-pointer"
-                  >
-                    <option value="member">Trabajador (Capa 2)</option>
-                    <option value="admin">Administrador (Capa 1)</option>
-                    <option value="viewer">Lector (Solo ver)</option>
-                  </select>
-
-                  <button
-                    type="submit"
-                    disabled={inviting}
-                    className="py-1.5 px-3 rounded-md bg-[var(--app-text-primary)] text-[var(--app-bg-primary)] hover:opacity-90 font-medium text-xs transition-opacity flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                  >
-                    {inviting ? (
-                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    ) : (
-                      <>
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Pre-autorizar</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-                <p className="text-[11px] text-[var(--app-text-muted)]">
-                  Cuando este correo se registre en Seven Note, se le asignará automáticamente el rol predefinido.
-                </p>
-              </form>
-
-              {/* Pending Invitations List */}
-              <div className="space-y-2">
-                <div className="font-medium text-xs text-[var(--app-text-secondary)]">
-                  Correos autorizados pendientes de registro
-                </div>
-
-                {invitations.length === 0 ? (
-                  <div className="p-6 text-center text-[var(--app-text-muted)] border border-dashed border-[var(--app-border-strong)] rounded-lg">
-                    No hay invitaciones pendientes.
-                  </div>
-                ) : (
-                  invitations.map((inv) => (
-                    <div
-                      key={inv.id}
-                      className="p-2.5 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)] flex items-center justify-between gap-3"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <Mail className="w-3.5 h-3.5 text-[var(--app-text-secondary)] shrink-0" />
-                        <span className="font-mono text-xs truncate text-[var(--app-text-primary)]">{inv.email}</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--app-hover)] text-[var(--app-text-secondary)] font-medium capitalize">
-                          {inv.role}
-                        </span>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteInvitation(inv.id)}
-                        className="p-1.5 rounded-md text-[var(--app-text-muted)] hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                        title="Revocar autorización"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+            {/* TAB 2: INVITATIONS */}
+            {activeTab === 'invitations' && (
+              <div className="space-y-4">
+                {/* Form to Invite / Whitelist Email */}
+                <form
+                  onSubmit={handleCreateInvitation}
+                  className="p-4 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)] space-y-3"
+                >
+                  <div>
+                    <div className="font-semibold text-[13px] text-[var(--app-text-primary)]">
+                      Pre-autorizar nuevo correo
                     </div>
-                  ))
-                )}
+                    <p className="text-xs text-[var(--app-text-muted)] mt-0.5">
+                      Al registrarse con este correo, recibirá automáticamente el rol elegido.
+                    </p>
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                    <div className="relative flex-1">
+                      <Mail className="w-4 h-4 absolute left-3 top-2.5 text-[var(--app-text-muted)] pointer-events-none" />
+                      <input
+                        type="email"
+                        required
+                        value={inviteEmail}
+                        onChange={(e) => setInviteEmail(e.target.value)}
+                        placeholder="nuevo-miembro@equipo.com"
+                        aria-label="Correo a pre-autorizar"
+                        className="w-full h-9 pl-9 pr-3 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] placeholder:text-[var(--app-text-muted)] text-xs outline-none focus:border-[var(--app-accent)] transition-colors"
+                      />
+                    </div>
+
+                    <select
+                      aria-label="Rol para invitación"
+                      value={inviteRole}
+                      onChange={(e) => setInviteRole(e.target.value as UserRole)}
+                      className="h-9 text-xs px-2.5 rounded-md border border-[var(--app-border-strong)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] outline-none focus:border-[var(--app-accent)] cursor-pointer"
+                    >
+                      <option value="member">Trabajador (Capa 2)</option>
+                      <option value="admin">Administrador (Capa 1)</option>
+                      <option value="viewer">Lector (Solo ver)</option>
+                    </select>
+
+                    <button
+                      type="submit"
+                      disabled={inviting}
+                      className="h-9 px-4 rounded-md bg-[var(--app-accent)] hover:bg-[var(--app-accent-hover)] text-white font-semibold text-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0"
+                    >
+                      {inviting ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <>
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Pre-autorizar</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+
+                {/* Pending Invitations List */}
+                <div className="space-y-2">
+                  <div className="font-medium text-xs text-[var(--app-text-secondary)]">
+                    Correos autorizados pendientes ({invitations.length})
+                  </div>
+
+                  {invitations.length === 0 ? (
+                    <div className="p-8 text-center text-[var(--app-text-muted)] border border-dashed border-[var(--app-border-strong)] rounded-lg">
+                      No hay invitaciones pendientes.
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)] divide-y divide-[var(--app-divider)] overflow-hidden">
+                      {invitations.map((inv) => (
+                        <div
+                          key={inv.id}
+                          className="px-3.5 py-2.5 flex items-center justify-between gap-3 hover:bg-[var(--app-hover)]/50 transition-colors"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <Mail className="w-4 h-4 text-[var(--app-text-muted)] shrink-0" />
+                            <span className="font-mono text-xs truncate text-[var(--app-text-primary)]">{inv.email}</span>
+                            <span className="text-[10px] px-2 py-0.5 rounded-md bg-[var(--app-bg-primary)] border border-[var(--app-border)] text-[var(--app-text-secondary)] font-medium shrink-0">
+                              {formatRoleBadge(inv.role)}
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            aria-label={`Revocar invitación de ${inv.email}`}
+                            onClick={() => handleDeleteInvitation(inv.id)}
+                            className="w-8 h-8 rounded-md flex items-center justify-center text-[var(--app-text-muted)] hover:text-rose-500 hover:bg-rose-500/10 transition-colors cursor-pointer shrink-0"
+                            title="Revocar autorización"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>

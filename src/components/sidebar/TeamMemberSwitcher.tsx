@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { createPortal } from 'react-dom'
-import { ChevronDown, Shield, LogOut, Key, User, Users, Lock } from 'lucide-react'
+import { ChevronDown, ChevronRight, Shield, LogOut, Key, User, Users, Lock } from 'lucide-react'
 import { type TeamMember, isUserAdmin } from '../../lib/teamAuth'
 import { UserAvatar } from '../ui/UserAvatar'
 
@@ -133,12 +133,14 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
             onClick={() => setIsOpen(false)}
           />
           <div
-            className="fixed z-[99999] bg-[var(--app-bg-overlay)] border border-[var(--app-border-strong)] rounded-xl shadow-[var(--app-shadow-popover)] p-1.5 animate-in fade-in zoom-in-95 duration-100 flex flex-col gap-1 font-sans text-xs max-h-[min(420px,80vh)] overflow-y-auto custom-scrollbar w-60 text-[var(--app-text-primary)]"
+            role="menu"
+            aria-label="Opciones de cuenta"
+            className="fixed z-[99999] bg-[var(--app-bg-overlay)] border border-[var(--app-border-strong)] rounded-xl shadow-[var(--app-shadow-popover)] p-2.5 animate-in fade-in zoom-in-95 duration-100 flex flex-col gap-2 font-sans text-xs max-h-[min(460px,82vh)] overflow-y-auto custom-scrollbar w-72 text-[var(--app-text-primary)]"
             style={
               variant === 'circular'
                 ? {
                     bottom: popoverPos ? `${popoverPos.bottom}px` : '16px',
-                    left: popoverPos ? `${popoverPos.left}px` : '52px'
+                    left: popoverPos ? `${popoverPos.left}px` : '56px'
                   }
                 : {
                     bottom: popoverPos ? `${popoverPos.bottom}px` : '16px',
@@ -147,27 +149,35 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
             }
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Account Header */}
-            <div className="px-2 py-2 flex items-center gap-2.5 border-b border-[var(--app-divider)]">
-              <UserAvatar
-                name={displayName}
-                avatarUrl={effectiveAvatar}
-                color={currentMember.color}
-                size="md"
-                shape="rounded"
-                className="w-8 h-8"
-              />
+            {/* Account Identity Card */}
+            <div className="p-2.5 rounded-lg bg-[var(--app-bg-secondary)] border border-[var(--app-border)] flex items-center gap-3">
+              <div className="relative shrink-0">
+                <UserAvatar
+                  name={displayName}
+                  avatarUrl={effectiveAvatar}
+                  color={currentMember.color}
+                  size="md"
+                  shape="rounded"
+                  className="w-10 h-10"
+                />
+                {authUser && (
+                  <span
+                    className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-[var(--app-bg-secondary)]"
+                    title="Sesión activa"
+                  />
+                )}
+              </div>
               <div className="min-w-0 flex-1 leading-tight">
                 <div className="flex items-center justify-between gap-1.5">
-                  <span className="font-semibold text-[var(--app-text-primary)] text-xs truncate">
+                  <span className="font-semibold text-[var(--app-text-primary)] text-[13px] truncate">
                     {displayName}
                   </span>
-                  <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-[var(--app-hover)] text-[var(--app-text-secondary)] shrink-0">
+                  <span className="text-[10px] px-2 py-0.5 rounded-md font-medium bg-[var(--app-bg-primary)] border border-[var(--app-border)] text-[var(--app-text-secondary)] shrink-0">
                     {roleLabel}
                   </span>
                 </div>
                 {displayEmail && (
-                  <div className="text-[11px] text-[var(--app-text-muted)] truncate mt-0.5">
+                  <div className="text-[11px] text-[var(--app-text-muted)] truncate mt-1">
                     {displayEmail}
                   </div>
                 )}
@@ -175,55 +185,81 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
             </div>
 
             {/* Acciones de Cuenta */}
-            <div className="space-y-0.5 py-0.5">
+            <div className="space-y-1">
               {authUser ? (
                 <>
                   <button
                     type="button"
+                    role="menuitem"
                     onClick={() => {
                       setIsOpen(false)
                       onOpenProfileModal?.()
                     }}
-                    className="w-full py-1.5 px-2 rounded-md hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] text-xs font-medium transition-colors flex items-center gap-2.5 cursor-pointer"
+                    className="group w-full px-2 py-2 rounded-lg hover:bg-[var(--app-hover)] text-left transition-colors flex items-center gap-2.5 cursor-pointer"
                   >
-                    <User className="w-3.5 h-3.5 text-[var(--app-text-secondary)] shrink-0" />
-                    <span>Mi Perfil y Seguridad</span>
+                    <span className="w-8 h-8 rounded-md bg-[var(--app-bg-secondary)] border border-[var(--app-border)] flex items-center justify-center text-[var(--app-text-secondary)] group-hover:text-[var(--app-text-primary)] shrink-0 transition-colors">
+                      <User className="w-4 h-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-semibold text-[var(--app-text-primary)] truncate">
+                        Mi Perfil y Seguridad
+                      </div>
+                      <div className="text-[11px] text-[var(--app-text-muted)] truncate">
+                        Avatar, nombre y contraseña
+                      </div>
+                    </div>
+                    <ChevronRight className="w-3.5 h-3.5 text-[var(--app-text-muted)] group-hover:text-[var(--app-text-primary)] shrink-0 transition-colors" />
                   </button>
 
                   {isAdmin && (
                     <button
                       type="button"
+                      role="menuitem"
                       onClick={() => {
                         setIsOpen(false)
                         onOpenUserManagementModal?.()
                       }}
-                      className="w-full py-1.5 px-2 rounded-md hover:bg-[var(--app-hover)] text-[var(--app-text-primary)] text-xs font-medium transition-colors flex items-center gap-2.5 cursor-pointer"
+                      className="group w-full px-2 py-2 rounded-lg hover:bg-[var(--app-hover)] text-left transition-colors flex items-center gap-2.5 cursor-pointer"
                     >
-                      <Users className="w-3.5 h-3.5 text-[var(--app-text-secondary)] shrink-0" />
-                      <span>Gestión de Usuarios</span>
+                      <span className="w-8 h-8 rounded-md bg-[var(--app-bg-secondary)] border border-[var(--app-border)] flex items-center justify-center text-[var(--app-text-secondary)] group-hover:text-[var(--app-text-primary)] shrink-0 transition-colors">
+                        <Users className="w-4 h-4" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-semibold text-[var(--app-text-primary)] truncate">
+                          Gestión de Usuarios
+                        </div>
+                        <div className="text-[11px] text-[var(--app-text-muted)] truncate">
+                          Miembros, roles e invitaciones
+                        </div>
+                      </div>
+                      <ChevronRight className="w-3.5 h-3.5 text-[var(--app-text-muted)] group-hover:text-[var(--app-text-primary)] shrink-0 transition-colors" />
                     </button>
                   )}
 
+                  <div className="my-1 border-t border-[var(--app-divider)]" />
+
                   <button
                     type="button"
+                    role="menuitem"
                     onClick={() => {
                       setIsOpen(false)
                       onSignOut?.()
                     }}
-                    className="w-full py-1.5 px-2 rounded-md hover:bg-rose-500/10 text-rose-500 dark:text-rose-400 text-xs font-medium transition-colors flex items-center gap-2.5 cursor-pointer"
+                    className="w-full h-9 px-2.5 rounded-lg hover:bg-rose-500/10 text-rose-500 dark:text-rose-400 text-xs font-semibold transition-colors flex items-center gap-2.5 cursor-pointer"
                   >
-                    <LogOut className="w-3.5 h-3.5 shrink-0" />
-                    <span>Cerrar Sesión</span>
+                    <LogOut className="w-4 h-4 shrink-0" />
+                    <span>Cerrar sesión</span>
                   </button>
                 </>
               ) : (
                 <button
                   type="button"
+                  role="menuitem"
                   onClick={() => {
                     setIsOpen(false)
                     onOpenAuthModal?.()
                   }}
-                  className="w-full py-1.5 px-2.5 rounded-md bg-[var(--app-text-primary)] text-[var(--app-bg-primary)] hover:opacity-90 text-xs font-medium transition flex items-center justify-center gap-2 cursor-pointer"
+                  className="w-full h-9 px-3 rounded-lg bg-[var(--app-accent)] hover:bg-[var(--app-accent-hover)] text-white text-xs font-semibold transition flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Key className="w-3.5 h-3.5" />
                   <span>Iniciar Sesión / Registrarse</span>
@@ -231,8 +267,8 @@ export const TeamMemberSwitcher: React.FC<TeamMemberSwitcherProps> = ({
               )}
             </div>
 
-            <div className="px-2 py-1.5 text-[11px] text-[var(--app-text-muted)] leading-snug border-t border-[var(--app-divider)] flex items-start gap-1.5">
-              <Lock className="w-3 h-3 shrink-0 mt-0.5 text-[var(--app-text-muted)]" />
+            <div className="px-2.5 py-2 rounded-lg bg-[var(--app-bg-secondary)]/70 border border-[var(--app-border)] text-[11px] text-[var(--app-text-muted)] leading-snug flex items-center gap-2">
+              <Lock className="w-3.5 h-3.5 shrink-0 text-[var(--app-text-muted)]" />
               <span>Tus notas privadas solo son visibles para ti.</span>
             </div>
           </div>

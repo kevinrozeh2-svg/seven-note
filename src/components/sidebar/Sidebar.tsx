@@ -2344,12 +2344,14 @@ export function Sidebar({
               isPrivate: doc.isPrivate
             })
           }}
-          className={`group relative flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-grab active:cursor-grabbing transition select-none ${
+          data-active={isActive ? 'true' : undefined}
+          data-dragging={isBeingDragged ? 'true' : undefined}
+          className={`sn-tree-row sn-doc-row group relative flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-grab active:cursor-grabbing select-none ${
             isBeingDragged
               ? 'opacity-40 bg-black/[0.04] dark:bg-white/[0.04] scale-[0.98]'
               : isActive
               ? 'bg-white dark:bg-[#202024] text-neutral-900 dark:text-neutral-100 font-semibold shadow-xs border border-black/[0.04] dark:border-white/[0.06]'
-              : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-black/[0.03] dark:hover:bg-white/[0.05] font-medium'
+              : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-black/[0.045] dark:hover:bg-white/[0.06] font-medium'
           }`}
         >
           {isDropTargetBefore && (
@@ -2363,17 +2365,19 @@ export function Sidebar({
             </div>
           )}
 
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <DocumentItemIcon
-              icon={doc.icon}
-              viewMode={doc.viewMode}
-              title={doc.title}
-              isPrivate={doc.isPrivate}
-              onClick={(e) => {
-                e.stopPropagation()
-                setEmojiPickerTarget({ id: doc.id, type: 'doc', currentIcon: doc.icon })
-              }}
-            />
+          <div className="sn-tree-content flex items-center gap-2 min-w-0 flex-1">
+            <span className="sn-doc-icon flex items-center shrink-0">
+              <DocumentItemIcon
+                icon={doc.icon}
+                viewMode={doc.viewMode}
+                title={doc.title}
+                isPrivate={doc.isPrivate}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setEmojiPickerTarget({ id: doc.id, type: 'doc', currentIcon: doc.icon })
+                }}
+              />
+            </span>
             <span className="truncate flex-1 text-[13px] select-none pointer-events-none">
               {renderWithAppleEmoji(doc.title || 'Untitled')}
             </span>
@@ -2382,7 +2386,7 @@ export function Sidebar({
             )}
           </div>
           <div
-            className="flex items-center gap-0.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity shrink-0"
+            className="sn-row-actions flex items-center gap-0.5 shrink-0"
             onMouseDown={(e) => e.stopPropagation()}
           >
             <button
@@ -2398,7 +2402,7 @@ export function Sidebar({
                   isPrivate: doc.isPrivate
                 })
               }}
-              className="p-1 rounded text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
+              className="sn-row-action-btn p-1 rounded-md text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-black/[0.06] dark:hover:bg-white/[0.08] cursor-pointer"
               title="Opciones de nota"
             >
               <DotsThree size={14} weight="bold" />
@@ -2439,12 +2443,14 @@ export function Sidebar({
                       isPrivate: sub.isPrivate
                     })
                   }}
-                  className={`group relative flex items-center justify-between px-2.5 py-1 rounded-xl cursor-grab active:cursor-grabbing transition select-none ${
+                  data-active={isSubActive ? 'true' : undefined}
+                  data-dragging={isSubBeingDragged ? 'true' : undefined}
+                  className={`sn-tree-row sn-doc-row group relative flex items-center justify-between px-2.5 py-1 rounded-xl cursor-grab active:cursor-grabbing select-none ${
                     isSubBeingDragged
                       ? 'opacity-40 bg-black/[0.04] dark:bg-white/[0.04] scale-[0.98]'
                       : isSubActive
                       ? 'bg-white dark:bg-[#202024] text-neutral-900 dark:text-neutral-100 font-semibold shadow-xs border border-black/[0.04] dark:border-white/[0.06]'
-                      : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-black/[0.03] dark:hover:bg-white/[0.05] font-medium'
+                      : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-black/[0.045] dark:hover:bg-white/[0.06] font-medium'
                   }`}
                 >
                   {isSubDropTargetBefore && (
@@ -2458,17 +2464,19 @@ export function Sidebar({
                     </div>
                   )}
 
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <DocumentItemIcon
-                      icon={sub.icon}
-                      viewMode={sub.viewMode}
-                      title={sub.title}
-                      isPrivate={sub.isPrivate}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setEmojiPickerTarget({ id: sub.id, type: 'doc', currentIcon: sub.icon })
-                      }}
-                    />
+                  <div className="sn-tree-content flex items-center gap-2 min-w-0 flex-1">
+                    <span className="sn-doc-icon flex items-center shrink-0">
+                      <DocumentItemIcon
+                        icon={sub.icon}
+                        viewMode={sub.viewMode}
+                        title={sub.title}
+                        isPrivate={sub.isPrivate}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setEmojiPickerTarget({ id: sub.id, type: 'doc', currentIcon: sub.icon })
+                        }}
+                      />
+                    </span>
                     <span className="truncate flex-1 select-none pointer-events-none">
                       {renderWithAppleEmoji(sub.title || 'Untitled')}
                     </span>
@@ -2477,7 +2485,7 @@ export function Sidebar({
                     )}
                   </div>
                   <div
-                    className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                    className="sn-row-actions flex items-center gap-0.5 shrink-0"
                     onMouseDown={(e) => e.stopPropagation()}
                   >
                     <button
@@ -2493,7 +2501,7 @@ export function Sidebar({
                           isPrivate: sub.isPrivate
                         })
                       }}
-                      className="p-1 rounded text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
+                      className="sn-row-action-btn p-1 rounded-md text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-black/[0.06] dark:hover:bg-white/[0.08] cursor-pointer"
                       title="Opciones de nota"
                     >
                       <DotsThree size={14} weight="bold" />
@@ -2551,8 +2559,10 @@ export function Sidebar({
               y: e.clientY
             })
           }}
+          aria-expanded={isFolderOpen}
+          data-dragging={isBeingDraggedFolder ? 'true' : undefined}
           style={{ paddingLeft: `${10 + level * 14}px` }}
-          className={`group relative flex items-center justify-between pr-2.5 py-1.5 rounded-[10px] cursor-grab active:cursor-grabbing hover:bg-black/[0.05] dark:hover:bg-white/[0.06] text-neutral-600 dark:text-neutral-400 font-medium transition select-none ${
+          className={`sn-tree-row sn-folder-row group relative flex items-center justify-between pr-2.5 py-1.5 rounded-[10px] cursor-grab active:cursor-grabbing hover:bg-black/[0.05] dark:hover:bg-white/[0.065] text-neutral-600 dark:text-neutral-400 font-medium select-none ${
             isBeingDraggedFolder ? 'opacity-40 bg-black/[0.04] dark:bg-white/[0.04]' : ''
           } ${
             isFolderTarget
@@ -2571,11 +2581,11 @@ export function Sidebar({
             </div>
           )}
 
-          <div className="flex items-center gap-2 min-w-0 flex-1">
+          <div className="sn-tree-content flex items-center gap-2 min-w-0 flex-1">
             <CaretRight
               size={11}
               weight="bold"
-              className={`text-neutral-400 shrink-0 transition-transform duration-200 ${isFolderOpen ? 'rotate-90' : ''}`}
+              className={`sn-folder-caret text-neutral-400 shrink-0 ${isFolderOpen ? 'rotate-90' : 'rotate-0'}`}
             />
             <PastelFolderIcon
               name={folderPath}
@@ -2583,7 +2593,7 @@ export function Sidebar({
               size={19}
               open={isFolderOpen}
             />
-            <span className="truncate text-[13px] font-medium text-neutral-800 dark:text-neutral-200 select-none pointer-events-none">{leafName}</span>
+            <span className="truncate text-[13px] font-medium text-neutral-800 dark:text-neutral-200 group-hover:text-neutral-950 dark:group-hover:text-white transition-colors select-none pointer-events-none">{leafName}</span>
             {folderDocs.some((d) => isItemUnread(d, 'workspace', activeMember, authUser?.id)) && !isFolderOpen && (
               <NewBadge className="ml-1" />
             )}
@@ -2594,19 +2604,19 @@ export function Sidebar({
             )}
           </div>
           <div
-            className="flex items-center gap-1"
+            className="sn-folder-right-slot gap-1"
             onMouseDown={(e) => e.stopPropagation()}
           >
-            <span className="text-[11px] text-neutral-400 dark:text-neutral-500 tabular-nums hidden md:inline md:group-hover:hidden">
+            <span className="sn-folder-count text-[11px] text-neutral-400 dark:text-neutral-500 tabular-nums hidden md:inline">
               {folderDocs.length}
             </span>
-            <div className="flex md:hidden md:group-hover:flex items-center gap-0.5">
+            <div className="sn-row-actions flex items-center gap-0.5">
               <button
                 onClick={(e) => {
                   e.stopPropagation()
                   handleCreateWorkspace(null, folderPath, 'doc', false)
                 }}
-                className="p-1 rounded text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
+                className="sn-row-action-btn p-1 rounded-md text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-black/[0.06] dark:hover:bg-white/[0.08] cursor-pointer"
                 title={`Crear nota en ${leafName}`}
               >
                 <Plus size={12} />
@@ -2618,7 +2628,7 @@ export function Sidebar({
                   setFolderOpenMap((prev) => ({ ...prev, [folderPath]: true }))
                   setNewSubfolderName('')
                 }}
-                className="p-1 rounded text-neutral-400 hover:text-blue-500"
+                className="sn-row-action-btn p-1 rounded-md text-neutral-400 hover:text-blue-500 hover:bg-black/[0.06] dark:hover:bg-white/[0.08] cursor-pointer"
                 title="Crear subcarpeta"
               >
                 <FolderSimplePlus size={12} weight="duotone" />
@@ -2635,7 +2645,7 @@ export function Sidebar({
                     y: rect.top
                   })
                 }}
-                className="p-1 rounded text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
+                className="sn-row-action-btn p-1 rounded-md text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-black/[0.06] dark:hover:bg-white/[0.08] cursor-pointer"
                 title="Opciones de carpeta"
               >
                 <DotsThree size={14} weight="bold" />
@@ -2644,71 +2654,79 @@ export function Sidebar({
           </div>
         </div>
 
-        {/* Input inline para crear subcarpeta dentro de esta carpeta */}
-        {isFolderOpen && creatingSubfolderParent === folderPath && (
-          <div
-            style={{ paddingLeft: `${14 + (level + 1) * 14}px` }}
-            className="py-1 pr-2 my-0.5"
-          >
-            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] border border-blue-500/40">
-              <PastelFolderIcon name="nueva" size={17} />
-              <input
-                type="text"
-                value={newSubfolderName}
-                onChange={(e) => setNewSubfolderName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault()
-                    handleCreateSubfolder(folderPath, newSubfolderName)
-                  } else if (e.key === 'Escape') {
-                    folderSubmitLockRef.current = true
-                    setCreatingSubfolderParent(null)
-                    setNewSubfolderName('')
-                    setTimeout(() => {
-                      folderSubmitLockRef.current = false
-                    }, 150)
-                  }
-                }}
-                onBlur={() => {
-                  if (folderSubmitLockRef.current) return
-                  if (newSubfolderName.trim()) {
-                    handleCreateSubfolder(folderPath, newSubfolderName)
-                  } else {
-                    setCreatingSubfolderParent(null)
-                    setNewSubfolderName('')
-                  }
-                }}
-                placeholder="Nombre de la subcarpeta..."
-                autoFocus
-                className="w-full bg-transparent text-xs text-neutral-900 dark:text-neutral-100 outline-none placeholder:text-neutral-400"
-              />
-            </div>
-          </div>
-        )}
+        {/* Smooth collapsible wrapper for folder contents (notes, subfolders, inline input, empty state) */}
+        <div
+          className="sn-folder-collapse"
+          data-open={isFolderOpen ? 'true' : 'false'}
+          aria-hidden={!isFolderOpen}
+          inert={!isFolderOpen ? true : undefined}
+        >
+          <div className="sn-folder-collapse-inner py-0.5">
+            {/* Input inline para crear subcarpeta dentro de esta carpeta */}
+            {creatingSubfolderParent === folderPath && (
+              <div
+                style={{ paddingLeft: `${14 + (level + 1) * 14}px` }}
+                className="py-1 pr-2 my-0.5"
+              >
+                <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl bg-black/[0.04] dark:bg-white/[0.06] border border-blue-500/40">
+                  <PastelFolderIcon name="nueva" size={17} />
+                  <input
+                    type="text"
+                    value={newSubfolderName}
+                    onChange={(e) => setNewSubfolderName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleCreateSubfolder(folderPath, newSubfolderName)
+                      } else if (e.key === 'Escape') {
+                        folderSubmitLockRef.current = true
+                        setCreatingSubfolderParent(null)
+                        setNewSubfolderName('')
+                        setTimeout(() => {
+                          folderSubmitLockRef.current = false
+                        }, 150)
+                      }
+                    }}
+                    onBlur={() => {
+                      if (folderSubmitLockRef.current) return
+                      if (newSubfolderName.trim()) {
+                        handleCreateSubfolder(folderPath, newSubfolderName)
+                      } else {
+                        setCreatingSubfolderParent(null)
+                        setNewSubfolderName('')
+                      }
+                    }}
+                    placeholder="Nombre de la subcarpeta..."
+                    autoFocus
+                    className="w-full bg-transparent text-xs text-neutral-900 dark:text-neutral-100 outline-none placeholder:text-neutral-400"
+                  />
+                </div>
+              </div>
+            )}
 
-        {/* Empty placeholder */}
-        {isFolderOpen &&
-          folderDocs.length === 0 &&
-          childFolders.length === 0 &&
-          creatingSubfolderParent !== folderPath && (
-            <div
-              style={{ marginLeft: `${14 + (level + 1) * 14}px` }}
-              onDragOver={(e) => handleEmptyFolderDragOver(e, folderPath)}
-              onDrop={(e) => handleFolderHeaderDrop(e, folderPath)}
-              className="py-2 px-3 text-[11px] text-neutral-400 italic rounded-lg border border-dashed border-black/10 dark:border-white/10 my-1 mr-2 select-none"
-            >
-              Carpeta vacía (arrastra notas o carpetas aquí)
-            </div>
-          )}
+            {/* Empty placeholder */}
+            {folderDocs.length === 0 &&
+              childFolders.length === 0 &&
+              creatingSubfolderParent !== folderPath && (
+                <div
+                  style={{ marginLeft: `${14 + (level + 1) * 14}px` }}
+                  onDragOver={(e) => handleEmptyFolderDragOver(e, folderPath)}
+                  onDrop={(e) => handleFolderHeaderDrop(e, folderPath)}
+                  className="py-2 px-3 text-[11px] text-neutral-400 italic rounded-lg border border-dashed border-black/10 dark:border-white/10 my-1 mr-2 select-none"
+                >
+                  Carpeta vacía (arrastra notas o carpetas aquí)
+                </div>
+              )}
 
-        {/* Folders and documents content */}
-        {isFolderOpen && (
-          <>
+            {/* Folders and documents content */}
             {foldersFirst ? (
               <>
                 {/* Child subfolders */}
                 {childFolders.length > 0 && (
-                  <div className="space-y-0.5 my-0.5">
+                  <div
+                    className="sn-folder-stagger space-y-0.5 my-0.5"
+                    data-open={isFolderOpen ? 'true' : 'false'}
+                  >
                     {childFolders.map((childPath: string) => renderFolderItem(childPath, level + 1))}
                   </div>
                 )}
@@ -2716,7 +2734,8 @@ export function Sidebar({
                 {folderDocs.length > 0 && (
                   <div
                     style={{ marginLeft: `${19 + level * 14}px` }}
-                    className="space-y-0.5 my-0.5 mr-0.5"
+                    className="sn-folder-stagger space-y-0.5 my-0.5 mr-0.5"
+                    data-open={isFolderOpen ? 'true' : 'false'}
                   >
                     {folderDocs.map((doc) => renderDocNode(doc, folderPath))}
                   </div>
@@ -2725,7 +2744,10 @@ export function Sidebar({
             ) : (
               /* Interleaved folders and documents */
               (childFolders.length > 0 || folderDocs.length > 0) && (
-                <div className="space-y-0.5 my-0.5 animate-in fade-in duration-150">
+                <div
+                  className="sn-folder-stagger space-y-0.5 my-0.5"
+                  data-open={isFolderOpen ? 'true' : 'false'}
+                >
                   {sortMixedItems([
                     ...childFolders.map((p) => {
                       const stats = getFolderTimestamps(p)
@@ -2761,8 +2783,8 @@ export function Sidebar({
                 </div>
               )
             )}
-          </>
-        )}
+          </div>
+        </div>
       </div>
     )
   }
@@ -3263,78 +3285,91 @@ export function Sidebar({
                   {favorites.length}
                 </span>
               )}
-              {favoritesOpen ? (
-                <CaretDown size={12} className="text-[var(--app-text-muted)] opacity-70 group-hover:opacity-100 transition" />
-              ) : (
-                <CaretRight size={12} className="text-[var(--app-text-muted)] opacity-70 group-hover:opacity-100 transition" />
-              )}
+              <CaretRight
+                size={12}
+                className={`sn-folder-caret text-[var(--app-text-muted)] opacity-70 group-hover:opacity-100 ${favoritesOpen ? 'rotate-90' : 'rotate-0'}`}
+              />
             </div>
           </button>
 
-          {favoritesOpen && (
-            <div className="mt-1 space-y-0.5">
-              {favorites.length === 0 ? (
-                <div className="px-3 py-1.5 text-[11px] text-neutral-400 italic">
-                  Sin favoritos fijados
-                </div>
-              ) : (
-                favorites.map((fav) => {
-                  const isActive = fav.id === currentWorkspaceId
-                  return (
-                    <div
-                      key={`fav-${fav.id}`}
-                      onClick={() => onSelectWorkspace(fav.id)}
-                      onContextMenu={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        setActiveItemMenu({
-                          type: 'doc',
-                          id: fav.id,
-                          name: fav.title,
-                          x: e.clientX,
-                          y: e.clientY,
-                          isPrivate: fav.isPrivate
-                        })
-                      }}
-                      className={`group flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-pointer transition ${
-                        isActive
-                          ? 'bg-white dark:bg-[#202024] text-neutral-900 dark:text-neutral-100 font-semibold shadow-xs border border-black/[0.04] dark:border-white/[0.06]'
-                          : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-black/[0.03] dark:hover:bg-white/[0.05] font-medium'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <DocumentItemIcon
-                          icon={fav.icon}
-                          viewMode={fav.viewMode}
-                          title={fav.title}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setEmojiPickerTarget({ id: fav.id, type: 'doc', currentIcon: fav.icon })
-                          }}
-                        />
-                        <span className="truncate flex-1">{renderWithAppleEmoji(fav.title || 'Untitled')}</span>
-                        {isItemUnread(fav, 'workspace', activeMember, authUser?.id) && (
-                          <NewBadge className="ml-1.5" />
-                        )}
-                      </div>
-                      <button
-                        onClick={(e) => handleToggleFavorite(e, fav)}
-                        className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-amber-500 p-1"
-                        title="Quitar de favoritos"
+          <div
+            className="sn-folder-collapse"
+            data-open={favoritesOpen ? 'true' : 'false'}
+            aria-hidden={!favoritesOpen}
+            inert={!favoritesOpen ? true : undefined}
+          >
+            <div className="sn-folder-collapse-inner py-0.5">
+              <div
+                className="sn-folder-stagger mt-1 space-y-0.5"
+                data-open={favoritesOpen ? 'true' : 'false'}
+              >
+                {favorites.length === 0 ? (
+                  <div className="px-3 py-1.5 text-[11px] text-neutral-400 italic">
+                    Sin favoritos fijados
+                  </div>
+                ) : (
+                  favorites.map((fav) => {
+                    const isActive = fav.id === currentWorkspaceId
+                    return (
+                      <div
+                        key={`fav-${fav.id}`}
+                        onClick={() => onSelectWorkspace(fav.id)}
+                        onContextMenu={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setActiveItemMenu({
+                            type: 'doc',
+                            id: fav.id,
+                            name: fav.title,
+                            x: e.clientX,
+                            y: e.clientY,
+                            isPrivate: fav.isPrivate
+                          })
+                        }}
+                        data-active={isActive ? 'true' : undefined}
+                        className={`sn-tree-row sn-doc-row group flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-pointer ${
+                          isActive
+                            ? 'bg-white dark:bg-[#202024] text-neutral-900 dark:text-neutral-100 font-semibold shadow-xs border border-black/[0.04] dark:border-white/[0.06]'
+                            : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-black/[0.045] dark:hover:bg-white/[0.06] font-medium'
+                        }`}
                       >
-                        <Star size={13} weight="fill" className="text-amber-500" />
-                      </button>
-                    </div>
-                  )
-                })
-              )}
+                        <div className="sn-tree-content flex items-center gap-2 min-w-0 flex-1">
+                          <span className="sn-doc-icon flex items-center shrink-0">
+                            <DocumentItemIcon
+                              icon={fav.icon}
+                              viewMode={fav.viewMode}
+                              title={fav.title}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setEmojiPickerTarget({ id: fav.id, type: 'doc', currentIcon: fav.icon })
+                              }}
+                            />
+                          </span>
+                          <span className="truncate flex-1">{renderWithAppleEmoji(fav.title || 'Untitled')}</span>
+                          {isItemUnread(fav, 'workspace', activeMember, authUser?.id) && (
+                            <NewBadge className="ml-1.5" />
+                          )}
+                        </div>
+                        <button
+                          onClick={(e) => handleToggleFavorite(e, fav)}
+                          className="sn-row-actions sn-row-action-btn text-amber-500 p-1 rounded-md hover:bg-amber-500/10 cursor-pointer shrink-0"
+                          title="Quitar de favoritos"
+                        >
+                          <Star size={13} weight="fill" className="text-amber-500" />
+                        </button>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
             </div>
-          )}
+          </div>
         </div>
 
         {/* SECCIÓN 1: NOTAS PRIVADAS DEL MIEMBRO ACTIVO */}
         <div>
           <div
+            aria-expanded={privateNotesOpen}
             onClick={() => setPrivateNotesOpen(!privateNotesOpen)}
             className="flex items-center justify-between px-2.5 py-1.5 pb-2 mb-1.5 border-b border-black/[0.06] dark:border-white/[0.08] text-[13px] font-semibold tracking-tight text-neutral-800 dark:text-neutral-200 hover:text-neutral-950 dark:hover:text-white cursor-pointer transition group"
           >
@@ -3358,128 +3393,142 @@ export function Sidebar({
               >
                 <Plus size={13} />
               </button>
-              {privateNotesOpen ? (
-                <CaretDown size={12} className="text-neutral-400 opacity-60 group-hover:opacity-100 transition" />
-              ) : (
-                <CaretRight size={12} className="text-neutral-400 opacity-60 group-hover:opacity-100 transition" />
-              )}
+              <CaretRight
+                size={12}
+                className={`sn-folder-caret text-neutral-400 opacity-60 group-hover:opacity-100 ${privateNotesOpen ? 'rotate-90' : 'rotate-0'}`}
+              />
             </div>
           </div>
 
-          {privateNotesOpen && (
-            <div className="mt-1 space-y-0.5">
-              {privateDocs.length === 0 ? (
-                <div className="px-3 py-1.5 text-[11px] text-neutral-400 italic flex items-center justify-between">
-                  <span>Sin notas privadas</span>
-                  <button
-                    onClick={() => handleCreateWorkspace(null, null, 'doc', true)}
-                    className="text-blue-500 hover:underline not-italic text-[11px]"
-                  >
-                    + Crear
-                  </button>
-                </div>
-              ) : (
-                privateDocs.map((doc) => {
-                  const isActive = doc.id === currentWorkspaceId
-                  const isBeingDragged = draggedDocId === doc.id
-                  const isDropTargetBefore = dropTarget?.id === doc.id && dropTarget?.position === 'before'
-                  const isDropTargetAfter = dropTarget?.id === doc.id && dropTarget?.position === 'after'
-
-                  return (
-                    <div
-                      key={`priv-${doc.id}`}
-                      draggable={true}
-                      onDragStart={(e) => handleDocDragStart(e, doc)}
-                      onDragEnd={handleDocDragEnd}
-                      onDragOver={(e) => handleDocDragOver(e, doc, null)}
-                      onDrop={(e) => handleDocDrop(e, doc, null)}
-                      onClick={() => {
-                        if (hasJustDraggedRef.current) return
-                        onSelectWorkspace(doc.id)
-                      }}
-                      onContextMenu={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        setActiveItemMenu({
-                          type: 'doc',
-                          id: doc.id,
-                          name: doc.title,
-                          x: e.clientX,
-                          y: e.clientY,
-                          isPrivate: true
-                        })
-                      }}
-                      className={`group relative flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-grab active:cursor-grabbing transition select-none ${
-                        isBeingDragged
-                          ? 'opacity-40 bg-black/[0.04] dark:bg-white/[0.04] scale-[0.98]'
-                          : isActive
-                          ? 'bg-amber-500/10 dark:bg-amber-500/15 text-amber-900 dark:text-amber-200 font-semibold shadow-xs border border-amber-500/30'
-                          : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-black/[0.03] dark:hover:bg-white/[0.05] font-medium'
-                      }`}
+          <div
+            className="sn-folder-collapse"
+            data-open={privateNotesOpen ? 'true' : 'false'}
+            aria-hidden={!privateNotesOpen}
+            inert={!privateNotesOpen ? true : undefined}
+          >
+            <div className="sn-folder-collapse-inner py-0.5">
+              <div
+                className="sn-folder-stagger mt-1 space-y-0.5"
+                data-open={privateNotesOpen ? 'true' : 'false'}
+              >
+                {privateDocs.length === 0 ? (
+                  <div className="px-3 py-1.5 text-[11px] text-neutral-400 italic flex items-center justify-between">
+                    <span>Sin notas privadas</span>
+                    <button
+                      onClick={() => handleCreateWorkspace(null, null, 'doc', true)}
+                      className="text-blue-500 hover:underline not-italic text-[11px]"
                     >
-                      {isDropTargetBefore && (
-                        <div className="absolute -top-1 left-1.5 right-1.5 h-[3px] bg-amber-500 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(245,158,11,1)]">
-                          <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-amber-500" />
-                        </div>
-                      )}
-                      {isDropTargetAfter && (
-                        <div className="absolute -bottom-1 left-1.5 right-1.5 h-[3px] bg-amber-500 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(245,158,11,1)]">
-                          <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-amber-500" />
-                        </div>
-                      )}
+                      + Crear
+                    </button>
+                  </div>
+                ) : (
+                  privateDocs.map((doc) => {
+                    const isActive = doc.id === currentWorkspaceId
+                    const isBeingDragged = draggedDocId === doc.id
+                    const isDropTargetBefore = dropTarget?.id === doc.id && dropTarget?.position === 'before'
+                    const isDropTargetAfter = dropTarget?.id === doc.id && dropTarget?.position === 'after'
 
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <DocumentItemIcon
-                          icon={doc.icon}
-                          viewMode={doc.viewMode}
-                          title={doc.title}
-                          isPrivate
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setEmojiPickerTarget({ id: doc.id, type: 'doc', currentIcon: doc.icon })
-                          }}
-                        />
-                        <span className="truncate flex-1 text-[13px] select-none pointer-events-none">{renderWithAppleEmoji(doc.title || 'Sin título')}</span>
-                        {isItemUnread(doc, 'workspace', activeMember, authUser?.id) && (
-                          <NewBadge className="ml-1.5" />
-                        )}
-                      </div>
+                    return (
                       <div
-                        className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity shrink-0"
-                        onMouseDown={(e) => e.stopPropagation()}
+                        key={`priv-${doc.id}`}
+                        draggable={true}
+                        onDragStart={(e) => handleDocDragStart(e, doc)}
+                        onDragEnd={handleDocDragEnd}
+                        onDragOver={(e) => handleDocDragOver(e, doc, null)}
+                        onDrop={(e) => handleDocDrop(e, doc, null)}
+                        onClick={() => {
+                          if (hasJustDraggedRef.current) return
+                          onSelectWorkspace(doc.id)
+                        }}
+                        onContextMenu={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setActiveItemMenu({
+                            type: 'doc',
+                            id: doc.id,
+                            name: doc.title,
+                            x: e.clientX,
+                            y: e.clientY,
+                            isPrivate: true
+                          })
+                        }}
+                        data-active={isActive ? 'true' : undefined}
+                        data-dragging={isBeingDragged ? 'true' : undefined}
+                        className={`sn-tree-row sn-doc-row group relative flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-grab active:cursor-grabbing select-none ${
+                          isBeingDragged
+                            ? 'opacity-40 bg-black/[0.04] dark:bg-white/[0.04] scale-[0.98]'
+                            : isActive
+                            ? 'bg-amber-500/10 dark:bg-amber-500/15 text-amber-900 dark:text-amber-200 font-semibold shadow-xs border border-amber-500/30'
+                            : 'text-neutral-600 dark:text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-black/[0.045] dark:hover:bg-white/[0.06] font-medium'
+                        }`}
                       >
-                        <button
-                          type="button"
-                          aria-label={`Opciones de ${doc.title || 'nota'}`}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            const rect = e.currentTarget.getBoundingClientRect()
-                            setActiveItemMenu({
-                              type: 'doc',
-                              id: doc.id,
-                              name: doc.title,
-                              x: rect.right + 4,
-                              y: rect.top,
-                              isPrivate: true
-                            })
-                          }}
-                          className="p-1 rounded text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] cursor-pointer"
-                          title="Opciones de nota"
+                        {isDropTargetBefore && (
+                          <div className="absolute -top-1 left-1.5 right-1.5 h-[3px] bg-amber-500 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(245,158,11,1)]">
+                            <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-amber-500" />
+                          </div>
+                        )}
+                        {isDropTargetAfter && (
+                          <div className="absolute -bottom-1 left-1.5 right-1.5 h-[3px] bg-amber-500 rounded-full z-40 pointer-events-none shadow-[0_0_8px_rgba(245,158,11,1)]">
+                            <div className="absolute -left-1 -top-[2.5px] w-2 h-2 rounded-full bg-amber-500" />
+                          </div>
+                        )}
+
+                        <div className="sn-tree-content flex items-center gap-2 min-w-0 flex-1">
+                          <span className="sn-doc-icon flex items-center shrink-0">
+                            <DocumentItemIcon
+                              icon={doc.icon}
+                              viewMode={doc.viewMode}
+                              title={doc.title}
+                              isPrivate
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setEmojiPickerTarget({ id: doc.id, type: 'doc', currentIcon: doc.icon })
+                              }}
+                            />
+                          </span>
+                          <span className="truncate flex-1 text-[13px] select-none pointer-events-none">{renderWithAppleEmoji(doc.title || 'Sin título')}</span>
+                          {isItemUnread(doc, 'workspace', activeMember, authUser?.id) && (
+                            <NewBadge className="ml-1.5" />
+                          )}
+                        </div>
+                        <div
+                          className="sn-row-actions flex items-center gap-0.5 shrink-0"
+                          onMouseDown={(e) => e.stopPropagation()}
                         >
-                          <DotsThree size={14} weight="bold" />
-                        </button>
+                          <button
+                            type="button"
+                            aria-label={`Opciones de ${doc.title || 'nota'}`}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              const rect = e.currentTarget.getBoundingClientRect()
+                              setActiveItemMenu({
+                                type: 'doc',
+                                id: doc.id,
+                                name: doc.title,
+                                x: rect.right + 4,
+                                y: rect.top,
+                                isPrivate: true
+                              })
+                            }}
+                            className="sn-row-action-btn p-1 rounded-md text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-black/[0.06] dark:hover:bg-white/[0.08] cursor-pointer"
+                            title="Opciones de nota"
+                          >
+                            <DotsThree size={14} weight="bold" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  )
-                })
-              )}
+                    )
+                  })
+                )}
+              </div>
             </div>
-          )}
+          </div>
         </div>
 
         {/* SECCIÓN 2: DOCUMENTOS DE EQUIPO */}
         <div>
           <div
+            aria-expanded={pagesOpen}
             onClick={() => setPagesOpen(!pagesOpen)}
             onDragOver={handleRootHeaderDragOver}
             onDrop={handleRootHeaderDrop}
@@ -3521,97 +3570,103 @@ export function Sidebar({
               >
                 <Plus size={13} />
               </button>
-              {pagesOpen ? (
-                <CaretDown size={12} className="text-neutral-400 opacity-60 group-hover:opacity-100 transition ml-0.5" />
-              ) : (
-                <CaretRight size={12} className="text-neutral-400 opacity-60 group-hover:opacity-100 transition ml-0.5" />
-              )}
+              <CaretRight
+                size={12}
+                className={`sn-folder-caret text-neutral-400 opacity-60 group-hover:opacity-100 ml-0.5 ${pagesOpen ? 'rotate-90' : 'rotate-0'}`}
+              />
             </div>
           </div>
 
-          {pagesOpen && (
-            <div className="mt-1 space-y-0.5">
-              {/* Inline input for creating a new folder */}
-              {isCreatingFolder && (
-                <div className="px-2 py-1 mb-1">
-                  <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-white dark:bg-[#202024] border border-blue-500/40 shadow-xs">
-                    <PastelFolderIcon name="nueva" size={17} />
-                    <input
-                      type="text"
-                      value={newFolderName}
-                      onChange={(e) => setNewFolderName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          handleCreateFolder(newFolderName)
-                        } else if (e.key === 'Escape') {
-                          folderSubmitLockRef.current = true
-                          setIsCreatingFolder(false)
-                          setNewFolderName('')
-                          setTimeout(() => {
-                            folderSubmitLockRef.current = false
-                          }, 150)
-                        }
-                      }}
-                      onBlur={() => {
-                        if (folderSubmitLockRef.current) return
-                        if (newFolderName.trim()) {
-                          handleCreateFolder(newFolderName)
-                        } else {
-                          setIsCreatingFolder(false)
-                          setNewFolderName('')
-                        }
-                      }}
-                      placeholder="Nombre de la carpeta..."
-                      autoFocus
-                      className="w-full bg-transparent text-xs text-neutral-900 dark:text-neutral-100 outline-none placeholder:text-neutral-400"
-                    />
+          <div
+            className="sn-folder-collapse"
+            data-open={pagesOpen ? 'true' : 'false'}
+            aria-hidden={!pagesOpen}
+            inert={!pagesOpen ? true : undefined}
+          >
+            <div className="sn-folder-collapse-inner py-0.5">
+              <div className="mt-1 space-y-0.5">
+                {/* Inline input for creating a new folder */}
+                {isCreatingFolder && (
+                  <div className="px-2 py-1 mb-1">
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-white dark:bg-[#202024] border border-blue-500/40 shadow-xs">
+                      <PastelFolderIcon name="nueva" size={17} />
+                      <input
+                        type="text"
+                        value={newFolderName}
+                        onChange={(e) => setNewFolderName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            handleCreateFolder(newFolderName)
+                          } else if (e.key === 'Escape') {
+                            folderSubmitLockRef.current = true
+                            setIsCreatingFolder(false)
+                            setNewFolderName('')
+                            setTimeout(() => {
+                              folderSubmitLockRef.current = false
+                            }, 150)
+                          }
+                        }}
+                        onBlur={() => {
+                          if (folderSubmitLockRef.current) return
+                          if (newFolderName.trim()) {
+                            handleCreateFolder(newFolderName)
+                          } else {
+                            setIsCreatingFolder(false)
+                            setNewFolderName('')
+                          }
+                        }}
+                        placeholder="Nombre de la carpeta..."
+                        autoFocus
+                        className="w-full bg-transparent text-xs text-neutral-900 dark:text-neutral-100 outline-none placeholder:text-neutral-400"
+                      />
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {foldersFirst ? (
-                <>
-                  {/* Dynamic recursive folders list */}
-                  {sortFolders(allFolders.filter((f: string) => getParentFolderPath(f) === null)).map((folderName: string) =>
-                    renderFolderItem(folderName, 0)
-                  )}
+                {foldersFirst ? (
+                  <>
+                    {/* Dynamic recursive folders list */}
+                    {sortFolders(allFolders.filter((f: string) => getParentFolderPath(f) === null)).map((folderName: string) =>
+                      renderFolderItem(folderName, 0)
+                    )}
 
-                  {/* Root pages */}
-                  {rootPages.map((page) => renderDocNode(page, null))}
-                </>
-              ) : (
-                <div className="space-y-0.5">
-                  {sortMixedItems([
-                    ...allFolders
-                      .filter((f: string) => getParentFolderPath(f) === null)
-                      .map((p) => {
-                        const stats = getFolderTimestamps(p)
-                        return {
-                          type: 'folder' as const,
-                          path: p,
-                          name: getFolderLeafName(p),
-                          updated: stats.maxUpdated,
-                          created: stats.maxCreated
-                        }
-                      }),
-                    ...rootPages.map((page) => ({
-                      type: 'doc' as const,
-                      doc: page,
-                      name: page.title || 'Untitled',
-                      updated: page.updatedAt || page.createdAt || 0,
-                      created: page.createdAt || 0
-                    }))
-                  ]).map((item) => {
-                    if (item.type === 'folder') {
-                      return renderFolderItem(item.path, 0)
-                    }
-                    return renderDocNode(item.doc, null)
-                  })}
-                </div>
-              )}
+                    {/* Root pages */}
+                    {rootPages.map((page) => renderDocNode(page, null))}
+                  </>
+                ) : (
+                  <div className="space-y-0.5">
+                    {sortMixedItems([
+                      ...allFolders
+                        .filter((f: string) => getParentFolderPath(f) === null)
+                        .map((p) => {
+                          const stats = getFolderTimestamps(p)
+                          return {
+                            type: 'folder' as const,
+                            path: p,
+                            name: getFolderLeafName(p),
+                            updated: stats.maxUpdated,
+                            created: stats.maxCreated
+                          }
+                        }),
+                      ...rootPages.map((page) => ({
+                        type: 'doc' as const,
+                        doc: page,
+                        name: page.title || 'Untitled',
+                        updated: page.updatedAt || page.createdAt || 0,
+                        created: page.createdAt || 0
+                      }))
+                    ]).map((item) => {
+                      if (item.type === 'folder') {
+                        return renderFolderItem(item.path, 0)
+                      }
+                      return renderDocNode(item.doc, null)
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
-          )}
+          </div>
         </div>
           </>
         )}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
+import { getEditorPreferences, subscribeEditorPreferences } from '../../lib/editorPreferences'
 import { useEditor, EditorContent } from '@tiptap/react'
 import { Extension, Mark, mergeAttributes } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
@@ -1024,6 +1025,17 @@ export function DocEditor({
       editor.setEditable(!readOnly)
     }
   }, [editor, readOnly])
+
+  useEffect(() => {
+    if (!editor) return
+    const applySpell = (enabled: boolean) => {
+      if (editor.view?.dom) {
+        editor.view.dom.spellcheck = enabled
+      }
+    }
+    applySpell(getEditorPreferences().spellCheck)
+    return subscribeEditorPreferences((prefs) => applySpell(prefs.spellCheck))
+  }, [editor])
 
   // Save Notion Database Data
   const handleSaveDatabaseData = async (newData: NotionDatabaseData) => {
