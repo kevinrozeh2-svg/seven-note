@@ -220,6 +220,8 @@ export interface WorkspaceItem {
   templateName?: string
   createdBy?: string
   lastEditedBy?: string
+  lastBotEditedBy?: string
+  lastBotEditedAt?: number
   borderlessTheme?: boolean
   pageWidth?: 'standard' | 'wide' | 'full'
   isInformationOpen?: boolean

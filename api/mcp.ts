@@ -903,9 +903,12 @@ function createSevenNoteMcpServer(supabase: SupabaseClient): McpServer {
         }
       }
 
+      const editor = edited_by?.trim() || 'AI Bot'
       const nextMetadata = {
         ...(existing.metadata || {}),
-        lastEditedBy: edited_by?.trim() || 'AI Bot',
+        lastEditedBy: editor,
+        lastBotEditedBy: editor,
+        lastBotEditedAt: now,
       }
       if (tags !== undefined) {
         nextMetadata.tags = tags

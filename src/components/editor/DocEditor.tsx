@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { getEditorPreferences, subscribeEditorPreferences } from '../../lib/editorPreferences'
 import { useTeamProfiles, resolveTeamProfile } from '../../lib/teamProfiles'
+import { getCurrentMember, isUserAdmin } from '../../lib/teamAuth'
 import { UserAvatar } from '../ui/UserAvatar'
 import { useEditor, EditorContent } from '@tiptap/react'
 import { Extension, Mark, mergeAttributes } from '@tiptap/core'
@@ -62,7 +63,8 @@ import {
   Palette,
   Edit3,
   Trash2,
-  Smile
+  Smile,
+  Bot
 } from 'lucide-react'
 import { CoverPickerPopover, type CoverConfig } from './CoverPickerPopover'
 import { NoteIconPickerModal, renderNoteIcon } from './NoteIconPickerModal'
@@ -2770,6 +2772,47 @@ export function DocEditor({
                 />
                 <span className="text-[var(--app-text-secondary)] font-medium">
                   {creatorName}
+                </span>
+              </span>
+            )
+          })()}
+
+          {/* Admin-only note if a bot modified this document */}
+          {(() => {
+            if (!isUserAdmin(getCurrentMember())) return null
+            const botName =
+              workspace.lastBotEditedBy ||
+              (workspace.lastEditedBy && /\bbot\b/i.test(workspace.lastEditedBy)
+                ? workspace.lastEditedBy
+                : null)
+            if (!botName) return null
+            const botTimestamp = workspace.lastBotEditedAt || workspace.updatedAt
+            const botDate = botTimestamp ? new Date(botTimestamp) : null
+            const sameYear = botDate ? botDate.getFullYear() === new Date().getFullYear() : true
+            const shortDate = botDate
+              ? botDate.toLocaleString('es-ES', {
+                  day: 'numeric',
+                  month: 'short',
+                  ...(sameYear ? {} : { year: 'numeric' }),
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })
+              : null
+            const fullDate = botDate
+              ? botDate.toLocaleString('es-ES', {
+                  dateStyle: 'medium',
+                  timeStyle: 'short'
+                })
+              : ''
+            return (
+              <span
+                title={`Solo visible para admins · Modificado por bot (${botName})${fullDate ? ` el ${fullDate}` : ''}`}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
+              >
+                <Bot className="w-3 h-3 shrink-0" />
+                <span>
+                  Modificado por {botName}
+                  {shortDate ? ` · ${shortDate}` : ''}
                 </span>
               </span>
             )
