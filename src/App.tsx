@@ -1814,19 +1814,19 @@ function MainApp() {
           >
           {/* Secondary Header for Document/Split Mode */}
           {!isPresentationMode && !focusMode && (!activeTab || !activeTab.viewType || activeTab.viewType === 'doc') && currentWorkspace && (
-            <header className={`h-12 px-3 sm:px-4 flex items-center justify-between select-none text-xs transition-colors duration-150 ${
+            <header className={`h-12 px-2 sm:px-4 flex items-center justify-between gap-1 sm:gap-2 select-none text-xs transition-colors duration-150 overflow-x-auto sm:overflow-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
               activeViewMode === 'canvas'
                 ? 'absolute top-0 left-0 right-0 z-20 pointer-events-none bg-transparent border-none'
                 : 'relative border-b border-[var(--app-border)] bg-[var(--obsidian-editor-bg)] shrink-0 z-15'
             }`}>
               {/* Left section: Mode Switcher, Favorite, Privacy, Readers */}
-              <div className="flex items-center gap-1.5 min-w-0 pointer-events-auto">
+              <div className="flex items-center gap-0.5 sm:gap-1.5 shrink-0 pointer-events-auto">
               {/* Mode Switcher */}
-              <div className="inline-flex items-center bg-[var(--app-bg-secondary)] p-0.5 rounded-lg border border-[var(--app-border)]">
+              <div className="inline-flex items-center bg-[var(--app-bg-secondary)] p-0.5 rounded-lg border border-[var(--app-border)] shrink-0">
                 <button
                   type="button"
                   onClick={() => setViewMode('doc')}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition cursor-pointer ${
+                  className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-md text-xs transition cursor-pointer ${
                     activeViewMode === 'doc'
                       ? 'bg-[var(--app-bg-overlay)] text-[var(--app-text-primary)] font-medium shadow-xs'
                       : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)]'
@@ -1839,7 +1839,7 @@ function MainApp() {
                 <button
                   type="button"
                   onClick={() => setViewMode('canvas')}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition cursor-pointer ${
+                  className={`flex items-center gap-1.5 px-2 sm:px-2.5 py-1 rounded-md text-xs transition cursor-pointer ${
                     activeViewMode === 'canvas'
                       ? 'bg-[var(--app-bg-overlay)] text-[var(--app-text-primary)] font-medium shadow-xs'
                       : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)]'
@@ -1857,7 +1857,7 @@ function MainApp() {
                 onClick={handleToggleFavorite}
                 aria-label={currentWorkspace?.isFavorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
                 aria-pressed={!!currentWorkspace?.isFavorite}
-                className={`w-8 h-8 rounded-md flex items-center justify-center transition cursor-pointer ${
+                className={`w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-md flex items-center justify-center transition cursor-pointer ${
                   currentWorkspace?.isFavorite
                     ? 'text-amber-400 hover:text-amber-300'
                     : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
@@ -1898,7 +1898,7 @@ function MainApp() {
                   disabled={!canEditCurrentPrivacy}
                   aria-label={currentWorkspace?.isPrivate ? 'Nota privada, cambiar visibilidad' : 'Nota pública, hacer privada'}
                   aria-expanded={activeDropdown === 'privacy'}
-                  className={`h-8 px-2.5 rounded-md flex items-center gap-1.5 text-xs font-medium transition select-none ${
+                  className={`h-7 px-1.5 sm:h-8 sm:px-2.5 shrink-0 rounded-md flex items-center gap-1.5 text-xs font-medium transition select-none ${
                     !canEditCurrentPrivacy ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'
                   } ${
                     currentWorkspace?.isPrivate
@@ -2043,16 +2043,16 @@ function MainApp() {
             )}
 
             {/* Right section: Actualizar, Propiedades, Exportar, Compartir, Más acciones */}
-            <div className="flex items-center gap-1.5 shrink-0 pointer-events-auto">
+            <div className="flex items-center gap-0.5 sm:gap-1.5 shrink-0 pointer-events-auto">
               {webUpdateAvailable && (
                 <button
                   type="button"
                   onClick={() => applyWebUpdate()}
-                  className="h-8 px-3 rounded-md bg-[var(--app-accent)] hover:bg-[var(--app-accent-hover)] text-white text-xs font-medium flex items-center gap-1.5 transition cursor-pointer shadow-xs"
+                  className="h-7 px-2 sm:h-8 sm:px-3 rounded-md bg-[var(--app-accent)] hover:bg-[var(--app-accent-hover)] text-white text-xs font-medium flex items-center gap-1.5 transition cursor-pointer shadow-xs shrink-0"
                   title="Hay una nueva versión disponible. Haz clic para actualizar la página."
                 >
                   <Sparkle size={14} weight="fill" />
-                  <span>Actualizar</span>
+                  <span className="hidden sm:inline">Actualizar</span>
                 </button>
               )}
 
@@ -2062,7 +2062,7 @@ function MainApp() {
                   onClick={() => setRightSidebarOpen((prev) => !prev)}
                   aria-label={rightSidebarOpen ? 'Ocultar propiedades y esquema' : 'Mostrar propiedades y esquema'}
                   aria-pressed={rightSidebarOpen}
-                  className={`w-8 h-8 rounded-md flex items-center justify-center transition cursor-pointer ${
+                  className={`w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-md flex items-center justify-center transition cursor-pointer ${
                     rightSidebarOpen
                       ? 'bg-[var(--app-active)] text-[var(--app-text-primary)]'
                       : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
@@ -2074,7 +2074,7 @@ function MainApp() {
               )}
 
               {/* Exportar Dropdown (Single canonical export entry) */}
-              <div className="relative">
+              <div className="relative shrink-0">
                 <button
                   type="button"
                   onClick={(e) => {
@@ -2084,7 +2084,7 @@ function MainApp() {
                   aria-label="Exportar nota"
                   aria-haspopup="menu"
                   aria-expanded={activeDropdown === 'export'}
-                  className={`h-8 px-2.5 rounded-md flex items-center gap-1.5 text-xs font-medium text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition cursor-pointer select-none ${
+                  className={`h-7 px-1.5 sm:h-8 sm:px-2.5 rounded-md flex items-center gap-1.5 text-xs font-medium text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)] transition cursor-pointer select-none ${
                     activeDropdown === 'export' ? 'bg-[var(--app-active)] text-[var(--app-text-primary)]' : ''
                   }`}
                   title="Exportar nota o lienzo"
@@ -2170,7 +2170,7 @@ function MainApp() {
               <button
                 type="button"
                 onClick={() => setIsShareOpen(true)}
-                className="h-8 px-3 rounded-md text-xs font-medium text-[var(--app-text-primary)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover-filled)] border border-[var(--app-border-strong)] flex items-center gap-1.5 transition cursor-pointer select-none"
+                className="h-7 px-2 sm:h-8 sm:px-3 shrink-0 rounded-md text-xs font-medium text-[var(--app-text-primary)] bg-[var(--app-bg-secondary)] hover:bg-[var(--app-hover-filled)] border border-[var(--app-border-strong)] flex items-center gap-1.5 transition cursor-pointer select-none"
                 title="Compartir con colaboradores"
               >
                 <ShareNetwork size={15} />

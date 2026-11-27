@@ -128,7 +128,7 @@ export function DocumentReadersBadge({
   }
 
   return (
-    <div className="relative">
+    <div className="relative shrink-0">
       <button
         type="button"
         onClick={(e) => {
@@ -137,7 +137,7 @@ export function DocumentReadersBadge({
         }}
         aria-label={summaryText}
         aria-expanded={isOpen}
-        className={`h-8 px-2.5 rounded-md flex items-center gap-1.5 text-xs transition cursor-pointer select-none border ${
+        className={`h-7 px-1.5 sm:h-8 sm:px-2.5 rounded-md flex items-center gap-1 sm:gap-1.5 text-xs transition cursor-pointer select-none border shrink-0 ${
           isOpen
             ? 'bg-[var(--app-active)] border-[var(--app-border-strong)] text-[var(--app-text-primary)]'
             : reads.length > 0
