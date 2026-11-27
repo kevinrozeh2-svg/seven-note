@@ -134,6 +134,24 @@ const UserManagementModal = lazy(() => import('./components/modals/UserManagemen
 const QuickCaptureModal = lazy(() => import('./components/modals/QuickCaptureModal').then(m => ({ default: m.QuickCaptureModal })))
 
 
+function extractNoteIdFromLocation(): string | null {
+  if (typeof window === 'undefined') return null
+  const hash = window.location.hash || ''
+  if (hash.startsWith('#note=')) {
+    const raw = hash.slice('#note='.length).split('&')[0].trim()
+    if (raw) {
+      try {
+        return decodeURIComponent(raw)
+      } catch {
+        return raw
+      }
+    }
+  }
+  const params = new URLSearchParams(window.location.search)
+  const queryNote = params.get('note')?.trim()
+  return queryNote || null
+}
+
 function MainApp() {
 
   // Miembro activo del equipo
@@ -324,7 +342,11 @@ function MainApp() {
     toast.info('Sesión cerrada correctamente')
   }
 
-  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string>('ws-feature-priorities')
+  const [pendingNoteId, setPendingNoteId] = useState<string | null>(() => extractNoteIdFromLocation())
+  const remoteNoteFetchRef = useRef<{ id: string; promise: Promise<WorkspaceItem | null> } | null>(null)
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string>(
+    () => extractNoteIdFromLocation() || 'ws-feature-priorities'
+  )
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     if (typeof window !== 'undefined') {
       return window.innerWidth >= 768
@@ -948,6 +970,7 @@ function MainApp() {
   // Keep currentSpaceId in sync with visible spaces and auto-select space with content
   useEffect(() => {
     if (visibleSpaces.length === 0) return
+    if (pendingNoteId) return
 
     const hasCurrentSpace = visibleSpaces.some((s: SpaceItem) => s.id === currentSpaceId)
     // El espacio actual es válido: nunca redirigir (p. ej. al borrar notas o carpetas).
@@ -973,7 +996,7 @@ function MainApp() {
         localStorage.setItem('seven_note_active_space_id', targetSpace.id)
       }
     }
-  }, [visibleSpaces, currentSpaceId, workspaces, currentMember, authUser?.id])
+  }, [visibleSpaces, currentSpaceId, workspaces, currentMember, authUser?.id, pendingNoteId])
 
   // Select active workspace items belonging to current space and visible to currentMember
   const currentSpaceWorkspaces = effectiveWorkspaces.filter(
@@ -983,10 +1006,18 @@ function MainApp() {
   )
   const activeWorkspaces = currentSpaceWorkspaces.filter((w) => !w.isDeleted)
   const currentWorkspace: WorkspaceItem | undefined =
-    activeWorkspaces.find((w) => w.id === currentWorkspaceId) || activeWorkspaces[0]
+    activeWorkspaces.find((w) => w.id === currentWorkspaceId) ||
+    effectiveWorkspaces.find(
+      (w) =>
+        w.id === currentWorkspaceId &&
+        !w.isDeleted &&
+        isWorkspaceVisible(w, currentMember, authUser?.id)
+    ) ||
+    activeWorkspaces[0]
 
   // Keep currentWorkspaceId in sync with active workspaces in current space
   useEffect(() => {
+    if (pendingNoteId) return
     if (activeWorkspaces.length > 0) {
       if (!activeWorkspaces.some((w) => w.id === currentWorkspaceId)) {
         let isMounted = true
@@ -1008,7 +1039,7 @@ function MainApp() {
         }
       }
     }
-  }, [activeWorkspaces, currentWorkspaceId, currentSpaceId])
+  }, [activeWorkspaces, currentWorkspaceId, currentSpaceId, pendingNoteId])
 
   // Workspaces from all public spaces (for bidirectional links and cross-workspace referencing)
   const publicWorkspaces = useMemo(() => {
@@ -1521,81 +1552,118 @@ function MainApp() {
   const activeTab = tabs.find((t) => t.id === activeTabId)
   const activeViewMode: ViewMode = currentWorkspace?.viewMode || 'doc'
 
-  const pendingHashNoteIdRef = useRef<string | null>(
-    typeof window !== 'undefined' && window.location.hash.startsWith('#note=')
-      ? decodeURIComponent(window.location.hash.slice('#note='.length).split('&')[0])
-      : null
-  )
-
   useEffect(() => {
-    if (!authUser) return
-    const pendingId = pendingHashNoteIdRef.current
-    if (!pendingId) return
+    if (!authUser || !pendingNoteId) return
 
-    if (workspaces.length > 0) {
-      const target = workspaces.find(
-        (w) => w.id === pendingId && !w.isDeleted && isWorkspaceVisible(w, currentMember, authUser?.id)
-      )
-      if (target) {
-        pendingHashNoteIdRef.current = null
-        selectWorkspaceWithTab(target.id)
-        return
-      }
+    const isDocTab = !activeTab?.viewType || activeTab.viewType === 'doc'
+    if (currentWorkspace?.id === pendingNoteId && isDocTab) {
+      remoteNoteFetchRef.current = null
+      setPendingNoteId(null)
+      return
     }
 
-    const timer = window.setTimeout(() => {
-      pendingHashNoteIdRef.current = null
-    }, 3500)
-    return () => window.clearTimeout(timer)
-  }, [authUser, workspaces, currentMember])
+    let cancelled = false
+
+    const resolvePendingNote = async () => {
+      let target =
+        effectiveWorkspaces.find((w) => w.id === pendingNoteId) ||
+        (await db.workspaces.get(pendingNoteId))
+
+      if (cancelled) return
+
+      if (!target && isSupabaseConfigured()) {
+        if (!remoteNoteFetchRef.current || remoteNoteFetchRef.current.id !== pendingNoteId) {
+          remoteNoteFetchRef.current = {
+            id: pendingNoteId,
+            promise: syncEngine.fetchWorkspaceById(pendingNoteId)
+          }
+        }
+        target = (await remoteNoteFetchRef.current.promise) || undefined
+        if (cancelled) return
+      }
+
+      if (!target) {
+        if (isDbHydrating) return
+        remoteNoteFetchRef.current = null
+        setPendingNoteId(null)
+        toast.error('No se encontró la nota del enlace o no tienes acceso a ella.')
+        return
+      }
+
+      if (target.isDeleted) {
+        remoteNoteFetchRef.current = null
+        setPendingNoteId(null)
+        toast.error('Esta nota fue eliminada o movida a la papelera.')
+        return
+      }
+
+      if (!isWorkspaceVisible(target, currentMember, authUser?.id)) {
+        remoteNoteFetchRef.current = null
+        setPendingNoteId(null)
+        toast.error('No tienes permiso para acceder a esta nota privada.')
+        return
+      }
+
+      const targetSpaceId = target.spaceId || DEFAULT_SPACE_ID
+      const targetSpace = spaces.find((s) => s.id === targetSpaceId)
+      if (targetSpace && (targetSpace.isDeleted || !isSpaceVisible(targetSpace, currentMember, authUser?.id))) {
+        remoteNoteFetchRef.current = null
+        setPendingNoteId(null)
+        toast.error('No tienes permiso para acceder al espacio de esta nota.')
+        return
+      }
+
+      await selectWorkspaceWithTab(target.id, targetSpaceId, target)
+    }
+
+    void resolvePendingNote()
+
+    return () => {
+      cancelled = true
+    }
+  }, [authUser, pendingNoteId, currentWorkspace?.id, activeTab?.viewType, effectiveWorkspaces, spaces, currentMember, isDbHydrating])
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !authUser) return
+    if (typeof window === 'undefined' || !authUser || pendingNoteId) return
     const hash = window.location.hash || ''
     if (hash.includes('type=recovery') || hash.includes('access_token=') || hash.includes('error=')) {
       return
     }
     const isSpecialView = Boolean(activeTab?.viewType && activeTab.viewType !== 'doc')
-    if (!pendingHashNoteIdRef.current && !isSpecialView && currentWorkspace?.id) {
+    if (!isSpecialView && currentWorkspace?.id) {
       const targetHash = `#note=${encodeURIComponent(currentWorkspace.id)}`
       if (window.location.hash !== targetHash) {
         window.history.replaceState(null, '', targetHash)
       }
     }
-  }, [authUser, currentWorkspace?.id, activeTab?.viewType])
+  }, [authUser, pendingNoteId, currentWorkspace?.id, activeTab?.viewType])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
     const handleHashChange = () => {
-      const hash = window.location.hash || ''
-      if (!hash.startsWith('#note=')) return
-      const noteId = decodeURIComponent(hash.slice('#note='.length).split('&')[0])
+      const noteId = extractNoteIdFromLocation()
       if (!noteId || noteId === currentWorkspace?.id) return
-      if (!authUser) {
-        pendingHashNoteIdRef.current = noteId
-        return
-      }
-      const target = workspaces.find(
-        (w) => w.id === noteId && !w.isDeleted && isWorkspaceVisible(w, currentMember, authUser?.id)
-      )
-      if (target) {
-        pendingHashNoteIdRef.current = null
-        selectWorkspaceWithTab(target.id)
-      }
+      remoteNoteFetchRef.current = null
+      setPendingNoteId(noteId)
     }
     window.addEventListener('hashchange', handleHashChange)
     return () => window.removeEventListener('hashchange', handleHashChange)
-  }, [authUser, workspaces, currentMember, currentWorkspace?.id])
+  }, [currentWorkspace?.id])
 
-  // Pantalla de carga mientras se verifica la sesión o se hidratan los datos locales
-  if (authLoading || (authUser && isDbHydrating)) {
+  // Pantalla de carga mientras se verifica la sesión, se hidratan los datos locales o se abre una nota por enlace
+  const isResolvingLinkedNote = Boolean(
+    authUser && pendingNoteId && currentWorkspace?.id !== pendingNoteId
+  )
+  if (authLoading || (authUser && isDbHydrating) || isResolvingLinkedNote) {
     return (
       <div className="flex h-screen w-screen items-center justify-center bg-[#fbfbfa] dark:bg-[#121214] text-neutral-900 dark:text-neutral-100 font-sans">
         <div className="flex flex-col items-center gap-3 animate-in fade-in duration-200">
           <div className="w-12 h-12 rounded-2xl bg-neutral-900 dark:bg-white flex items-center justify-center text-white dark:text-neutral-900 font-black text-xl shadow-lg">
             7
           </div>
-          <div className="text-xs text-neutral-400 font-medium">Cargando Seven Note...</div>
+          <div className="text-xs text-neutral-400 font-medium">
+            {isResolvingLinkedNote ? 'Abriendo nota...' : 'Cargando Seven Note...'}
+          </div>
         </div>
       </div>
     )

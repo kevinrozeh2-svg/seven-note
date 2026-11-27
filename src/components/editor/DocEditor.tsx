@@ -441,32 +441,68 @@ export function DocEditor({
   )
   const [isNotionMenuOpen, setIsNotionMenuOpen] = useState(false)
 
+  const [localTitle, setLocalTitle] = useState(() =>
+    workspace.title === 'Untitled' ? '' : workspace.title || ''
+  )
   const isFirstRender = useRef(true)
   const saveTimeoutRef = useRef<any>(null)
   const pendingSaveRef = useRef<{ workspaceId: string; html: string } | null>(null)
+  const titleSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingTitleRef = useRef<{ workspaceId: string; title: string } | null>(null)
+  const isTitleFocusedRef = useRef(false)
+  const lastWorkspaceIdForTitleRef = useRef(workspace.id)
+  const onTitleChangeRef = useRef(onTitleChange)
+  onTitleChangeRef.current = onTitleChange
   const currentWorkspaceIdRef = useRef(workspace.id)
   currentWorkspaceIdRef.current = workspace.id
   const editorImageInputRef = useRef<HTMLInputElement>(null)
   const titleTextareaRef = useRef<HTMLTextAreaElement>(null)
   const notionButtonRef = useRef<HTMLButtonElement>(null)
 
-  const adjustTitleHeight = useCallback(() => {
-    const el = titleTextareaRef.current
-    if (el) {
-      el.style.height = 'auto'
-      el.style.height = `${el.scrollHeight}px`
+  const flushPendingTitle = useCallback(() => {
+    if (titleSaveTimeoutRef.current) {
+      clearTimeout(titleSaveTimeoutRef.current)
+      titleSaveTimeoutRef.current = null
+    }
+    const pending = pendingTitleRef.current
+    if (!pending) return
+    pendingTitleRef.current = null
+
+    if (pending.workspaceId === currentWorkspaceIdRef.current && onTitleChangeRef.current) {
+      onTitleChangeRef.current(pending.title)
+    } else {
+      void db.workspaces
+        .update(pending.workspaceId, {
+          title: pending.title,
+          updatedAt: Date.now(),
+          syncStatus: 'pending'
+        })
+        .then(async () => {
+          const docFrame = await db.canvasNodes.get(`docframe-${pending.workspaceId}`)
+          if (docFrame) {
+            await db.canvasNodes.update(`docframe-${pending.workspaceId}`, {
+              data: { ...docFrame.data, title: pending.title },
+              updatedAt: Date.now(),
+              syncStatus: 'pending'
+            })
+          }
+          syncEngine.scheduleSync(1500)
+        })
+        .catch(() => {})
     }
   }, [])
 
   useEffect(() => {
-    adjustTitleHeight()
-  }, [workspace.title, adjustTitleHeight])
-
-  useEffect(() => {
-    const handleResize = () => adjustTitleHeight()
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [adjustTitleHeight])
+    const incoming = workspace.title === 'Untitled' ? '' : workspace.title || ''
+    if (lastWorkspaceIdForTitleRef.current !== workspace.id) {
+      lastWorkspaceIdForTitleRef.current = workspace.id
+      setLocalTitle(incoming)
+      return
+    }
+    if (!isTitleFocusedRef.current && !pendingTitleRef.current) {
+      setLocalTitle(incoming)
+    }
+  }, [workspace.id, workspace.title])
 
   const handleEditorImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
@@ -984,13 +1020,14 @@ export function DocEditor({
           .then(() => syncEngine.scheduleSync(500))
           .catch(() => {})
       }
+      flushPendingTitle()
     }
     window.addEventListener('beforeunload', flushPendingSave)
     return () => {
       window.removeEventListener('beforeunload', flushPendingSave)
       flushPendingSave()
     }
-  }, [workspace.id])
+  }, [workspace.id, flushPendingTitle])
 
   // Synchronize editor content when workspace changes
   useEffect(() => {
@@ -2675,30 +2712,51 @@ export function DocEditor({
         </div>
 
         {/* Big Title - Obsidian Style */}
-        <div className="mb-4">
+        <div className="mb-4 grid">
+          <div
+            aria-hidden="true"
+            className="col-start-1 row-start-1 min-w-0 w-full p-0 invisible pointer-events-none select-none text-3xl sm:text-4xl font-bold tracking-tight leading-tight break-words whitespace-pre-wrap min-h-[1.25em]"
+          >
+            {(localTitle || 'Título de la nota...') + ' '}
+          </div>
           <textarea
             ref={titleTextareaRef}
             rows={1}
-            value={workspace.title === 'Untitled' ? '' : workspace.title}
+            value={localTitle}
+            onFocus={() => {
+              isTitleFocusedRef.current = true
+            }}
+            onBlur={() => {
+              isTitleFocusedRef.current = false
+              flushPendingTitle()
+            }}
             onChange={(e) => {
               if (readOnly) return
               const val = e.target.value
-              onTitleChange?.(val || 'Untitled')
-              e.target.style.height = 'auto'
-              e.target.style.height = `${e.target.scrollHeight}px`
+              setLocalTitle(val)
+              pendingTitleRef.current = {
+                workspaceId: workspace.id,
+                title: val || 'Untitled'
+              }
+              if (titleSaveTimeoutRef.current) {
+                clearTimeout(titleSaveTimeoutRef.current)
+              }
+              titleSaveTimeoutRef.current = setTimeout(() => {
+                flushPendingTitle()
+              }, 350)
             }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
+                flushPendingTitle()
                 editor?.commands.focus('start')
               }
             }}
             readOnly={readOnly}
             placeholder="Título de la nota..."
-            className={`w-full text-3xl sm:text-4xl font-bold tracking-tight text-[var(--app-text-primary)] placeholder:text-[var(--app-text-muted)] bg-transparent border-none outline-none focus:outline-none resize-none overflow-hidden leading-tight break-words whitespace-pre-wrap block ${
+            className={`col-start-1 row-start-1 min-w-0 w-full h-full p-0 text-3xl sm:text-4xl font-bold tracking-tight text-[var(--app-text-primary)] placeholder:text-[var(--app-text-muted)] bg-transparent border-none outline-none focus:outline-none resize-none overflow-hidden leading-tight break-words whitespace-pre-wrap block ${
               readOnly ? 'cursor-default' : ''
             }`}
-            style={{ fieldSizing: 'content' }}
           />
         </div>
 

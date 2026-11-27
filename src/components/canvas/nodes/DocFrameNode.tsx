@@ -14,38 +14,41 @@ import { renderWithAppleEmoji } from '../../ui/AppleEmoji'
 import { renderNoteIcon } from '../../editor/NoteIconPickerModal'
 
 export const DocFrameNode = memo(({ id, data, selected }: any) => {
-  const [title, setTitle] = useState(data.title || '')
+  const [title, setTitle] = useState(data.title === 'Untitled' ? '' : data.title || '')
   const [isExpanded, setIsExpanded] = useState(data.isExpanded ?? false)
   const [showInfo, setShowInfo] = useState(false)
   const [copied, setCopied] = useState(false)
   const titleTextareaRef = useRef<HTMLTextAreaElement>(null)
-
-  const adjustHeight = () => {
-    if (titleTextareaRef.current) {
-      titleTextareaRef.current.style.height = 'auto'
-      titleTextareaRef.current.style.height = `${titleTextareaRef.current.scrollHeight}px`
-    }
-  }
+  const isTitleFocusedRef = useRef(false)
+  const titleSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingTitleRef = useRef<string | null>(null)
+  const dataRef = useRef(data)
+  dataRef.current = data
 
   useEffect(() => {
-    setTitle(data.title || '')
-    adjustHeight()
+    if (!isTitleFocusedRef.current && pendingTitleRef.current === null) {
+      setTitle(data.title === 'Untitled' ? '' : data.title || '')
+    }
   }, [data.title])
 
-  const handleTitleChange = async (newTitle: string) => {
-    setTitle(newTitle)
+  const flushTitleSave = async () => {
+    if (titleSaveTimeoutRef.current) {
+      clearTimeout(titleSaveTimeoutRef.current)
+      titleSaveTimeoutRef.current = null
+    }
+    const nextTitle = pendingTitleRef.current
+    if (nextTitle === null) return
+    pendingTitleRef.current = null
+    const latestData = dataRef.current
     try {
-      // Update canvas node data
       await db.canvasNodes.update(id, {
-        data: { ...data, title: newTitle },
+        data: { ...latestData, title: nextTitle || 'Untitled' },
         updatedAt: Date.now(),
         syncStatus: 'pending'
       })
-
-      // Also update workspace title if this node represents the current workspace
-      if (data.workspaceId) {
-        await db.workspaces.update(data.workspaceId, {
-          title: newTitle || 'Untitled',
+      if (latestData.workspaceId) {
+        await db.workspaces.update(latestData.workspaceId, {
+          title: nextTitle || 'Untitled',
           updatedAt: Date.now(),
           syncStatus: 'pending'
         })
@@ -54,6 +57,23 @@ export const DocFrameNode = memo(({ id, data, selected }: any) => {
     } catch (e) {
       console.error('Error updating title from doc card', e)
     }
+  }
+
+  useEffect(() => {
+    return () => {
+      void flushTitleSave()
+    }
+  }, [id])
+
+  const handleTitleChange = (newTitle: string) => {
+    setTitle(newTitle)
+    pendingTitleRef.current = newTitle
+    if (titleSaveTimeoutRef.current) {
+      clearTimeout(titleSaveTimeoutRef.current)
+    }
+    titleSaveTimeoutRef.current = setTimeout(() => {
+      void flushTitleSave()
+    }, 350)
   }
 
   const handleOpenDoc = () => {
@@ -216,19 +236,31 @@ export const DocFrameNode = memo(({ id, data, selected }: any) => {
               </div>
             </div>
           )}
-          <textarea
-            ref={titleTextareaRef}
-            rows={1}
-            value={title === 'Untitled' ? '' : title}
-            onChange={(e) => {
-              handleTitleChange(e.target.value)
-              e.target.style.height = 'auto'
-              e.target.style.height = `${e.target.scrollHeight}px`
-            }}
-            placeholder="Título..."
-            className="text-xl font-bold tracking-tight text-[var(--affine-text-primary-color)] placeholder:text-[var(--affine-placeholder-color)] bg-transparent border-none outline-none focus:outline-none w-full resize-none overflow-hidden leading-snug break-words whitespace-pre-wrap block"
-            style={{ fieldSizing: 'content' }}
-          />
+          <div className="grid">
+            <div
+              aria-hidden="true"
+              className="col-start-1 row-start-1 min-w-0 w-full p-0 invisible pointer-events-none select-none text-xl font-bold tracking-tight leading-snug break-words whitespace-pre-wrap min-h-[1.35em]"
+            >
+              {(title || 'Título...') + ' '}
+            </div>
+            <textarea
+              ref={titleTextareaRef}
+              rows={1}
+              value={title}
+              onFocus={() => {
+                isTitleFocusedRef.current = true
+              }}
+              onBlur={() => {
+                isTitleFocusedRef.current = false
+                void flushTitleSave()
+              }}
+              onChange={(e) => {
+                handleTitleChange(e.target.value)
+              }}
+              placeholder="Título..."
+              className="col-start-1 row-start-1 min-w-0 w-full h-full p-0 text-xl font-bold tracking-tight text-[var(--affine-text-primary-color)] placeholder:text-[var(--affine-placeholder-color)] bg-transparent border-none outline-none focus:outline-none resize-none overflow-hidden leading-snug break-words whitespace-pre-wrap block"
+            />
+          </div>
 
           {/* Preview of page text */}
           <div className="mt-2.5 text-xs text-[var(--affine-text-secondary-color)] leading-relaxed border-t border-[var(--affine-divider-color)] pt-2 max-h-36 overflow-y-auto font-sans">

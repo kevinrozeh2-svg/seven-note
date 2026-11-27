@@ -2019,6 +2019,214 @@ class SyncEngine {
       }
     }
   }
+  public async fetchWorkspaceById(workspaceId: string): Promise<WorkspaceItem | null> {
+    if (!workspaceId) return null
+    const supabase = getSupabaseClient()
+    if (!supabase) return null
+
+    try {
+      const authUser = await getAuthUser()
+      if (!authUser) return null
+
+      const currentMember = getCurrentMember()
+      const nowServer = this.getServerNow()
+
+      const { data: rw, error } = await supabase
+        .from('seven_workspaces')
+        .select('*')
+        .eq('id', workspaceId)
+        .maybeSingle()
+
+      if (error || !rw) return null
+
+      const isOwner = isWorkspaceOwner(
+        {
+          ownerMember: rw.owner_member,
+          ownerName: rw.metadata?.ownerName,
+          createdBy: rw.metadata?.createdBy,
+          userId: rw.user_id
+        },
+        currentMember,
+        authUser.id
+      )
+
+      if (rw.is_private && !isOwner) {
+        return null
+      }
+
+      const normalizedSpaceId =
+        rw.space_id && rw.space_id !== 'default-space' ? rw.space_id : 'default-workspace'
+
+      // Ensure parent space exists locally if missing
+      const localSpace = await db.spaces.get(normalizedSpaceId)
+      if (!localSpace && rw.space_id) {
+        const { data: rs } = await supabase
+          .from('seven_spaces')
+          .select('*')
+          .eq('id', rw.space_id)
+          .maybeSingle()
+
+        if (rs) {
+          const isCurrentAdmin = isUserAdmin(currentMember)
+          if (rs.admin_only && !isCurrentAdmin) {
+            return null
+          }
+          let rawFolderOrder: unknown = rs.folder_order
+          if (typeof rawFolderOrder === 'string') {
+            try {
+              rawFolderOrder = JSON.parse(rawFolderOrder)
+            } catch {
+              rawFolderOrder = undefined
+            }
+          }
+          const normalizedFolderOrder = Array.isArray(rawFolderOrder)
+            ? ((rawFolderOrder as string[]).map((f) => normalizeFolderPath(f)).filter(Boolean) as string[])
+            : undefined
+
+          await db.spaces.put({
+            id: rs.id,
+            name: rs.name,
+            icon: rs.icon,
+            color: rs.color,
+            createdAt: this.clampTimestamp(Number(rs.created_at) || Date.now(), nowServer),
+            updatedAt: this.clampTimestamp(Number(rs.updated_at) || Date.now(), nowServer),
+            isDeleted: Boolean(rs.is_deleted),
+            syncStatus: 'synced',
+            isPrivate: Boolean(rs.is_private),
+            adminOnly: Boolean(rs.admin_only),
+            ownerMember: rs.owner_member || undefined,
+            userId: rs.user_id || undefined,
+            folderOrder: normalizedFolderOrder,
+            folderColors: normalizeFolderColorsMap(rs.folder_colors),
+            sortOrder: typeof rs.sort_order === 'number' ? rs.sort_order : undefined
+          })
+        }
+      }
+
+      const meta = rw.metadata || {}
+      const local = await db.workspaces.get(rw.id)
+      const mergedViewed = Array.from(
+        new Set([
+          ...(Array.isArray(local?.viewedBy) ? local!.viewedBy : []),
+          ...(Array.isArray(meta.viewedBy) ? meta.viewedBy : [])
+        ])
+      )
+
+      const mapped: WorkspaceItem = {
+        id: rw.id,
+        parentId: rw.parent_id,
+        spaceId: normalizedSpaceId,
+        folder: normalizeFolderPath(rw.folder),
+        title: rw.title,
+        icon: rw.icon,
+        color: rw.color,
+        viewMode: rw.view_mode,
+        docContent: rw.doc_content,
+        createdAt: this.clampTimestamp(Number(rw.created_at) || Date.now(), nowServer),
+        updatedAt: this.clampTimestamp(Number(rw.updated_at) || Date.now(), nowServer),
+        isFavorite: Boolean(rw.is_favorite),
+        isDeleted: Boolean(rw.is_deleted),
+        syncStatus: 'synced',
+        isPrivate: Boolean(rw.is_private),
+        ownerMember: rw.owner_member || 'kevin',
+        ownerName: meta.ownerName,
+        userId: rw.user_id || undefined,
+        isPublicShared: Boolean(rw.is_public_shared),
+        shareToken: rw.share_token,
+        sharePermission: rw.share_permission || 'view',
+        tags: meta.tags,
+        documentMode: meta.documentMode,
+        isJournal: meta.isJournal,
+        journalDate: meta.journalDate,
+        templateName: meta.templateName,
+        createdBy: meta.createdBy,
+        lastEditedBy: meta.lastEditedBy,
+        lastBotEditedBy: meta.lastBotEditedBy,
+        lastBotEditedAt: meta.lastBotEditedAt,
+        borderlessTheme: meta.borderlessTheme,
+        pageWidth: meta.pageWidth,
+        isInformationOpen: meta.isInformationOpen,
+        informationContent: meta.informationContent,
+        biDirectionalLinksVisible: meta.biDirectionalLinksVisible,
+        propertyVisibility: meta.propertyVisibility,
+        activeProperties: meta.activeProperties,
+        customProperties: meta.customProperties,
+        databaseData: meta.databaseData,
+        canvasGridVariant: meta.canvasGridVariant,
+        sortOrder: meta.sortOrder ?? (rw as any).sort_order ?? (rw as any).sortOrder,
+        viewedBy: mergedViewed.length > 0 ? mergedViewed : undefined,
+        isNewItem: meta.isNewItem,
+        hasCover: meta.hasCover,
+        coverType: meta.coverType,
+        coverUrl: meta.coverUrl,
+        coverColor: meta.coverColor,
+        coverBannerTitle: meta.coverBannerTitle,
+        coverBannerSubtitle: meta.coverBannerSubtitle,
+        coverBannerStyle: meta.coverBannerStyle,
+        coverPosition: meta.coverPosition,
+        trashedWithSpaceId: meta.trashedWithSpaceId,
+        trashedFolder: meta.trashedFolder
+      }
+
+      if (!local || this.shouldApplyRemote(local, mapped.updatedAt, nowServer)) {
+        await db.workspaces.put(mapped)
+      }
+
+      // If canvas or split view, also hydrate its nodes and edges right away
+      if (mapped.viewMode === 'canvas' || mapped.viewMode === 'split') {
+        const [{ data: nodes }, { data: edges }] = await Promise.all([
+          supabase.from('seven_canvas_nodes').select('*').eq('workspace_id', mapped.id),
+          supabase.from('seven_canvas_edges').select('*').eq('workspace_id', mapped.id)
+        ])
+
+        if (Array.isArray(nodes) && nodes.length > 0) {
+          await db.canvasNodes.bulkPut(
+            nodes.map((n: any) => ({
+              id: n.id,
+              workspaceId: n.workspace_id,
+              type: n.type,
+              positionX: n.position_x,
+              positionY: n.position_y,
+              width: n.width,
+              height: n.height,
+              data: n.data,
+              createdAt: this.clampTimestamp(Number(n.created_at) || Date.now(), nowServer),
+              updatedAt: this.clampTimestamp(Number(n.updated_at) || Date.now(), nowServer),
+              isDeleted: Boolean(n.is_deleted),
+              syncStatus: 'synced' as const
+            }))
+          )
+        }
+
+        if (Array.isArray(edges) && edges.length > 0) {
+          await db.canvasEdges.bulkPut(
+            edges.map((e: any) => ({
+              id: e.id,
+              workspaceId: e.workspace_id,
+              source: e.source,
+              target: e.target,
+              sourceHandle: e.source_handle,
+              targetHandle: e.target_handle,
+              label: e.label,
+              animated: e.animated,
+              color: e.color,
+              edgeType: e.edge_type,
+              markerEndType: e.marker_end_type,
+              createdAt: this.clampTimestamp(Number(e.created_at) || Date.now(), nowServer),
+              updatedAt: this.clampTimestamp(Number(e.updated_at) || Date.now(), nowServer),
+              isDeleted: Boolean(e.is_deleted),
+              syncStatus: 'synced' as const
+            }))
+          )
+        }
+      }
+
+      return local && !this.shouldApplyRemote(local, mapped.updatedAt, nowServer) ? local : mapped
+    } catch (err) {
+      console.warn('Error fetching workspace by id:', err)
+      return null
+    }
+  }
 }
 
 export const syncEngine = new SyncEngine()

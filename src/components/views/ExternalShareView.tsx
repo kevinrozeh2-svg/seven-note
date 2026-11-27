@@ -96,12 +96,27 @@ export const ExternalShareView: React.FC<ExternalShareViewProps> = ({ workspaceI
           syncStatus: 'synced',
           isPrivate: data.is_private,
           ownerMember: data.owner_member,
+          ownerName: meta.ownerName,
+          createdBy: meta.createdBy,
           isPublicShared: data.is_public_shared,
-          shareToken: data.share_token,
+          shareToken: data.share_token || token,
           sharePermission: data.share_permission || 'view',
           tags: meta.tags,
           databaseData: meta.databaseData,
-          canvasGridVariant: meta.canvasGridVariant
+          canvasGridVariant: meta.canvasGridVariant,
+          pageWidth: meta.pageWidth,
+          borderlessTheme: meta.borderlessTheme,
+          propertyVisibility: meta.propertyVisibility,
+          activeProperties: meta.activeProperties,
+          customProperties: meta.customProperties,
+          hasCover: meta.hasCover,
+          coverType: meta.coverType,
+          coverUrl: meta.coverUrl,
+          coverColor: meta.coverColor,
+          coverBannerTitle: meta.coverBannerTitle,
+          coverBannerSubtitle: meta.coverBannerSubtitle,
+          coverBannerStyle: meta.coverBannerStyle,
+          coverPosition: meta.coverPosition
         }
 
         // Guardar temporalmente en Dexie para navegación fluida

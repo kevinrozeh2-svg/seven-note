@@ -48,8 +48,8 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
 
   if (!isOpen || !workspace) return null
 
-  const externalShareUrl = `${window.location.origin}/?share=${workspace.id}&token=${shareToken}`
-  const internalShareUrl = `${window.location.origin}/#note=${workspace.id}`
+  const externalShareUrl = `${window.location.origin}/?share=${encodeURIComponent(workspace.id)}&token=${encodeURIComponent(shareToken)}`
+  const internalShareUrl = `${window.location.origin}/#note=${encodeURIComponent(workspace.id)}`
   const currentUrl = isPublic ? externalShareUrl : internalShareUrl
 
   const handleCopy = () => {
@@ -82,7 +82,11 @@ export function ShareModal({ isOpen, onClose, workspace }: ShareModalProps) {
       updatedAt: Date.now(),
       syncStatus: 'pending'
     })
-    syncEngine.scheduleSync(500)
+    if (nextPublic) {
+      void syncEngine.triggerSync()
+    } else {
+      syncEngine.scheduleSync(500)
+    }
     toast.success(nextPublic ? 'Enlace público externo activado' : 'Enlace público externo revocado')
   }
 
