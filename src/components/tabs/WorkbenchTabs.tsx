@@ -18,7 +18,8 @@ import {
   X,
   PanelLeft,
   Network,
-  Calendar
+  Calendar,
+  Home
 } from 'lucide-react'
 import { type WorkspaceItem } from '../../db'
 import { AppleEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
@@ -27,7 +28,7 @@ export interface WorkbenchTab {
   id: string
   workspaceId: string
   pinned?: boolean
-  viewType?: 'doc' | 'all-docs' | 'knowledge-graph' | 'calendar' | 'trash' | 'templates'
+  viewType?: 'doc' | 'home' | 'all-docs' | 'knowledge-graph' | 'calendar' | 'trash' | 'templates'
   title?: string
   icon?: string
   spaceId?: string
@@ -158,7 +159,9 @@ export function WorkbenchTabs({
 
   // Resolve metadata (title, icon, viewMode) for each tab
   const getTabMeta = (tab: WorkbenchTab) => {
-    if (tab.viewType === 'all-docs') {
+    if (tab.viewType === 'home') {
+      return { title: 'Inicio', icon: '', viewMode: 'doc' }
+    } else if (tab.viewType === 'all-docs') {
       return { title: 'Todos los documentos', icon: '📑', viewMode: 'doc' }
     } else if (tab.viewType === 'knowledge-graph') {
       return { title: 'Vista gráfica', icon: '', viewMode: 'doc' }
@@ -350,7 +353,9 @@ export function WorkbenchTabs({
                 }`}
                 title={`${meta.title} (Pestaña fijada)`}
               >
-                {tab.viewType === 'knowledge-graph' ? (
+                {tab.viewType === 'home' ? (
+                  <Home className="w-3.5 h-3.5 text-[var(--app-accent)]" />
+                ) : tab.viewType === 'knowledge-graph' ? (
                   <Network className="w-3.5 h-3.5 text-[var(--app-text-secondary)]" />
                 ) : tab.viewType === 'calendar' ? (
                   <Calendar className="w-3.5 h-3.5 text-[var(--app-accent)]" />
@@ -416,7 +421,9 @@ export function WorkbenchTabs({
             >
               {/* Tab Icon */}
               <span className="shrink-0 text-xs flex items-center justify-center">
-                {tab.viewType === 'knowledge-graph' ? (
+                {tab.viewType === 'home' ? (
+                  <Home className="w-3.5 h-3.5 text-[var(--app-accent)]" />
+                ) : tab.viewType === 'knowledge-graph' ? (
                   <Network className="w-3.5 h-3.5 text-[var(--app-text-secondary)]" />
                 ) : tab.viewType === 'calendar' ? (
                   <Calendar className="w-3.5 h-3.5 text-[var(--app-accent)]" />

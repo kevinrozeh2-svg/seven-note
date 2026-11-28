@@ -161,22 +161,24 @@ function dispatchSileo(
     id: resolvedId,
     type: state,
     title,
-    description,
-    duration: resolvedDuration,
-    position: options?.position,
     icon: options?.icon !== undefined ? options.icon : getStateIcon(state),
-    fill: options?.fill,
-    roundness: options?.roundness,
-    autopilot: resolvedAutopilot,
-    button: options?.action
+    ...(description !== undefined ? { description } : {}),
+    ...(resolvedDuration !== undefined ? { duration: resolvedDuration } : {}),
+    ...(options?.position !== undefined ? { position: options.position } : {}),
+    ...(options?.fill !== undefined ? { fill: options.fill } : {}),
+    ...(options?.roundness !== undefined ? { roundness: options.roundness } : {}),
+    ...(resolvedAutopilot !== undefined ? { autopilot: resolvedAutopilot } : {}),
+    ...(options?.action
       ? {
-          title: options.action.label,
-          onClick: () => {
-            options.action!.onClick()
-            sileo.dismiss(resolvedId)
+          button: {
+            title: options.action.label,
+            onClick: () => {
+              options.action!.onClick()
+              sileo.dismiss(resolvedId)
+            },
           },
         }
-      : undefined,
+      : {}),
   }
 
   return sileo.show(sileoOpts)

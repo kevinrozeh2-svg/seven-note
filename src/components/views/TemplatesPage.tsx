@@ -40,6 +40,7 @@ import { TemplateVisualPreview } from '../templates/TemplateVisualPreview'
 import { TemplatePreviewModal } from '../templates/TemplatePreviewModal'
 import { CreateTemplateModal } from '../templates/CreateTemplateModal'
 import { toast } from '../../lib/toast'
+import { AmbientGlowBackdrop } from '../ui/AmbientGlowBackdrop'
 
 interface TemplatesPageProps {
   onSelectTemplate: (template: AppTemplate) => void
@@ -259,9 +260,10 @@ export const TemplatesPage: React.FC<TemplatesPageProps> = ({
   ]
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] select-none overflow-hidden">
+    <div className="relative flex-1 flex flex-col h-full bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] select-none overflow-hidden">
+      <AmbientGlowBackdrop variant="subtle" />
       {/* Top Bar */}
-      <header className="min-h-14 py-2.5 px-4 sm:px-6 border-b border-[var(--app-border)] flex flex-wrap items-center justify-between gap-3 shrink-0 bg-[var(--app-bg-primary)]">
+      <header className="relative z-10 min-h-14 py-2.5 px-4 sm:px-6 border-b border-[var(--app-border)] flex flex-wrap items-center justify-between gap-3 shrink-0 bg-[var(--app-bg-primary)]/85 backdrop-blur-sm">
         <div className="flex items-center gap-2.5 min-w-0">
           <h1 className="text-sm sm:text-[15px] font-semibold text-[var(--app-text-primary)] tracking-tight">
             Plantillas

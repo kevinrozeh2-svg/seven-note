@@ -16,6 +16,7 @@ import { isItemUnread, NewBadge, useUnreadTrigger } from '../../lib/unreadTracke
 import { getCurrentMember } from '../../lib/teamAuth'
 import { AppleEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
 import { DocThumbnailPreview } from '../ui/DocThumbnailPreview'
+import { AmbientGlowBackdrop } from '../ui/AmbientGlowBackdrop'
 
 interface AllDocsPageProps {
   workspaces: WorkspaceItem[]
@@ -150,9 +151,10 @@ export const AllDocsPage: React.FC<AllDocsPageProps> = ({
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] select-none overflow-hidden">
+    <div className="relative flex-1 flex flex-col h-full bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] select-none overflow-hidden">
+      <AmbientGlowBackdrop variant="subtle" />
       {/* Top Header */}
-      <header className="h-14 px-3 sm:px-8 border-b border-[var(--app-border)] flex items-center justify-between shrink-0 bg-[var(--app-bg-primary)] gap-2 overflow-x-auto no-scrollbar">
+      <header className="relative z-10 h-14 px-3 sm:px-8 border-b border-[var(--app-border)] flex items-center justify-between shrink-0 bg-[var(--app-bg-primary)]/85 backdrop-blur-sm gap-2 overflow-x-auto no-scrollbar">
         {/* Navigation Tabs (Notas / Etiquetas) */}
         <div role="tablist" aria-label="Vistas de documentos" className="flex items-center gap-3 sm:gap-6 shrink-0">
           <button

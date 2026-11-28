@@ -21,6 +21,8 @@ import {
   PlugsConnected,
   Robot,
   ShieldCheck,
+  Shuffle,
+  Sparkle,
   TextAa,
   Trash,
   X
@@ -45,7 +47,19 @@ import {
   type WebPushStatus
 } from '../../lib/webPush'
 
-import { APP_THEMES, type AppThemeId, getThemeById } from '../../lib/themes'
+import {
+  ACCENT_PRESETS,
+  APP_THEMES,
+  type AppThemeCategory,
+  type AppThemeId,
+  applyAppTheme,
+  getCustomAccentId,
+  getRandomThemeId,
+  getThemeById,
+  getThemeEffectsEnabled,
+  setCustomAccentId,
+  setThemeEffectsEnabled
+} from '../../lib/themes'
 import {
   type EditorPreferences,
   getEditorPreferences,
@@ -94,6 +108,12 @@ export function SettingsModal({
   const [activeSection, setActiveSection] = useState<
     'appearance' | 'editor' | 'notifications' | 'sync' | 'mcp' | 'backup'
   >('appearance')
+  const [themeCategoryFilter, setThemeCategoryFilter] = useState<'all' | AppThemeCategory>('all')
+  const [themeModeFilter, setThemeModeFilter] = useState<'all' | 'dark' | 'light'>('all')
+  const [themeEffectsEnabled, setThemeEffectsEnabledState] = useState<boolean>(() =>
+    getThemeEffectsEnabled()
+  )
+  const [customAccentId, setCustomAccentIdState] = useState<string | null>(() => getCustomAccentId())
   const [editorPrefs, setEditorPrefs] = useState<EditorPreferences>(() => getEditorPreferences())
   const [storageStats, setStorageStats] = useState<{
     activeNotes: number
@@ -616,27 +636,123 @@ export function SettingsModal({
           {/* Scrollable Active Section Body */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 text-xs custom-scrollbar">
             {/* TAB 1: APARIENCIA */}
-            {activeSection === 'appearance' && (
+            {activeSection === 'appearance' && (() => {
+              const filteredThemes = APP_THEMES.filter((t) => {
+                if (themeCategoryFilter !== 'all' && t.category !== themeCategoryFilter) return false
+                if (themeModeFilter !== 'all' && t.mode !== themeModeFilter) return false
+                return true
+              })
+              const activeTheme = getThemeById(themeId)
+              const categoryCounts = {
+                all: APP_THEMES.length,
+                classic: APP_THEMES.filter((t) => t.category === 'classic').length,
+                colorful: APP_THEMES.filter((t) => t.category === 'colorful').length,
+                exotic: APP_THEMES.filter((t) => t.category === 'exotic').length
+              }
+
+              return (
               <>
                 {/* Theme Selector Section */}
                 <div className="space-y-3 p-4 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)]">
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <h4 className="text-[13px] font-semibold text-[var(--app-text-primary)]">
                         Tema de la interfaz
                       </h4>
                       <p className="text-xs mt-0.5 text-[var(--app-text-muted)]">
-                        Elige la paleta de colores para el editor, sidebar y lienzo.
+                        Elige entre paletas clásicas, vibrantes o temas exóticos que transforman la UI.
                       </p>
                     </div>
-                    <span className="text-xs font-medium px-2.5 py-1 rounded-md bg-[var(--app-bg-primary)] border border-[var(--app-border)] text-[var(--app-text-primary)] shrink-0">
-                      {getThemeById(themeId).name}
-                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextId = getRandomThemeId(themeId)
+                          onThemeChange?.(nextId)
+                          toast.info(`Tema aplicado: ${getThemeById(nextId).name}`)
+                        }}
+                        className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-md bg-[var(--app-bg-primary)] border border-[var(--app-border)] text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:border-[var(--app-border-strong)] hover:bg-[var(--app-hover)] transition cursor-pointer"
+                        title="Probar un tema aleatorio"
+                      >
+                        <Shuffle size={13} weight="bold" />
+                        <span>Sorpréndeme</span>
+                      </button>
+                      <span className="text-xs font-medium px-2.5 py-1 rounded-md bg-[var(--app-bg-primary)] border border-[var(--app-border)] text-[var(--app-text-primary)]">
+                        {activeTheme.name}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Category & Mode Filters */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5">
+                    <div className="inline-flex flex-wrap items-center gap-1 bg-[var(--app-bg-primary)]/70 p-1 rounded-lg border border-[var(--app-border)]">
+                      {(
+                        [
+                          { id: 'all', label: 'Todos', count: categoryCounts.all },
+                          { id: 'classic', label: 'Clásicos', count: categoryCounts.classic },
+                          { id: 'colorful', label: 'Colores', count: categoryCounts.colorful },
+                          { id: 'exotic', label: 'Exóticos', count: categoryCounts.exotic, icon: true }
+                        ] as const
+                      ).map((cat) => {
+                        const active = themeCategoryFilter === cat.id
+                        return (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            aria-pressed={active}
+                            onClick={() => setThemeCategoryFilter(cat.id)}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition cursor-pointer ${
+                              active
+                                ? 'bg-[var(--app-accent)] text-white shadow-xs'
+                                : 'text-[var(--app-text-secondary)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
+                            }`}
+                          >
+                            {'icon' in cat && cat.icon && <Sparkle size={11} weight="fill" />}
+                            <span>{cat.label}</span>
+                            <span className={`text-[10px] ${active ? 'opacity-85' : 'opacity-60'}`}>
+                              {cat.count}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    <div className="inline-flex items-center gap-0.5 bg-[var(--app-bg-primary)]/70 p-1 rounded-lg border border-[var(--app-border)]">
+                      {(
+                        [
+                          { id: 'all', label: 'Todos' },
+                          { id: 'dark', label: 'Oscuro' },
+                          { id: 'light', label: 'Claro' }
+                        ] as const
+                      ).map((m) => {
+                        const active = themeModeFilter === m.id
+                        return (
+                          <button
+                            key={m.id}
+                            type="button"
+                            aria-pressed={active}
+                            onClick={() => setThemeModeFilter(m.id)}
+                            className={`px-2 py-1 rounded-md text-[11px] font-medium transition cursor-pointer ${
+                              active
+                                ? 'bg-[var(--app-bg-secondary)] text-[var(--app-text-primary)] border border-[var(--app-border-strong)]'
+                                : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)]'
+                            }`}
+                          >
+                            {m.label}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
-                    {APP_THEMES.map((theme) => {
+                    {filteredThemes.map((theme) => {
                       const isSelected = themeId === theme.id
+                      const isExotic = theme.category === 'exotic'
+                      const previewRadius =
+                        theme.fx === 'cyberpunk' || theme.fx === 'matrix' || theme.fx === 'blueprint'
+                          ? 'rounded-[3px]'
+                          : 'rounded-md'
                       return (
                         <button
                           key={theme.id}
@@ -651,23 +767,94 @@ export function SettingsModal({
                         >
                           {/* Mini app layout preview */}
                           <div
-                            className="w-full h-12 rounded-md overflow-hidden border flex"
+                            className={`relative w-full h-14 ${previewRadius} overflow-hidden border flex`}
                             style={{
                               backgroundColor: theme.swatches.editor,
-                              borderColor: theme.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'
+                              borderColor:
+                                theme.fx === 'cyberpunk'
+                                  ? 'rgba(0, 240, 255, 0.5)'
+                                  : theme.fx === 'matrix'
+                                  ? 'rgba(0, 255, 102, 0.45)'
+                                  : theme.fx === 'art-deco'
+                                  ? 'rgba(212, 175, 55, 0.5)'
+                                  : theme.fx === 'blueprint'
+                                  ? 'rgba(125, 211, 252, 0.45)'
+                                  : theme.mode === 'dark'
+                                  ? 'rgba(255,255,255,0.1)'
+                                  : 'rgba(0,0,0,0.1)',
+                              boxShadow:
+                                theme.fx === 'cyberpunk'
+                                  ? '0 0 10px rgba(0,240,255,0.18)'
+                                  : theme.fx === 'synthwave'
+                                  ? '0 0 10px rgba(255,79,216,0.22)'
+                                  : undefined
                             }}
                           >
+                            {/* Exotic mini visual hints */}
+                            {theme.fx === 'aurora' && (
+                              <div
+                                className="pointer-events-none absolute inset-0 opacity-45"
+                                style={{
+                                  background:
+                                    'radial-gradient(circle at 75% 20%, rgba(45,212,191,0.55), transparent 55%), radial-gradient(circle at 35% 90%, rgba(167,139,250,0.5), transparent 55%)'
+                                }}
+                              />
+                            )}
+                            {theme.fx === 'blueprint' && (
+                              <div
+                                className="pointer-events-none absolute inset-0 opacity-35"
+                                style={{
+                                  backgroundImage:
+                                    'linear-gradient(to right, rgba(125,211,252,0.35) 1px, transparent 1px), linear-gradient(to bottom, rgba(125,211,252,0.35) 1px, transparent 1px)',
+                                  backgroundSize: '8px 8px'
+                                }}
+                              />
+                            )}
+                            {theme.fx === 'synthwave' && (
+                              <div
+                                className="pointer-events-none absolute inset-x-0 bottom-0 h-3 opacity-60"
+                                style={{
+                                  background:
+                                    'linear-gradient(180deg, transparent, rgba(255,79,216,0.55))'
+                                }}
+                              />
+                            )}
+                            {theme.fx === 'cyberpunk' && (
+                              <div
+                                className="pointer-events-none absolute inset-0 opacity-20"
+                                style={{
+                                  backgroundImage:
+                                    'repeating-linear-gradient(0deg, rgba(0,240,255,0.5) 0px, rgba(0,240,255,0.5) 1px, transparent 1px, transparent 3px)'
+                                }}
+                              />
+                            )}
+                            {theme.fx === 'art-deco' && (
+                              <div className="pointer-events-none absolute inset-1 border border-[#d4af37]/35" />
+                            )}
+                            {theme.fx === 'zen-petals' && (
+                              <>
+                                <span className="pointer-events-none absolute top-1.5 right-2 w-1.5 h-1.5 rounded-full bg-[#f472b6]/80" />
+                                <span className="pointer-events-none absolute bottom-2 right-4 w-1 h-1 rounded-full bg-[#e11d64]/70" />
+                              </>
+                            )}
+
                             <div
-                              className="w-3 h-full shrink-0 flex flex-col items-center justify-start pt-1.5 gap-1"
+                              className="w-3 h-full shrink-0 flex flex-col items-center justify-start pt-1.5 gap-1 relative z-10"
                               style={{ backgroundColor: theme.swatches.ribbon }}
                             >
                               <span
                                 className="w-1.5 h-1.5 rounded-full"
                                 style={{ backgroundColor: theme.swatches.accent }}
                               />
+                              {theme.swatches.secondary && (
+                                <span
+                                  className="w-1.5 h-1.5 rounded-full opacity-90"
+                                  style={{ backgroundColor: theme.swatches.secondary }}
+                                />
+                              )}
                             </div>
                             <div
-                              className="w-7 h-full shrink-0 p-1 flex flex-col gap-1"
+                              className="w-7 h-full shrink-0 p-1 flex flex-col gap-1 relative z-10"
                               style={{ backgroundColor: theme.swatches.sidebar }}
                             >
                               <span
@@ -678,10 +865,14 @@ export function SettingsModal({
                                 className="h-1 w-3/4 rounded-full opacity-20"
                                 style={{ backgroundColor: theme.swatches.text }}
                               />
-                            </div>
-                            <div className="flex-1 p-1.5 flex flex-col gap-1">
                               <span
-                                className="h-1.5 w-2/3 rounded-full opacity-80"
+                                className="mt-auto h-1 w-4/5 rounded-full opacity-70"
+                                style={{ backgroundColor: theme.swatches.accent }}
+                              />
+                            </div>
+                            <div className="flex-1 p-1.5 flex flex-col gap-1 relative z-10">
+                              <span
+                                className="h-1.5 w-2/3 rounded-full opacity-85"
                                 style={{ backgroundColor: theme.swatches.text }}
                               />
                               <span
@@ -695,17 +886,144 @@ export function SettingsModal({
                             </div>
                           </div>
 
-                          <div className="flex items-center justify-between gap-1 px-0.5">
-                            <span className="text-xs font-semibold text-[var(--app-text-primary)] truncate">
-                              {theme.name}
-                            </span>
-                            <span className="text-[10px] uppercase tracking-wider text-[var(--app-text-muted)] shrink-0">
-                              {theme.mode === 'dark' ? 'Oscuro' : 'Claro'}
-                            </span>
+                          <div className="space-y-0.5 px-0.5">
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="text-xs font-semibold text-[var(--app-text-primary)] truncate">
+                                {theme.name}
+                              </span>
+                              {isExotic && theme.badge ? (
+                                <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[var(--app-accent-soft)] text-[var(--app-accent)] shrink-0">
+                                  {theme.badge}
+                                </span>
+                              ) : (
+                                <span className="text-[10px] uppercase tracking-wider text-[var(--app-text-muted)] shrink-0">
+                                  {theme.mode === 'dark' ? 'Oscuro' : 'Claro'}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10.5px] text-[var(--app-text-muted)] truncate">
+                              {theme.features ? theme.features.join(' · ') : theme.description}
+                            </p>
                           </div>
                         </button>
                       )
                     })}
+                  </div>
+                </div>
+
+                {/* Exotic Visual Effects & Custom Accent Section */}
+                <div className="space-y-4 p-4 rounded-lg border border-[var(--app-border)] bg-[var(--app-bg-secondary)]">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <Sparkle size={14} weight="fill" className="text-[var(--app-accent)] shrink-0" />
+                        <h4 className="text-[13px] font-semibold text-[var(--app-text-primary)]">
+                          Efectos visuales de temas exóticos
+                        </h4>
+                      </div>
+                      <p className="text-xs mt-0.5 text-[var(--app-text-muted)]">
+                        Activa capas ambientales sutiles (scanlines, grilla láser, pétalos, auroras, miras CAD y filigranas).
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={themeEffectsEnabled}
+                      aria-label="Activar efectos visuales de temas exóticos"
+                      onClick={() => {
+                        const next = !themeEffectsEnabled
+                        setThemeEffectsEnabled(next)
+                        setThemeEffectsEnabledState(next)
+                        applyAppTheme(themeId)
+                      }}
+                      className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition cursor-pointer ${
+                        themeEffectsEnabled
+                          ? 'bg-[var(--app-accent)] border-[var(--app-accent)]'
+                          : 'bg-[var(--app-bg-primary)] border-[var(--app-border-strong)]'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition ${
+                          themeEffectsEnabled ? 'translate-x-4' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  <div className="border-t border-[var(--app-divider)] pt-3 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <h5 className="text-xs font-semibold text-[var(--app-text-primary)]">
+                          Acento personalizado
+                        </h5>
+                        <p className="text-[11px] text-[var(--app-text-muted)]">
+                          Sobrescribe el color principal de botones, foco y pestañas activas.
+                        </p>
+                      </div>
+                      {customAccentId && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomAccentId(null)
+                            setCustomAccentIdState(null)
+                            applyAppTheme(themeId)
+                          }}
+                          className="text-[11px] text-[var(--app-accent)] hover:underline cursor-pointer shrink-0"
+                        >
+                          Usar del tema
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                      <button
+                        type="button"
+                        aria-pressed={customAccentId === null}
+                        onClick={() => {
+                          setCustomAccentId(null)
+                          setCustomAccentIdState(null)
+                          applyAppTheme(themeId)
+                        }}
+                        className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full border text-[11px] font-medium transition cursor-pointer ${
+                          customAccentId === null
+                            ? 'border-[var(--app-accent)] bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] ring-1 ring-[var(--app-accent)]/40'
+                            : 'border-[var(--app-border)] bg-[var(--app-bg-primary)]/70 text-[var(--app-text-secondary)] hover:bg-[var(--app-hover)]'
+                        }`}
+                        title="Usar el color de acento original del tema"
+                      >
+                        <span
+                          className="w-3 h-3 rounded-full border border-white/20"
+                          style={{ backgroundColor: activeTheme.swatches.accent }}
+                        />
+                        <span>Del tema</span>
+                      </button>
+
+                      {ACCENT_PRESETS.map((preset) => {
+                        const isPresetActive = customAccentId === preset.id
+                        return (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            aria-label={`Acento ${preset.name}`}
+                            aria-pressed={isPresetActive}
+                            onClick={() => {
+                              setCustomAccentId(preset.id)
+                              setCustomAccentIdState(preset.id)
+                              applyAppTheme(themeId)
+                            }}
+                            title={preset.name}
+                            className={`w-7 h-7 rounded-full flex items-center justify-center border transition cursor-pointer ${
+                              isPresetActive
+                                ? 'scale-110 ring-2 ring-offset-2 ring-offset-[var(--app-bg-secondary)] ring-[var(--app-text-primary)] border-white/60'
+                                : 'border-white/20 hover:scale-105'
+                            }`}
+                            style={{ backgroundColor: preset.color }}
+                          >
+                            {isPresetActive && <Check size={13} weight="bold" className="text-white drop-shadow" />}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
                 </div>
 
@@ -761,7 +1079,8 @@ export function SettingsModal({
                   </div>
                 </div>
               </>
-            )}
+              )
+            })()}
 
             {/* TAB 2: EDITOR Y ESCRITURA */}
             {activeSection === 'editor' && (

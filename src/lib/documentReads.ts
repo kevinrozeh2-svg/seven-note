@@ -59,6 +59,44 @@ function readLocalStore(): LocalReadsStore {
   }
 }
 
+export interface DocumentReadSummary {
+  totalReads: number
+  uniqueReaders: number
+  lastReadAt: number
+  readerIds: string[]
+}
+
+/**
+ * Devuelve un mapa rápido workspaceId -> métricas de lectura locales
+ * para ordenar documentos por "Más leídos" en la pantalla de Inicio.
+ */
+export function getDocumentReadStatsMap(): Record<string, DocumentReadSummary> {
+  const store = readLocalStore()
+  const result: Record<string, DocumentReadSummary> = {}
+  for (const [workspaceId, entries] of Object.entries(store)) {
+    if (!Array.isArray(entries) || entries.length === 0) continue
+    let totalReads = 0
+    let lastReadAt = 0
+    const readerSet = new Set<string>()
+    for (const entry of entries) {
+      totalReads += Math.max(1, Number(entry?.readCount) || 1)
+      if ((entry?.lastReadAt || 0) > lastReadAt) {
+        lastReadAt = entry.lastReadAt
+      }
+      if (entry?.userId) readerSet.add(String(entry.userId).toLowerCase().trim())
+      if (entry?.userEmail) readerSet.add(String(entry.userEmail).toLowerCase().trim())
+      if (entry?.userName) readerSet.add(String(entry.userName).toLowerCase().trim())
+    }
+    result[workspaceId] = {
+      totalReads,
+      uniqueReaders: entries.length,
+      lastReadAt,
+      readerIds: Array.from(readerSet)
+    }
+  }
+  return result
+}
+
 function writeLocalStore(store: LocalReadsStore): void {
   if (typeof window === 'undefined') return
   try {

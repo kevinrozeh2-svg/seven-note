@@ -103,6 +103,7 @@ import {
   getToggledThemeId,
   applyAppTheme
 } from './lib/themes'
+import { ThemeEffectsOverlay } from './components/ui/ThemeEffectsOverlay'
 import {
   type EditorPreferences,
   getEditorPreferences,
@@ -115,6 +116,7 @@ const DocEditor = lazy(() => import('./components/editor/DocEditor').then(m => (
 const CanvasBoard = lazy(() => import('./components/canvas/CanvasBoard').then(m => ({ default: m.CanvasBoard })))
 const PresentationViewer = lazy(() => import('./components/presentation/PresentationViewer').then(m => ({ default: m.PresentationViewer })))
 const AllDocsPage = lazy(() => import('./components/views/AllDocsPage').then(m => ({ default: m.AllDocsPage })))
+const HomePage = lazy(() => import('./components/views/HomePage').then(m => ({ default: m.HomePage })))
 const KnowledgeGraphPage = lazy(() => import('./components/views/KnowledgeGraphPage').then(m => ({ default: m.KnowledgeGraphPage })))
 const TrashPage = lazy(() => import('./components/views/TrashPage').then(m => ({ default: m.TrashPage })))
 const TemplatesPage = lazy(() => import('./components/views/TemplatesPage').then(m => ({ default: m.TemplatesPage })))
@@ -433,6 +435,13 @@ function MainApp() {
 
   // Workbench tabs state (Browser-grade tab management)
   const [tabs, setTabs] = useState<WorkbenchTab[]>(() => {
+    const defaultHomeTab: WorkbenchTab = {
+      id: 'tab-home',
+      workspaceId: '',
+      viewType: 'home',
+      title: 'Inicio',
+      pinned: false
+    }
     try {
       const saved = localStorage.getItem('seven_note_workbench_tabs')
       if (saved) {
@@ -450,21 +459,27 @@ function MainApp() {
               cleaned.push(t)
             }
           }
-          if (cleaned.length > 0) return cleaned
+          if (cleaned.length > 0) {
+            const hasHome = cleaned.some((t) => t.viewType === 'home')
+            return hasHome ? cleaned : [defaultHomeTab, ...cleaned]
+          }
         }
       }
     } catch (e) {
       // fallback
     }
-    return [{ id: 'tab-initial', workspaceId: 'ws-feature-priorities', title: 'Plan de Producto', icon: '🎯', pinned: false }]
+    return [defaultHomeTab]
   })
 
   const [activeTabId, setActiveTabId] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem('seven_note_workbench_active_tab')
-      if (saved) return saved
-    } catch (e) {}
-    return 'tab-initial'
+    if (extractNoteIdFromLocation()) {
+      try {
+        const saved = localStorage.getItem('seven_note_workbench_active_tab')
+        if (saved) return saved
+      } catch (e) {}
+    }
+    const homeTab = tabs.find((t) => t.viewType === 'home')
+    return homeTab?.id || 'tab-home'
   })
 
   // Keep refs for event listeners so they don't capture stale closures
@@ -672,7 +687,7 @@ function MainApp() {
   }, [currentSpaceId, effectiveWorkspaces, currentMember, authUser?.id])
 
   const openSpecialViewTab = (
-    viewType: 'all-docs' | 'knowledge-graph' | 'calendar' | 'trash' | 'templates',
+    viewType: 'home' | 'all-docs' | 'knowledge-graph' | 'calendar' | 'trash' | 'templates',
     title: string
   ) => {
     if (typeof window !== 'undefined' && window.innerWidth < 768) {
@@ -1692,11 +1707,13 @@ function MainApp() {
   return (
     <MotionConfig reducedMotion={editorPrefs.reduceMotion ? 'always' : 'user'}>
     <div className="relative flex h-dvh w-full overflow-hidden bg-[var(--obsidian-sidebar-bg,#181818)] text-[var(--app-text-primary)] font-sans select-none">
+      <ThemeEffectsOverlay themeId={themeId} />
       {/* 0. Obsidian Left Ribbon (Compact 40px Tool strip) */}
       {!isPresentationMode && !focusMode && (
         <ObsidianRibbon
           sidebarOpen={sidebarOpen}
           onToggleSidebar={() => setSidebarOpen((prev) => !prev)}
+          onOpenHome={() => openSpecialViewTab('home', 'Inicio')}
           onNewNote={handleNewTab}
           onOpenSearch={() => setIsSearchOpen(true)}
           onOpenCalendar={() => openSpecialViewTab('calendar', 'Almanaque')}
@@ -2402,7 +2419,53 @@ function MainApp() {
               <span>Cargando vista...</span>
             </div>
           }>
-            {activeTab?.viewType === 'all-docs' ? (
+            {activeTab?.viewType === 'home' ? (
+              <HomePage
+                workspaces={effectiveWorkspaces}
+                spaces={visibleSpaces}
+                currentSpaceId={currentSpaceId}
+                currentMember={currentMember}
+                onSelectWorkspace={(id, spaceId, wsItem) => selectWorkspaceWithTab(id, spaceId, wsItem)}
+                onSelectSpace={(spaceId) => setCurrentSpaceId(spaceId)}
+                onQuickCreateNote={async ({ title, spaceId, folder, viewMode, isPrivate, docContent }) => {
+                  const newId = crypto.randomUUID()
+                  const now = Date.now()
+                  const resolvedSpaceId = spaceId || currentSpaceId
+                  const newWs: WorkspaceItem = {
+                    id: newId,
+                    parentId: null,
+                    spaceId: resolvedSpaceId,
+                    folder: folder || null,
+                    title: title || 'Sin título',
+                    icon: isPrivate ? '🔒' : '',
+                    color: '#7c3aed',
+                    viewMode: viewMode || editorPrefs.defaultViewMode,
+                    pageWidth: editorPrefs.defaultPageWidth,
+                    isPrivate: typeof isPrivate === 'boolean' ? isPrivate : editorPrefs.defaultPrivate,
+                    docContent: docContent || '<p></p>',
+                    createdAt: now,
+                    updatedAt: now,
+                    isFavorite: false,
+                    isDeleted: false,
+                    syncStatus: 'pending',
+                    ownerMember: currentMember.id,
+                    ownerName: currentMember.name,
+                    createdBy: currentMember.name,
+                    userId: authUser?.id || undefined,
+                    viewedBy: [currentMember.id, currentMember.fullName || currentMember.name, currentMember.email, authUser?.id].filter(Boolean) as string[],
+                    isNewItem: true
+                  }
+                  await db.workspaces.add(newWs)
+                  syncEngine.scheduleSync(500)
+                  setCurrentSpaceId(resolvedSpaceId)
+                  setOptimisticWorkspace(newWs)
+                  selectWorkspaceWithTab(newId, resolvedSpaceId, newWs)
+                }}
+                onOpenSearch={() => setIsSearchOpen(true)}
+                onOpenTemplates={() => openSpecialViewTab('templates', 'Plantillas')}
+                onOpenAllDocs={() => openSpecialViewTab('all-docs', 'Todos los documentos')}
+              />
+            ) : activeTab?.viewType === 'all-docs' ? (
               <AllDocsPage
                 workspaces={currentSpaceWorkspaces}
                 currentWorkspaceId={currentWorkspace?.id}

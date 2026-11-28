@@ -71,6 +71,7 @@ import {
   canUserManageSpace
 } from '../../lib/teamAuth'
 import { toast } from '../../lib/toast'
+import { AmbientGlowBackdrop } from '../ui/AmbientGlowBackdrop'
 
 export interface SidebarProps {
   spaces?: SpaceItem[]
@@ -2817,10 +2818,11 @@ export function Sidebar({
   return (
     <aside
       style={{ '--sidebar-width': `${sidebarWidth}px` } as React.CSSProperties}
-      className={`relative h-full w-[calc(100vw-48px)] md:w-[var(--sidebar-width)] flex flex-col bg-[var(--obsidian-sidebar-bg)] border-r border-[var(--app-border)] text-[var(--app-text-primary)] select-none shrink-0 text-[13px] font-sans shadow-2xl md:shadow-none ${
+      className={`relative overflow-hidden h-full w-[calc(100vw-48px)] md:w-[var(--sidebar-width)] flex flex-col bg-[var(--obsidian-sidebar-bg)] border-r border-[var(--app-border)] text-[var(--app-text-primary)] select-none shrink-0 text-[13px] font-sans shadow-2xl md:shadow-none ${
         isResizing ? '' : 'transition-[width] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]'
       }`}
     >
+      <AmbientGlowBackdrop variant="subtle" />
       {/* 1. Workspace Bar */}
       <div className="px-3 pt-2 pb-1.5 relative">
         <div className="flex items-center gap-1">

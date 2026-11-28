@@ -16,6 +16,7 @@ import {
 } from '../../db'
 import { syncEngine } from '../../lib/syncEngine'
 import { toast } from '../../lib/toast'
+import { AmbientGlowBackdrop } from '../ui/AmbientGlowBackdrop'
 import { AppleEmoji, renderWithAppleEmoji } from '../ui/AppleEmoji'
 import { deleteImageFromStorage, extractStorageUrlsFromHtml } from '../../lib/imageOptimizer'
 import { getSupabaseClient } from '../../lib/supabase'
@@ -394,9 +395,10 @@ export const TrashPage: React.FC<TrashPageProps> = ({ authUserId }) => {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] select-none overflow-hidden">
+    <div className="relative flex-1 flex flex-col h-full bg-[var(--app-bg-primary)] text-[var(--app-text-primary)] select-none overflow-hidden">
+      <AmbientGlowBackdrop variant="subtle" />
       {/* Header */}
-      <header className="h-auto min-h-14 py-2 px-4 sm:px-8 border-b border-[var(--app-border)] flex flex-col sm:flex-row sm:items-center justify-between shrink-0 bg-[var(--app-bg-primary)] gap-2.5">
+      <header className="relative z-10 h-auto min-h-14 py-2 px-4 sm:px-8 border-b border-[var(--app-border)] flex flex-col sm:flex-row sm:items-center justify-between shrink-0 bg-[var(--app-bg-primary)]/85 backdrop-blur-sm gap-2.5">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-500 dark:text-rose-400 flex items-center justify-center shrink-0">
             <Trash2 className="w-4 h-4" />
@@ -434,7 +436,7 @@ export const TrashPage: React.FC<TrashPageProps> = ({ authUserId }) => {
       </header>
 
       {/* Main List */}
-      <div className="flex-1 overflow-y-auto px-3 sm:px-6 md:px-10 py-4 sm:py-6 max-w-5xl w-full mx-auto space-y-6 custom-scrollbar">
+      <div className="relative z-10 flex-1 overflow-y-auto px-3 sm:px-6 md:px-10 py-4 sm:py-6 max-w-5xl w-full mx-auto space-y-6 custom-scrollbar">
         {totalCount === 0 ? (
           <div className="py-24 text-center">
             <div className="w-12 h-12 rounded-full bg-[var(--app-bg-secondary)] border border-[var(--app-border)] mx-auto flex items-center justify-center text-[var(--app-text-muted)] mb-3">

@@ -1,4 +1,5 @@
 import {
+  House,
   FileText,
   MagnifyingGlass,
   Graph,
@@ -23,6 +24,7 @@ import { type TeamMember } from '../../lib/teamAuth'
 export interface ObsidianRibbonProps {
   sidebarOpen: boolean
   onToggleSidebar: () => void
+  onOpenHome?: () => void
   onNewNote: () => void
   onOpenSearch: () => void
   onOpenCalendar?: () => void
@@ -58,6 +60,7 @@ export interface ObsidianRibbonProps {
 export function ObsidianRibbon({
   sidebarOpen,
   onToggleSidebar,
+  onOpenHome,
   onNewNote,
   onOpenSearch,
   onOpenCalendar,
@@ -94,13 +97,13 @@ export function ObsidianRibbon({
     >
       {/* Top tools list */}
       <div className="flex flex-col items-center gap-1.5 w-full px-1">
-        {/* Brand App Icon (Navigates to All Notes) */}
+        {/* Brand App Icon (Navigates to Home) */}
         <button
           type="button"
-          onClick={onOpenAllDocs}
-          aria-label="Seven Note — Todas las notas"
+          onClick={onOpenHome || onOpenAllDocs}
+          aria-label="Seven Note — Inicio"
           className="w-10 h-10 rounded-md flex items-center justify-center p-0.5 mb-1 transition cursor-pointer hover:bg-[var(--app-hover)]"
-          title="Seven Note — Todas las notas"
+          title="Seven Note — Inicio"
         >
           <img
             src="/app-logo-light.png"
@@ -113,6 +116,34 @@ export function ObsidianRibbon({
             className="w-full h-full object-contain hidden dark:block"
           />
         </button>
+
+        {/* Home View */}
+        {onOpenHome && (
+          <button
+            type="button"
+            onClick={onOpenHome}
+            aria-label="Inicio"
+            aria-current={activeView === 'home' ? 'page' : undefined}
+            className={`w-9 h-9 rounded-md flex items-center justify-center transition cursor-pointer ${
+              activeView === 'home'
+                ? 'text-[var(--app-accent)]'
+                : 'text-[var(--app-text-muted)] hover:text-[var(--app-text-primary)] hover:bg-[var(--app-hover)]'
+            }`}
+            style={
+              activeView === 'home'
+                ? {
+                    background:
+                      'linear-gradient(135deg, color-mix(in srgb, var(--prism-1) 20%, transparent), color-mix(in srgb, var(--prism-3) 18%, transparent))',
+                    boxShadow:
+                      'inset 0 0 0 1px color-mix(in srgb, var(--prism-1) 38%, transparent), 0 0 12px -3px color-mix(in srgb, var(--prism-1) 45%, transparent)'
+                  }
+                : undefined
+            }
+            title="Inicio"
+          >
+            <House size={20} weight={activeView === 'home' ? 'fill' : 'regular'} />
+          </button>
+        )}
 
         {/* Toggle File Explorer / Sidebar */}
         <button

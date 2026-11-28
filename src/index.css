@@ -48,6 +48,16 @@
     --app-accent-soft: rgba(124, 58, 237, 0.12);
     --app-brand-purple: #7c3aed;
 
+    /* Obsidian Prism Adaptive Optical Spectrum (defaults: light obsidian) */
+    --prism-1: #7c3aed;
+    --prism-2: #4f46e5;
+    --prism-3: #a855f7;
+    --prism-4: #ec4899;
+    --prism-specular: rgba(255, 255, 255, 0.92);
+    --prism-sheen: linear-gradient(174deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.18) 38%, rgba(15, 23, 42, 0.03));
+    --prism-aura-opacity: 0.22;
+    --prism-subtle-opacity: 0.14;
+
     /* Milanote Physical Shadows (No AI-glow) */
     --app-shadow-card: 0 1px 3px rgba(15, 15, 15, 0.06), 0 1px 2px rgba(15, 15, 15, 0.04);
     --app-shadow-card-hover: 0 4px 14px rgba(15, 15, 15, 0.08), 0 1px 3px rgba(15, 15, 15, 0.04);
@@ -163,6 +173,15 @@
     --app-accent-hover: #9061f9;
     --app-accent-soft: rgba(124, 58, 237, 0.18);
 
+    --prism-1: #7f6df2;
+    --prism-2: #4c8df6;
+    --prism-3: #c084fc;
+    --prism-4: #e879a9;
+    --prism-specular: rgba(255, 255, 255, 0.095);
+    --prism-sheen: linear-gradient(172deg, rgba(255, 255, 255, 0.048), rgba(160, 185, 245, 0.015) 36%, rgba(10, 11, 16, 0.18));
+    --prism-aura-opacity: 0.34;
+    --prism-subtle-opacity: 0.22;
+
     --app-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
     --app-shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.45);
     --app-shadow-popover: 0 8px 24px rgba(0, 0, 0, 0.6);
@@ -220,6 +239,14 @@
     --app-accent-hover: #9383f7;
     --app-accent-soft: rgba(127, 109, 242, 0.16);
     --app-canvas-dot: #292929;
+    --prism-1: #7f6df2;
+    --prism-2: #4c8df6;
+    --prism-3: #c084fc;
+    --prism-4: #e879a9;
+    --prism-specular: rgba(255, 255, 255, 0.095);
+    --prism-sheen: linear-gradient(172deg, rgba(255, 255, 255, 0.048), rgba(160, 185, 245, 0.015) 36%, rgba(10, 11, 16, 0.18));
+    --prism-aura-opacity: 0.34;
+    --prism-subtle-opacity: 0.22;
   }
 
   /* 2. Midnight Slate Dark */
@@ -246,6 +273,14 @@
     --app-accent-hover: #818cf8;
     --app-accent-soft: rgba(99, 102, 241, 0.18);
     --app-canvas-dot: #233046;
+    --prism-1: #4285f4;
+    --prism-2: #6366f1;
+    --prism-3: #38bdf8;
+    --prism-4: #9b72cb;
+    --prism-specular: rgba(210, 230, 255, 0.11);
+    --prism-sheen: linear-gradient(172deg, rgba(186, 214, 255, 0.055), rgba(99, 102, 241, 0.018) 38%, rgba(7, 11, 20, 0.22));
+    --prism-aura-opacity: 0.36;
+    --prism-subtle-opacity: 0.24;
   }
 
   /* 3. Nord Arctic Dark */
@@ -272,6 +307,14 @@
     --app-accent-hover: #9bd0df;
     --app-accent-soft: rgba(136, 192, 208, 0.16);
     --app-canvas-dot: #3d4556;
+    --prism-1: #88c0d0;
+    --prism-2: #81a1c1;
+    --prism-3: #5e81ac;
+    --prism-4: #b48ead;
+    --prism-specular: rgba(236, 239, 244, 0.11);
+    --prism-sheen: linear-gradient(172deg, rgba(216, 222, 233, 0.055), rgba(136, 192, 208, 0.02) 38%, rgba(28, 33, 43, 0.2));
+    --prism-aura-opacity: 0.34;
+    --prism-subtle-opacity: 0.22;
   }
 
   /* 4. Forest Night Dark */
@@ -298,6 +341,14 @@
     --app-accent-hover: #73bb96;
     --app-accent-soft: rgba(95, 168, 130, 0.16);
     --app-canvas-dot: #26312a;
+    --prism-1: #5fa882;
+    --prism-2: #34d399;
+    --prism-3: #2dd4bf;
+    --prism-4: #a3c977;
+    --prism-specular: rgba(220, 242, 228, 0.10);
+    --prism-sheen: linear-gradient(172deg, rgba(200, 240, 216, 0.048), rgba(95, 168, 130, 0.02) 38%, rgba(10, 16, 12, 0.22));
+    --prism-aura-opacity: 0.32;
+    --prism-subtle-opacity: 0.21;
   }
 
   /* 5. Rose Velvet Dark (Warm Plum & Dusty Rose) */
@@ -324,6 +375,14 @@
     --app-accent-hover: #e391b0;
     --app-accent-soft: rgba(217, 122, 158, 0.16);
     --app-canvas-dot: #312630;
+    --prism-1: #d97a9e;
+    --prism-2: #c06c9d;
+    --prism-3: #e88c7d;
+    --prism-4: #f2b872;
+    --prism-specular: rgba(252, 232, 242, 0.10);
+    --prism-sheen: linear-gradient(172deg, rgba(250, 224, 238, 0.05), rgba(217, 122, 158, 0.02) 38%, rgba(16, 10, 15, 0.22));
+    --prism-aura-opacity: 0.34;
+    --prism-subtle-opacity: 0.22;
   }
 
   /* 5. Obsidian Light */
@@ -350,6 +409,14 @@
     --app-accent-hover: #6d28d9;
     --app-accent-soft: rgba(124, 58, 237, 0.12);
     --app-canvas-dot: #dcdcdc;
+    --prism-1: #7c3aed;
+    --prism-2: #4f46e5;
+    --prism-3: #a855f7;
+    --prism-4: #ec4899;
+    --prism-specular: rgba(255, 255, 255, 0.94);
+    --prism-sheen: linear-gradient(176deg, rgba(255, 255, 255, 0.94), rgba(244, 240, 255, 0.5));
+    --prism-aura-opacity: 0.20;
+    --prism-subtle-opacity: 0.13;
   }
 
   /* 6. Warm Editorial Paper Light */
@@ -376,6 +443,508 @@
     --app-accent-hover: #1b6ec2;
     --app-accent-soft: rgba(35, 131, 226, 0.12);
     --app-canvas-dot: #e2dfd8;
+    --prism-1: #2383e2;
+    --prism-2: #d97706;
+    --prism-3: #c26a4a;
+    --prism-4: #6366f1;
+    --prism-specular: rgba(255, 255, 255, 0.94);
+    --prism-sheen: linear-gradient(176deg, rgba(255, 255, 255, 0.94), rgba(248, 245, 238, 0.56));
+    --prism-aura-opacity: 0.20;
+    --prism-subtle-opacity: 0.13;
+  }
+
+  /* ── Colorful Themes (7) ─────────────────────────────────────────────── */
+
+  /* 8. Dracula */
+  html[data-color-theme="dracula"] {
+    color-scheme: dark;
+    --app-bg-primary: #282a36;
+    --app-bg-secondary: #21222c;
+    --app-bg-tertiary: #191a24;
+    --app-bg-overlay: #303341;
+    --app-bg-canvas: #1f2029;
+    --obsidian-ribbon-bg: #191a24;
+    --obsidian-sidebar-bg: #21222c;
+    --obsidian-editor-bg: #282a36;
+    --app-text-primary: #f8f8f2;
+    --app-text-secondary: #b6bad6;
+    --app-text-muted: #7c82a8;
+    --app-border: rgba(189, 147, 249, 0.12);
+    --app-border-strong: rgba(189, 147, 249, 0.24);
+    --app-divider: rgba(189, 147, 249, 0.10);
+    --app-hover: rgba(189, 147, 249, 0.09);
+    --app-hover-filled: #343746;
+    --app-active: rgba(189, 147, 249, 0.16);
+    --app-accent: #bd93f9;
+    --app-accent-hover: #cfaeff;
+    --app-accent-soft: rgba(189, 147, 249, 0.20);
+    --app-canvas-dot: #3b3e52;
+    --affine-background-code-block: #21222c;
+    --prism-1: #bd93f9;
+    --prism-2: #ff79c6;
+    --prism-3: #8be9fd;
+    --prism-4: #50fa7b;
+    --prism-specular: rgba(248, 248, 242, 0.11);
+    --prism-sheen: linear-gradient(172deg, rgba(189, 147, 249, 0.06), rgba(255, 121, 198, 0.02) 38%, rgba(25, 26, 36, 0.22));
+    --prism-aura-opacity: 0.36;
+    --prism-subtle-opacity: 0.24;
+  }
+
+  /* 9. Espresso Tostado */
+  html[data-color-theme="espresso"] {
+    color-scheme: dark;
+    --app-bg-primary: #221b16;
+    --app-bg-secondary: #1b1511;
+    --app-bg-tertiary: #14100d;
+    --app-bg-overlay: #2b221c;
+    --app-bg-canvas: #19130f;
+    --obsidian-ribbon-bg: #14100d;
+    --obsidian-sidebar-bg: #1b1511;
+    --obsidian-editor-bg: #221b16;
+    --app-text-primary: #f2e8dc;
+    --app-text-secondary: #bba794;
+    --app-text-muted: #867261;
+    --app-border: rgba(242, 232, 220, 0.09);
+    --app-border-strong: rgba(242, 232, 220, 0.18);
+    --app-divider: rgba(242, 232, 220, 0.08);
+    --app-hover: rgba(217, 138, 78, 0.09);
+    --app-hover-filled: #2e241d;
+    --app-active: rgba(217, 138, 78, 0.16);
+    --app-accent: #d98a4e;
+    --app-accent-hover: #e5a06b;
+    --app-accent-soft: rgba(217, 138, 78, 0.18);
+    --app-canvas-dot: #382c23;
+    --affine-background-code-block: #1b1511;
+    --prism-1: #d98a4e;
+    --prism-2: #eab308;
+    --prism-3: #c26a4a;
+    --prism-4: #a16207;
+    --prism-specular: rgba(242, 232, 220, 0.10);
+    --prism-sheen: linear-gradient(172deg, rgba(242, 232, 220, 0.05), rgba(217, 138, 78, 0.02) 38%, rgba(16, 12, 9, 0.22));
+    --prism-aura-opacity: 0.34;
+    --prism-subtle-opacity: 0.22;
+  }
+
+  /* 10. Abisal Turquesa */
+  html[data-color-theme="abyssal"] {
+    color-scheme: dark;
+    --app-bg-primary: #0e222e;
+    --app-bg-secondary: #0a1b24;
+    --app-bg-tertiary: #07131a;
+    --app-bg-overlay: #132c3b;
+    --app-bg-canvas: #091820;
+    --obsidian-ribbon-bg: #07131a;
+    --obsidian-sidebar-bg: #0a1b24;
+    --obsidian-editor-bg: #0e222e;
+    --app-text-primary: #e0f2fe;
+    --app-text-secondary: #93b8cc;
+    --app-text-muted: #5d849a;
+    --app-border: rgba(56, 189, 248, 0.12);
+    --app-border-strong: rgba(56, 189, 248, 0.24);
+    --app-divider: rgba(56, 189, 248, 0.10);
+    --app-hover: rgba(20, 184, 166, 0.10);
+    --app-hover-filled: #143040;
+    --app-active: rgba(20, 184, 166, 0.17);
+    --app-accent: #14b8a6;
+    --app-accent-hover: #2dd4bf;
+    --app-accent-soft: rgba(20, 184, 166, 0.18);
+    --app-canvas-dot: #19384a;
+    --affine-background-code-block: #091821;
+    --prism-1: #14b8a6;
+    --prism-2: #06b6d4;
+    --prism-3: #38bdf8;
+    --prism-4: #34d399;
+    --prism-specular: rgba(224, 242, 254, 0.11);
+    --prism-sheen: linear-gradient(172deg, rgba(186, 230, 253, 0.055), rgba(20, 184, 166, 0.02) 38%, rgba(5, 14, 20, 0.24));
+    --prism-aura-opacity: 0.36;
+    --prism-subtle-opacity: 0.24;
+  }
+
+  /* 11. Matcha Cremoso */
+  html[data-color-theme="matcha"] {
+    color-scheme: light;
+    --app-bg-primary: #fafcf7;
+    --app-bg-secondary: #f1f5ec;
+    --app-bg-tertiary: #e7ece2;
+    --app-bg-overlay: #ffffff;
+    --app-bg-canvas: #eff4ea;
+    --obsidian-ribbon-bg: #e7ece2;
+    --obsidian-sidebar-bg: #f1f5ec;
+    --obsidian-editor-bg: #fafcf7;
+    --app-text-primary: #243127;
+    --app-text-secondary: #536657;
+    --app-text-muted: #7f9483;
+    --app-border: rgba(36, 49, 39, 0.09);
+    --app-border-strong: rgba(36, 49, 39, 0.16);
+    --app-divider: rgba(36, 49, 39, 0.08);
+    --app-hover: rgba(77, 124, 79, 0.07);
+    --app-hover-filled: #e6ede0;
+    --app-active: rgba(77, 124, 79, 0.12);
+    --app-accent: #4d7c4f;
+    --app-accent-hover: #3f6841;
+    --app-accent-soft: rgba(77, 124, 79, 0.14);
+    --app-canvas-dot: #d6e0ce;
+    --affine-background-code-block: #f1f5ec;
+    --prism-1: #4d7c4f;
+    --prism-2: #65a30d;
+    --prism-3: #10b981;
+    --prism-4: #84cc16;
+    --prism-specular: rgba(255, 255, 255, 0.92);
+    --prism-sheen: linear-gradient(176deg, rgba(255, 255, 255, 0.92), rgba(235, 244, 229, 0.56));
+    --prism-aura-opacity: 0.21;
+    --prism-subtle-opacity: 0.14;
+  }
+
+  /* 12. Sakura Pastel */
+  html[data-color-theme="sakura"] {
+    color-scheme: light;
+    --app-bg-primary: #fff9fb;
+    --app-bg-secondary: #fbf1f4;
+    --app-bg-tertiary: #f5e6eb;
+    --app-bg-overlay: #ffffff;
+    --app-bg-canvas: #f9eef2;
+    --obsidian-ribbon-bg: #f5e6eb;
+    --obsidian-sidebar-bg: #fbf1f4;
+    --obsidian-editor-bg: #fff9fb;
+    --app-text-primary: #3a222b;
+    --app-text-secondary: #6e4e5a;
+    --app-text-muted: #9d7d89;
+    --app-border: rgba(58, 34, 43, 0.09);
+    --app-border-strong: rgba(58, 34, 43, 0.16);
+    --app-divider: rgba(58, 34, 43, 0.08);
+    --app-hover: rgba(219, 39, 119, 0.06);
+    --app-hover-filled: #f6e4eb;
+    --app-active: rgba(219, 39, 119, 0.11);
+    --app-accent: #db2777;
+    --app-accent-hover: #be185d;
+    --app-accent-soft: rgba(219, 39, 119, 0.13);
+    --app-canvas-dot: #ebd3dc;
+    --affine-background-code-block: #fbf1f4;
+    --prism-1: #db2777;
+    --prism-2: #f472b6;
+    --prism-3: #fb7185;
+    --prism-4: #c084fc;
+    --prism-specular: rgba(255, 255, 255, 0.94);
+    --prism-sheen: linear-gradient(176deg, rgba(255, 255, 255, 0.94), rgba(252, 232, 241, 0.56));
+    --prism-aura-opacity: 0.22;
+    --prism-subtle-opacity: 0.14;
+  }
+
+  /* 13. Niebla Lavanda */
+  html[data-color-theme="lavender-mist"] {
+    color-scheme: light;
+    --app-bg-primary: #fbfaff;
+    --app-bg-secondary: #f3f0fb;
+    --app-bg-tertiary: #eae6f6;
+    --app-bg-overlay: #ffffff;
+    --app-bg-canvas: #f2eefb;
+    --obsidian-ribbon-bg: #eae6f6;
+    --obsidian-sidebar-bg: #f3f0fb;
+    --obsidian-editor-bg: #fbfaff;
+    --app-text-primary: #2a243d;
+    --app-text-secondary: #5c5378;
+    --app-text-muted: #8b82a6;
+    --app-border: rgba(42, 36, 61, 0.09);
+    --app-border-strong: rgba(42, 36, 61, 0.16);
+    --app-divider: rgba(42, 36, 61, 0.08);
+    --app-hover: rgba(109, 40, 217, 0.06);
+    --app-hover-filled: #ebe6f8;
+    --app-active: rgba(109, 40, 217, 0.11);
+    --app-accent: #6d28d9;
+    --app-accent-hover: #5b21b6;
+    --app-accent-soft: rgba(109, 40, 217, 0.12);
+    --app-canvas-dot: #ddd6f0;
+    --affine-background-code-block: #f3f0fb;
+    --prism-1: #6d28d9;
+    --prism-2: #8b5cf6;
+    --prism-3: #6366f1;
+    --prism-4: #ec4899;
+    --prism-specular: rgba(255, 255, 255, 0.94);
+    --prism-sheen: linear-gradient(176deg, rgba(255, 255, 255, 0.94), rgba(237, 233, 254, 0.56));
+    --prism-aura-opacity: 0.22;
+    --prism-subtle-opacity: 0.14;
+  }
+
+  /* 14. Terracota Sol */
+  html[data-color-theme="terracotta"] {
+    color-scheme: light;
+    --app-bg-primary: #fdfaf6;
+    --app-bg-secondary: #f7f0e8;
+    --app-bg-tertiary: #efe5da;
+    --app-bg-overlay: #ffffff;
+    --app-bg-canvas: #f5ede4;
+    --obsidian-ribbon-bg: #efe5da;
+    --obsidian-sidebar-bg: #f7f0e8;
+    --obsidian-editor-bg: #fdfaf6;
+    --app-text-primary: #3d2b22;
+    --app-text-secondary: #70584c;
+    --app-text-muted: #9e8476;
+    --app-border: rgba(61, 43, 34, 0.09);
+    --app-border-strong: rgba(61, 43, 34, 0.17);
+    --app-divider: rgba(61, 43, 34, 0.08);
+    --app-hover: rgba(194, 89, 52, 0.07);
+    --app-hover-filled: #efe3d7;
+    --app-active: rgba(194, 89, 52, 0.12);
+    --app-accent: #c25934;
+    --app-accent-hover: #a74928;
+    --app-accent-soft: rgba(194, 89, 52, 0.13);
+    --app-canvas-dot: #e3d5c6;
+    --affine-background-code-block: #f7f0e8;
+    --prism-1: #c25934;
+    --prism-2: #ea580c;
+    --prism-3: #d97706;
+    --prism-4: #e11d48;
+    --prism-specular: rgba(255, 255, 255, 0.94);
+    --prism-sheen: linear-gradient(176deg, rgba(255, 255, 255, 0.94), rgba(247, 236, 224, 0.56));
+    --prism-aura-opacity: 0.22;
+    --prism-subtle-opacity: 0.14;
+  }
+
+  /* ── Exotic Themes (7) ───────────────────────────────────────────────── */
+
+  /* 15. Cyberpunk 2099 */
+  html[data-color-theme="cyberpunk"] {
+    color-scheme: dark;
+    --app-bg-primary: #120e24;
+    --app-bg-secondary: #0d0a1c;
+    --app-bg-tertiary: #070610;
+    --app-bg-overlay: #181330;
+    --app-bg-canvas: #0b0818;
+    --obsidian-ribbon-bg: #070610;
+    --obsidian-sidebar-bg: #0d0a1c;
+    --obsidian-editor-bg: #120e24;
+    --app-text-primary: #eef6ff;
+    --app-text-secondary: #98b4d4;
+    --app-text-muted: #627699;
+    --app-border: rgba(0, 240, 255, 0.16);
+    --app-border-strong: rgba(0, 240, 255, 0.34);
+    --app-divider: rgba(0, 240, 255, 0.13);
+    --app-hover: rgba(0, 240, 255, 0.10);
+    --app-hover-filled: #1c1638;
+    --app-active: rgba(255, 42, 133, 0.18);
+    --app-accent: #00f0ff;
+    --app-accent-hover: #5cf7ff;
+    --app-accent-soft: rgba(0, 240, 255, 0.18);
+    --app-canvas-dot: #251d47;
+    --affine-background-code-block: #090716;
+    --prism-1: #00f0ff;
+    --prism-2: #ff2a85;
+    --prism-3: #fcee0a;
+    --prism-4: #9d4edd;
+    --prism-specular: rgba(0, 240, 255, 0.18);
+    --prism-sheen: linear-gradient(172deg, rgba(0, 240, 255, 0.08), rgba(255, 42, 133, 0.03) 38%, rgba(7, 6, 16, 0.3));
+    --prism-aura-opacity: 0.42;
+    --prism-subtle-opacity: 0.28;
+  }
+
+  /* 16. Synthwave 84 */
+  html[data-color-theme="synthwave"] {
+    color-scheme: dark;
+    --app-bg-primary: #241440;
+    --app-bg-secondary: #1c1033;
+    --app-bg-tertiary: #140b24;
+    --app-bg-overlay: #2c194d;
+    --app-bg-canvas: #190e2e;
+    --obsidian-ribbon-bg: #140b24;
+    --obsidian-sidebar-bg: #1c1033;
+    --obsidian-editor-bg: #241440;
+    --app-text-primary: #f7ebff;
+    --app-text-secondary: #cbb2e6;
+    --app-text-muted: #8c70ad;
+    --app-border: rgba(255, 79, 216, 0.16);
+    --app-border-strong: rgba(255, 79, 216, 0.34);
+    --app-divider: rgba(255, 79, 216, 0.13);
+    --app-hover: rgba(255, 79, 216, 0.10);
+    --app-hover-filled: #331d59;
+    --app-active: rgba(255, 79, 216, 0.18);
+    --app-accent: #ff4fd8;
+    --app-accent-hover: #ff7be3;
+    --app-accent-soft: rgba(255, 79, 216, 0.18);
+    --app-canvas-dot: #3a2363;
+    --affine-background-code-block: #180d2c;
+    --prism-1: #ff4fd8;
+    --prism-2: #ff9e64;
+    --prism-3: #36f9f6;
+    --prism-4: #9d4edd;
+    --prism-specular: rgba(255, 160, 232, 0.15);
+    --prism-sheen: linear-gradient(172deg, rgba(255, 79, 216, 0.08), rgba(255, 158, 100, 0.03) 38%, rgba(20, 11, 36, 0.3));
+    --prism-aura-opacity: 0.44;
+    --prism-subtle-opacity: 0.28;
+  }
+
+  /* 17. Terminal Matrix */
+  html[data-color-theme="matrix"] {
+    color-scheme: dark;
+    --app-bg-primary: #07160b;
+    --app-bg-secondary: #051008;
+    --app-bg-tertiary: #020804;
+    --app-bg-overlay: #0a1f10;
+    --app-bg-canvas: #040c06;
+    --obsidian-ribbon-bg: #020804;
+    --obsidian-sidebar-bg: #051008;
+    --obsidian-editor-bg: #07160b;
+    --app-text-primary: #b8ffd0;
+    --app-text-secondary: #4cc97a;
+    --app-text-muted: #297a47;
+    --app-border: rgba(0, 255, 102, 0.16);
+    --app-border-strong: rgba(0, 255, 102, 0.34);
+    --app-divider: rgba(0, 255, 102, 0.12);
+    --app-hover: rgba(0, 255, 102, 0.09);
+    --app-hover-filled: #0d2915;
+    --app-active: rgba(0, 255, 102, 0.16);
+    --app-accent: #00ff66;
+    --app-accent-hover: #4dff94;
+    --app-accent-soft: rgba(0, 255, 102, 0.16);
+    --app-canvas-dot: #12381e;
+    --affine-background-code-block: #040d06;
+    --prism-1: #00ff66;
+    --prism-2: #10b981;
+    --prism-3: #22c55e;
+    --prism-4: #059669;
+    --prism-specular: rgba(0, 255, 102, 0.14);
+    --prism-sheen: linear-gradient(172deg, rgba(0, 255, 102, 0.06), rgba(16, 185, 129, 0.02) 38%, rgba(2, 8, 4, 0.3));
+    --prism-aura-opacity: 0.36;
+    --prism-subtle-opacity: 0.24;
+  }
+
+  /* 18. Aurora Cristal */
+  html[data-color-theme="aurora-glass"] {
+    color-scheme: dark;
+    --app-bg-primary: #0c1424;
+    --app-bg-secondary: rgba(14, 22, 38, 0.72);
+    --app-bg-tertiary: #080e19;
+    --app-bg-overlay: rgba(18, 29, 49, 0.84);
+    --app-bg-canvas: #09101d;
+    --obsidian-ribbon-bg: #080e19;
+    --obsidian-sidebar-bg: rgba(14, 22, 38, 0.72);
+    --obsidian-editor-bg: #0c1424;
+    --app-text-primary: #ebf5ff;
+    --app-text-secondary: #9dc2de;
+    --app-text-muted: #6487a6;
+    --app-border: rgba(148, 235, 255, 0.14);
+    --app-border-strong: rgba(148, 235, 255, 0.28);
+    --app-divider: rgba(148, 235, 255, 0.12);
+    --app-hover: rgba(45, 212, 191, 0.10);
+    --app-hover-filled: rgba(24, 41, 68, 0.85);
+    --app-active: rgba(45, 212, 191, 0.18);
+    --app-accent: #2dd4bf;
+    --app-accent-hover: #5eead4;
+    --app-accent-soft: rgba(45, 212, 191, 0.18);
+    --app-canvas-dot: #1d314d;
+    --affine-background-code-block: rgba(8, 15, 28, 0.8);
+    --prism-1: #2dd4bf;
+    --prism-2: #38bdf8;
+    --prism-3: #a78bfa;
+    --prism-4: #34d399;
+    --prism-specular: rgba(186, 245, 255, 0.16);
+    --prism-sheen: linear-gradient(172deg, rgba(148, 235, 255, 0.08), rgba(45, 212, 191, 0.03) 38%, rgba(8, 14, 25, 0.25));
+    --prism-aura-opacity: 0.48;
+    --prism-subtle-opacity: 0.34;
+  }
+
+  /* 19. Sakura Zen */
+  html[data-color-theme="sakura-zen"] {
+    color-scheme: light;
+    --app-bg-primary: #fdf8fa;
+    --app-bg-secondary: #f8eef1;
+    --app-bg-tertiary: #f2e4e8;
+    --app-bg-overlay: #ffffff;
+    --app-bg-canvas: #f7ecf0;
+    --obsidian-ribbon-bg: #f2e4e8;
+    --obsidian-sidebar-bg: #f8eef1;
+    --obsidian-editor-bg: #fdf8fa;
+    --app-text-primary: #2c1d24;
+    --app-text-secondary: #684955;
+    --app-text-muted: #9a7985;
+    --app-border: rgba(225, 29, 100, 0.11);
+    --app-border-strong: rgba(225, 29, 100, 0.22);
+    --app-divider: rgba(225, 29, 100, 0.09);
+    --app-hover: rgba(225, 29, 100, 0.07);
+    --app-hover-filled: #f5e5eb;
+    --app-active: rgba(225, 29, 100, 0.12);
+    --app-accent: #e11d64;
+    --app-accent-hover: #be123c;
+    --app-accent-soft: rgba(225, 29, 100, 0.12);
+    --app-canvas-dot: #ead1db;
+    --affine-background-code-block: #f8eef1;
+    --prism-1: #e11d64;
+    --prism-2: #f472b6;
+    --prism-3: #fb7185;
+    --prism-4: #f9a8d4;
+    --prism-specular: rgba(255, 255, 255, 0.94);
+    --prism-sheen: linear-gradient(176deg, rgba(255, 255, 255, 0.94), rgba(253, 232, 240, 0.58));
+    --prism-aura-opacity: 0.24;
+    --prism-subtle-opacity: 0.16;
+  }
+
+  /* 20. Plano Técnico (Blueprint) */
+  html[data-color-theme="blueprint"] {
+    color-scheme: dark;
+    --app-bg-primary: #102c54;
+    --app-bg-secondary: #0d2445;
+    --app-bg-tertiary: #091b34;
+    --app-bg-overlay: #143666;
+    --app-bg-canvas: #0b203d;
+    --obsidian-ribbon-bg: #091b34;
+    --obsidian-sidebar-bg: #0d2445;
+    --obsidian-editor-bg: #102c54;
+    --app-text-primary: #f0f7ff;
+    --app-text-secondary: #9ec5f0;
+    --app-text-muted: #6492c4;
+    --app-border: rgba(125, 211, 252, 0.18);
+    --app-border-strong: rgba(125, 211, 252, 0.34);
+    --app-divider: rgba(125, 211, 252, 0.14);
+    --app-hover: rgba(56, 189, 248, 0.12);
+    --app-hover-filled: #163b6e;
+    --app-active: rgba(56, 189, 248, 0.20);
+    --app-accent: #38bdf8;
+    --app-accent-hover: #7dd3fc;
+    --app-accent-soft: rgba(56, 189, 248, 0.20);
+    --app-canvas-dot: #29568f;
+    --affine-background-code-block: #0b203d;
+    --prism-1: #38bdf8;
+    --prism-2: #60a5fa;
+    --prism-3: #0ea5e9;
+    --prism-4: #93c5fd;
+    --prism-specular: rgba(240, 247, 255, 0.14);
+    --prism-sheen: linear-gradient(172deg, rgba(186, 230, 253, 0.06), rgba(56, 189, 248, 0.02) 38%, rgba(9, 27, 52, 0.26));
+    --prism-aura-opacity: 0.34;
+    --prism-subtle-opacity: 0.22;
+  }
+
+  /* 21. Art Déco Dorado */
+  html[data-color-theme="golden-noir"] {
+    color-scheme: dark;
+    --app-bg-primary: #16130f;
+    --app-bg-secondary: #110f0c;
+    --app-bg-tertiary: #090806;
+    --app-bg-overlay: #1e1a14;
+    --app-bg-canvas: #0f0d0a;
+    --obsidian-ribbon-bg: #090806;
+    --obsidian-sidebar-bg: #110f0c;
+    --obsidian-editor-bg: #16130f;
+    --app-text-primary: #f5eee2;
+    --app-text-secondary: #bfb097;
+    --app-text-muted: #85775f;
+    --app-border: rgba(212, 175, 55, 0.18);
+    --app-border-strong: rgba(212, 175, 55, 0.36);
+    --app-divider: rgba(212, 175, 55, 0.14);
+    --app-hover: rgba(212, 175, 55, 0.10);
+    --app-hover-filled: #241f18;
+    --app-active: rgba(212, 175, 55, 0.18);
+    --app-accent: #d4af37;
+    --app-accent-hover: #e6c65a;
+    --app-accent-soft: rgba(212, 175, 55, 0.18);
+    --app-canvas-dot: #332c20;
+    --affine-background-code-block: #100e0b;
+    --prism-1: #d4af37;
+    --prism-2: #f59e0b;
+    --prism-3: #b45309;
+    --prism-4: #fde68a;
+    --prism-specular: rgba(253, 230, 138, 0.14);
+    --prism-sheen: linear-gradient(172deg, rgba(253, 230, 138, 0.06), rgba(212, 175, 55, 0.025) 38%, rgba(9, 8, 6, 0.28));
+    --prism-aura-opacity: 0.36;
+    --prism-subtle-opacity: 0.24;
   }
 }
 
@@ -2234,3 +2803,392 @@ html [data-sileo-viewport] [data-sileo-button][data-state="action"].sn-sileo-but
 .ProseMirror .apple-emoji-failed + .apple-emoji-src { font-size: inherit; }
 .ProseMirror .apple-emoji-img { display: inline-block; width: 1.2em; height: 1.2em; vertical-align: -0.2em; object-fit: contain; user-select: none; pointer-events: none; }
 .ProseMirror .apple-emoji-native { font-family: 'Apple Color Emoji','Segoe UI Emoji',sans-serif; }
+
+/* ==========================================================================
+   Exotic Themes: Structural UI Transformations & Atmospheric Effects
+   ========================================================================== */
+
+/* Hide theme overlay layer when user disables exotic effects */
+html[data-theme-effects="off"] .sn-theme-fx-overlay {
+  display: none !important;
+}
+
+/* ── 1. Cyberpunk 2099 (Angular HUD + Neon Cyan/Magenta Glow) ───────────── */
+html[data-theme-fx="cyberpunk"] .affine-sidebar-item,
+html[data-theme-fx="cyberpunk"] .affine-button-primary,
+html[data-theme-fx="cyberpunk"] .affine-panel,
+html[data-theme-fx="cyberpunk"] .affine-modal-card,
+html[data-theme-fx="cyberpunk"] .affine-toolbar-dock,
+html[data-theme-fx="cyberpunk"] .pill-capsule-bar,
+html[data-theme-fx="cyberpunk"] [role="dialog"],
+html[data-theme-fx="cyberpunk"] .affine-segmented-container,
+html[data-theme-fx="cyberpunk"] .affine-segmented-tab {
+  border-radius: 2px !important;
+}
+
+html[data-theme-fx="cyberpunk"] [role="dialog"],
+html[data-theme-fx="cyberpunk"] .affine-panel,
+html[data-theme-fx="cyberpunk"] .affine-modal-card,
+html[data-theme-fx="cyberpunk"] .affine-toolbar-dock,
+html[data-theme-fx="cyberpunk"] .pill-capsule-bar {
+  border-color: rgba(0, 240, 255, 0.36);
+  box-shadow:
+    0 0 0 1px rgba(255, 42, 133, 0.14),
+    0 8px 28px rgba(0, 0, 0, 0.7),
+    0 0 18px rgba(0, 240, 255, 0.14);
+}
+
+html[data-theme-fx="cyberpunk"] .affine-button-primary,
+html[data-theme-fx="cyberpunk"] .btn-pill-purple {
+  color: #06131a !important;
+  font-weight: 700;
+  box-shadow: 0 0 14px rgba(0, 240, 255, 0.42), 0 0 2px rgba(255, 42, 133, 0.4);
+}
+
+html[data-theme-fx="cyberpunk"] .sn-doc-row[data-active="true"]::before {
+  background: linear-gradient(180deg, #00f0ff, #ff2a85);
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.75);
+}
+
+html[data-theme-fx="cyberpunk"] .affine-category-divider {
+  letter-spacing: 0.11em;
+  color: rgba(0, 240, 255, 0.7);
+}
+
+html[data-theme-fx="cyberpunk"] .ProseMirror h1,
+html[data-theme-fx="cyberpunk"] .ProseMirror h2 {
+  text-shadow: 0 0 14px rgba(0, 240, 255, 0.28);
+}
+
+html[data-theme-fx="cyberpunk"] .ProseMirror blockquote {
+  border-left-color: #ff2a85;
+  background: rgba(255, 42, 133, 0.06);
+  padding: 0.45rem 0.85rem;
+}
+
+html[data-theme-fx="cyberpunk"] ::-webkit-scrollbar-thumb {
+  background: rgba(0, 240, 255, 0.35);
+}
+
+/* ── 2. Synthwave 84 (Sunset Gradient Buttons + Laser Bloom) ────────────── */
+html[data-theme-fx="synthwave"] .affine-button-primary,
+html[data-theme-fx="synthwave"] .btn-pill-purple {
+  background: linear-gradient(135deg, #ff4fd8 0%, #ff9e64 100%) !important;
+  color: #160926 !important;
+  font-weight: 700;
+  box-shadow: 0 4px 16px rgba(255, 79, 216, 0.38);
+}
+
+html[data-theme-fx="synthwave"] [role="dialog"],
+html[data-theme-fx="synthwave"] .affine-panel,
+html[data-theme-fx="synthwave"] .affine-modal-card,
+html[data-theme-fx="synthwave"] .affine-toolbar-dock,
+html[data-theme-fx="synthwave"] .pill-capsule-bar {
+  border-color: rgba(255, 79, 216, 0.32);
+  box-shadow:
+    0 10px 30px rgba(10, 4, 22, 0.75),
+    0 0 20px rgba(255, 79, 216, 0.14);
+}
+
+html[data-theme-fx="synthwave"] .sn-doc-row[data-active="true"]::before {
+  background: linear-gradient(180deg, #ff4fd8, #ff9e64);
+  box-shadow: 0 0 10px rgba(255, 79, 216, 0.7);
+}
+
+html[data-theme-fx="synthwave"] .ProseMirror h1 {
+  background: linear-gradient(90deg, #ff7be3 0%, #ff9e64 55%, #36f9f6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+html[data-theme-fx="synthwave"] .ProseMirror h2 {
+  color: #ff9ae9;
+  text-shadow: 0 0 14px rgba(255, 79, 216, 0.35);
+}
+
+html[data-theme-fx="synthwave"] .ProseMirror blockquote {
+  border-left-color: #36f9f6;
+  box-shadow: -3px 0 12px -4px rgba(54, 249, 246, 0.5);
+}
+
+/* ── 3. Terminal Matrix (Full Monospace UI + Phosphor CRT) ──────────────── */
+html[data-theme-fx="matrix"] {
+  --app-font-sans: var(--app-font-mono);
+}
+
+html[data-theme-fx="matrix"] .affine-sidebar-item,
+html[data-theme-fx="matrix"] .affine-button-primary,
+html[data-theme-fx="matrix"] .affine-panel,
+html[data-theme-fx="matrix"] .affine-modal-card,
+html[data-theme-fx="matrix"] .affine-toolbar-dock,
+html[data-theme-fx="matrix"] .pill-capsule-bar,
+html[data-theme-fx="matrix"] [role="dialog"],
+html[data-theme-fx="matrix"] .affine-segmented-container,
+html[data-theme-fx="matrix"] .affine-segmented-tab {
+  border-radius: 2px !important;
+}
+
+html[data-theme-fx="matrix"] [role="dialog"],
+html[data-theme-fx="matrix"] .affine-panel,
+html[data-theme-fx="matrix"] .affine-modal-card,
+html[data-theme-fx="matrix"] .affine-toolbar-dock,
+html[data-theme-fx="matrix"] .pill-capsule-bar {
+  border-color: rgba(0, 255, 102, 0.32);
+  box-shadow: 0 0 20px rgba(0, 255, 102, 0.1), 0 10px 28px rgba(0, 0, 0, 0.78);
+}
+
+html[data-theme-fx="matrix"] .affine-button-primary,
+html[data-theme-fx="matrix"] .btn-pill-purple {
+  color: #021206 !important;
+  font-weight: 700;
+  box-shadow: 0 0 12px rgba(0, 255, 102, 0.35);
+}
+
+html[data-theme-fx="matrix"] .ProseMirror h1,
+html[data-theme-fx="matrix"] .ProseMirror h2,
+html[data-theme-fx="matrix"] .sn-doc-row[data-active="true"] {
+  text-shadow: 0 0 10px rgba(0, 255, 102, 0.32);
+}
+
+html[data-theme-fx="matrix"] .ProseMirror blockquote {
+  border-left-color: #00ff66;
+  background: rgba(0, 255, 102, 0.05);
+  padding: 0.45rem 0.85rem;
+}
+
+/* ── 4. Aurora Cristal (Glassmorphism + Luminous Frost Borders) ─────────── */
+html[data-theme-fx="aurora"] aside,
+html[data-theme-fx="aurora"] nav[aria-label="Navegación principal"],
+html[data-theme-fx="aurora"] .affine-panel,
+html[data-theme-fx="aurora"] .affine-modal-card,
+html[data-theme-fx="aurora"] .affine-toolbar-dock,
+html[data-theme-fx="aurora"] .pill-capsule-bar,
+html[data-theme-fx="aurora"] [role="dialog"] {
+  backdrop-filter: blur(18px) saturate(145%);
+  -webkit-backdrop-filter: blur(18px) saturate(145%);
+}
+
+html[data-theme-fx="aurora"] [role="dialog"],
+html[data-theme-fx="aurora"] .affine-panel,
+html[data-theme-fx="aurora"] .affine-modal-card,
+html[data-theme-fx="aurora"] .pill-capsule-bar {
+  border-radius: 14px;
+  border-color: rgba(148, 235, 255, 0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 14px 36px rgba(2, 8, 20, 0.62);
+}
+
+html[data-theme-fx="aurora"] .sn-doc-row[data-active="true"]::before {
+  background: linear-gradient(180deg, #2dd4bf, #a78bfa);
+  box-shadow: 0 0 10px rgba(45, 212, 191, 0.65);
+}
+
+/* ── 5. Sakura Zen (Editorial Serif Headings + Blossom Callouts) ────────── */
+html[data-theme-fx="zen-petals"] .ProseMirror h1,
+html[data-theme-fx="zen-petals"] .ProseMirror h2,
+html[data-theme-fx="zen-petals"] .ProseMirror h3,
+html[data-theme-fx="zen-petals"] [role="dialog"] h2,
+html[data-theme-fx="zen-petals"] [role="dialog"] h3 {
+  font-family: var(--app-font-serif);
+  letter-spacing: -0.015em;
+}
+
+html[data-theme-fx="zen-petals"] .ProseMirror blockquote {
+  border-left-color: #e11d64;
+  background: rgba(225, 29, 100, 0.045);
+  padding: 0.5rem 0.9rem;
+  border-radius: 0 8px 8px 0;
+}
+
+html[data-theme-fx="zen-petals"] .sn-doc-row[data-active="true"]::before {
+  background: linear-gradient(180deg, #e11d64, #f472b6);
+}
+
+/* ── 6. Plano Técnico / Blueprint (CAD Grid + Drafting Borders) ─────────── */
+html[data-theme-fx="blueprint"] main {
+  background-image:
+    linear-gradient(to right, rgba(125, 211, 252, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(125, 211, 252, 0.06) 1px, transparent 1px),
+    linear-gradient(to right, rgba(125, 211, 252, 0.12) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(125, 211, 252, 0.12) 1px, transparent 1px);
+  background-size: 24px 24px, 24px 24px, 120px 120px, 120px 120px;
+}
+
+html[data-theme-fx="blueprint"] .affine-sidebar-item,
+html[data-theme-fx="blueprint"] .affine-button-primary,
+html[data-theme-fx="blueprint"] .affine-panel,
+html[data-theme-fx="blueprint"] .affine-modal-card,
+html[data-theme-fx="blueprint"] .affine-toolbar-dock,
+html[data-theme-fx="blueprint"] .pill-capsule-bar,
+html[data-theme-fx="blueprint"] [role="dialog"] {
+  border-radius: 3px !important;
+}
+
+html[data-theme-fx="blueprint"] [role="dialog"],
+html[data-theme-fx="blueprint"] .affine-panel,
+html[data-theme-fx="blueprint"] .affine-modal-card {
+  border-color: rgba(125, 211, 252, 0.36);
+}
+
+html[data-theme-fx="blueprint"] .affine-category-divider {
+  font-family: var(--app-font-mono);
+  letter-spacing: 0.1em;
+}
+
+html[data-theme-fx="blueprint"] .ProseMirror h1 {
+  border-bottom: 1px dashed rgba(125, 211, 252, 0.32);
+  padding-bottom: 0.3rem;
+}
+
+/* ── 7. Art Déco Dorado (Brushed Gold + Serif Display + Luxury Frames) ──── */
+html[data-theme-fx="art-deco"] .ProseMirror h1,
+html[data-theme-fx="art-deco"] .ProseMirror h2,
+html[data-theme-fx="art-deco"] [role="dialog"] h2,
+html[data-theme-fx="art-deco"] [role="dialog"] h3 {
+  font-family: var(--app-font-serif);
+  color: #f3d98b;
+}
+
+html[data-theme-fx="art-deco"] .ProseMirror h1 {
+  border-bottom: 1px solid rgba(212, 175, 55, 0.35);
+  padding-bottom: 0.35rem;
+}
+
+html[data-theme-fx="art-deco"] .affine-button-primary,
+html[data-theme-fx="art-deco"] .btn-pill-purple {
+  background: linear-gradient(135deg, #e6c65a 0%, #c99e2c 55%, #b5891e 100%) !important;
+  color: #0c0b09 !important;
+  font-weight: 700;
+  box-shadow: 0 2px 12px rgba(212, 175, 55, 0.28);
+}
+
+html[data-theme-fx="art-deco"] [role="dialog"],
+html[data-theme-fx="art-deco"] .affine-panel,
+html[data-theme-fx="art-deco"] .affine-modal-card,
+html[data-theme-fx="art-deco"] .pill-capsule-bar {
+  border-color: rgba(212, 175, 55, 0.38);
+  box-shadow:
+    0 0 0 1px rgba(212, 175, 55, 0.10),
+    0 12px 32px rgba(0, 0, 0, 0.72);
+}
+
+html[data-theme-fx="art-deco"] .ProseMirror blockquote {
+  border-left-color: #d4af37;
+  background: rgba(212, 175, 55, 0.055);
+  padding: 0.45rem 0.9rem;
+}
+
+html[data-theme-fx="art-deco"] .sn-doc-row[data-active="true"]::before {
+  background: linear-gradient(180deg, #fde68a, #d4af37);
+}
+
+/* ── Keyframes for Exotic Overlays ──────────────────────────────────────── */
+@keyframes sn-fx-petal-fall {
+  0% {
+    transform: translate3d(0, -30px, 0) rotate(0deg);
+  }
+  25% {
+    transform: translate3d(26px, 26vh, 0) rotate(70deg);
+  }
+  50% {
+    transform: translate3d(-18px, 52vh, 0) rotate(145deg);
+  }
+  75% {
+    transform: translate3d(22px, 78vh, 0) rotate(235deg);
+  }
+  100% {
+    transform: translate3d(-12px, 108vh, 0) rotate(320deg);
+  }
+}
+
+@keyframes sn-fx-aurora-drift {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(6%, 12px, 0) scale(1.08);
+  }
+}
+
+@keyframes sn-fx-matrix-drop {
+  0% {
+    transform: translate3d(0, -110%, 0);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.16;
+  }
+  88% {
+    opacity: 0.14;
+  }
+  100% {
+    transform: translate3d(0, 110vh, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes sn-fx-gold-float {
+  0%, 100% {
+    transform: translate3d(0, 0, 0) scale(0.85);
+    opacity: 0.14;
+  }
+  50% {
+    transform: translate3d(6px, -18px, 0) scale(1.25);
+    opacity: 0.42;
+  }
+}
+
+@keyframes sn-fx-cyber-blink {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 8px #00f0ff;
+  }
+  50% {
+    opacity: 0.35;
+    box-shadow: none;
+  }
+}
+
+.sn-fx-petal {
+  animation: sn-fx-petal-fall 16s linear infinite;
+  will-change: transform;
+}
+
+.sn-fx-aurora {
+  animation: sn-fx-aurora-drift 20s ease-in-out infinite;
+  will-change: transform;
+}
+
+.sn-fx-matrix-col {
+  animation: sn-fx-matrix-drop 12s linear infinite;
+  will-change: transform, opacity;
+}
+
+.sn-fx-gold-mote {
+  animation: sn-fx-gold-float 10s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+.sn-fx-cyber-pulse {
+  animation: sn-fx-cyber-blink 2.2s ease-in-out infinite;
+}
+
+html[data-reduce-motion="true"] .sn-fx-petal,
+html[data-reduce-motion="true"] .sn-fx-aurora,
+html[data-reduce-motion="true"] .sn-fx-matrix-col,
+html[data-reduce-motion="true"] .sn-fx-gold-mote,
+html[data-reduce-motion="true"] .sn-fx-cyber-pulse {
+  animation: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sn-fx-petal,
+  .sn-fx-aurora,
+  .sn-fx-matrix-col,
+  .sn-fx-gold-mote,
+  .sn-fx-cyber-pulse {
+    animation: none !important;
+  }
+}
